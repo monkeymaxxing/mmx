@@ -16,18 +16,20 @@ import (
 func TestANodeJobCarriesTheNodesDurations(t *testing.T) {
 	limit := "{{ .vars.limit }}"
 	p := config.Project{FleetStages: []config.FleetStage{{ID: "work", Nodes: "a", NodeTasks: []config.Task{
-		{ID: "slow", Module: "shell", ModuleInputs: &modules.Shell{Script: "sleep 5"}, TimeLimit: &limit, Retry: &config.Retry{Disabled: true}},
+		{ID: "slow", Module: "shell", ModuleInputs: &modules.Shell{Script: "sleep 30"}, TimeLimit: &limit, Retry: &config.Retry{Disabled: true}},
 	}}}}
 	c, r := playbookRun(t, p, nil, false)
 	r.Project.Vars["limit"] = "200ms"
 	c.executeNode = func(ctx context.Context, r *Run, s config.FleetStage, en Entry, _ bool, _ func(Entry) error) (Entry, error) {
 		return runOnNode(ctx, r, s, en)
 	}
+	// The sleep is far longer than the check allows, so a slow machine still
+	// tells a stopped node task from one that ran to its end.
 	started := time.Now()
 	if err := c.Execute(context.Background(), r, false); err != nil {
 		t.Fatal(err)
 	}
-	if en := entry(t, r, "work", "a"); en.Response.Status != "failed" || !strings.Contains(en.Response.Error, "time_limit exceeded") || time.Since(started) > 4*time.Second {
+	if en := entry(t, r, "work", "a"); en.Response.Status != "failed" || !strings.Contains(en.Response.Error, "time_limit exceeded") || time.Since(started) > 20*time.Second {
 		t.Fatalf("%+v after %s", en.Response, time.Since(started))
 	}
 

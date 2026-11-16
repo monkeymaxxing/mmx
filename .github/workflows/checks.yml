@@ -28,7 +28,9 @@ jobs:
       - name: Confirm the pinned Go toolchain
         shell: bash
         run: test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" {print $2}' go.mod)"
-      - run: go test ./...
+      # The controller and engine packages take over 10 minutes, Go's default
+      # limit for one package, on GitHub's smaller macOS runners.
+      - run: go test -timeout 30m ./...
       - if: runner.os == 'Linux'
         run: go vet ./...
       - if: runner.os == 'Linux'
