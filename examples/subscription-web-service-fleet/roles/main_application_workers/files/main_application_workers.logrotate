@@ -1,0 +1,16 @@
+# Managed by MMX (role main_application_workers): the logs in
+# /home/deploy/logs, the workers' and, where they run on the same server,
+# the cron jobs'.
+/home/deploy/logs/*.log {
+    # The logs belong to deploy, in a directory that deploy may write.
+    su deploy deploy
+    # logrotate looks every day; a log rotates once it has 100 MB.
+    size 100M
+    # Ten old logs, compressed.
+    rotate 10
+    compress
+    # systemd and cron keep the logs open: copy the log, then empty it.
+    copytruncate
+    # A log that a worker has not written yet is fine.
+    missingok
+}

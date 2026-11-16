@@ -1,0 +1,34 @@
+fleet_stages:
+  - id: set_up_automatic_security_updates
+    nodes: all
+    node_tasks:
+      - apt_package:
+          packages:
+            - {name: unattended-upgrades, version: newest_when_first_installed}
+
+      - file:
+          path: /etc/apt/apt.conf.d/20auto-upgrades
+          permissions_mode: "0644"
+          content: |
+            APT::Periodic::Update-Package-Lists "1";
+            APT::Periodic::Unattended-Upgrade "1";
+
+      # Keep the distribution's 50unattended-upgrades and its allowed origins.
+      - file:
+          path: /etc/apt/apt.conf.d/52unattended-upgrades-local
+          permissions_mode: "0644"
+          content: |
+            // Leave reboot timing to the operator, even after a kernel update.
+            Unattended-Upgrade::Automatic-Reboot "false";
+            // Remove automatically installed dependencies that nothing needs anymore.
+            Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+      - systemd_service:
+          name: apt-daily.timer
+          start_at_boot: true
+          state: running
+
+      - systemd_service:
+          name: apt-daily-upgrade.timer
+          start_at_boot: true
+          state: running

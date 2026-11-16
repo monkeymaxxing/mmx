@@ -1,0 +1,141 @@
+summary: Manages one PostgreSQL node of a pg_auto_failover formation on its database server, with its systemd unit, its failover settings, maintenance, and its PostgreSQL settings.
+inputs:
+  data_directory:
+    type: string
+    required: true
+    description: The node's PostgreSQL data directory, an absolute path such as /var/lib/postgresql/18/main. Its parent directory must belong to the account postgres.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, in_maintenance, absent, deleted_with_all_its_data]
+    description: present (the default) creates the node and keeps it as the task says; in_maintenance also puts a replica into maintenance; absent drops the node from its formation, stops its service, and removes its unit, and the data directory stays; deleted_with_all_its_data also deletes the data directory. absent and deleted_with_all_its_data accept only data_directory.
+  name:
+    type: string
+    required: false
+    description: The node's name in the formation, such as the inventory name db01. A dropped node's name cannot be used again at once; a replaced server gets a new name. Required for state present and in_maintenance.
+  postgresql_major_version:
+    type: integer
+    required: false
+    description: The major version of PostgreSQL whose programs run the node, such as 18. Required for state present and in_maintenance.
+  port:
+    type: integer
+    required: false
+    description: The port of the node's PostgreSQL, such as 5432. Required for state present and in_maintenance.
+  host_name:
+    type: string
+    required: false
+    description: The host name or IP address with which the other nodes and the monitor reach this node, such as its address on a private network. Required for state present and in_maintenance.
+  listen_address:
+    type: string
+    required: false
+    description: The address on which the node's PostgreSQL listens for connections, such as the same private address as host_name, or * for every address of the server. host_name is the address that the other nodes and the monitor connect to; listen_address is where PostgreSQL listens. A changed address takes a restart of pgautofailover.service. Required for state present and in_maintenance.
+  monitor_host_name:
+    type: string
+    required: false
+    description: The host name or IP address of the monitor, as its pg_auto_failover_monitor task gives it in host_name. Required for state present and in_maintenance.
+  monitor_port:
+    type: integer
+    required: false
+    description: The port of the monitor's PostgreSQL. Required for state present and in_maintenance.
+  autoctl_node_password:
+    type: string
+    required: false
+    private_value: true
+    description: The password of the monitor's login autoctl_node. The module keeps it in the password file of the account postgres. Required for state present and in_maintenance.
+  replication_password:
+    type: string
+    required: false
+    private_value: true
+    description: The password of pgautofailover_replicator, with which replicas copy from the primary; the same on every node of the formation. The module keeps it in the password file of the account postgres and sets it on the primary. Required for state present and in_maintenance.
+  formation:
+    type: string
+    required: false
+    description: The formation that the node joins, such as default. Required for state present and in_maintenance.
+  candidate_priority:
+    type: integer
+    required: false
+    description: A whole number from 0 to 100; the monitor promotes the healthy replica with the highest priority, and 0 means never. Required for state present and in_maintenance.
+  replication_quorum:
+    type: boolean
+    required: false
+    description: true makes a write on the primary wait for this node while it is a healthy replica, which is synchronous replication; false lets writes go on without it. Required for state present and in_maintenance.
+  postgresql_settings:
+    type: any
+    required: false
+    description: >-
+      A mapping of PostgreSQL's setting names to their values, such as work_mem: 64MB or pg_stat_statements.max: 10000. A value is a text, a number,
+      true or false, which becomes on or off, or a share of the server's memory, such as {percent_of_memory: 25, rounded_down_to_mib: 128,
+      at_least_mib: 128}, a quarter of MemTotal in MiB rounded down to a multiple of 128 and at least 128, written such as 2048MB. The module writes the settings into /etc/postgresql/pg_auto_failover_node_settings.conf, which the data directory's postgresql.conf includes at its
+      end, so they win over pg_autoctl's own. Without the input, the module leaves that file alone; {} empties it.
+  restart_postgresql_for_new_settings:
+    type: string
+    required: false
+    allowed_values: [never, on_a_replica, on_a_replica_or_a_node_alone]
+    description: >-
+      Whether the task restarts PostgreSQL for a setting that takes effect only with a restart, such as shared_buffers. never only reloads, and the
+      setting waits for a restart. on_a_replica restarts a replica, through maintenance. on_a_replica_or_a_node_alone also restarts a node that is
+      alone in its formation. The primary of a formation with replicas never restarts in place, which would be a failover. A node that the task
+      creates restarts with any value. With any value too, a node on which no PostgreSQL runs, such as after a value that it did not start with,
+      gets pgautofailover.service restarted, so that PostgreSQL starts with the file: such a node serves nobody, a replica or a primary. Required
+      with postgresql_settings.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the node, or in a dryrun would create it.
+  current_state:
+    type: string
+    description: The node's state as the monitor reports it, such as single, primary, secondary, or maintenance. Not known in a dryrun that would create the node or start its service.
+  is_primary:
+    type: boolean
+    description: true while the monitor has made the node its formation's primary, by its assigned state (single, wait_primary, primary, join_primary, or apply_settings), also while the node itself still reports another state. Not known in a dryrun that would create the node or start its service.
+  changed_postgresql_settings:
+    type: list_of_strings
+    description: With postgresql_settings, the sorted names of the settings whose value in the module's file the task changed, added, or removed, or in a dryrun would.
+  restarted_postgresql:
+    type: boolean
+    description: With postgresql_settings, true when the task restarted the node's PostgreSQL for its settings, or restarted pgautofailover.service because no PostgreSQL ran, so that pg_autoctl starts PostgreSQL with the file. Not known in a dryrun.
+  postgresql_settings_waiting_for_a_restart:
+    type: list_of_strings
+    description: With postgresql_settings, the sorted names of the settings, of the task or any other, whose new value waits for a restart of PostgreSQL after the task. Not known in a dryrun.
+examples:
+  - description: The node db01 of the formation default, which copies the primary when another node is the primary already, and which writes wait for while it is a healthy replica.
+    config: |
+      pg_auto_failover_node:
+        name: db01
+        data_directory: /var/lib/postgresql/18/main
+        postgresql_major_version: 18
+        port: 5432
+        host_name: 10.20.0.21
+        listen_address: 10.20.0.21
+        monitor_host_name: 10.20.0.31
+        monitor_port: 5432
+        autoctl_node_password: "{{ .secrets.autoctl_node_password }}"
+        replication_password: "{{ .secrets.pgautofailover_replicator_password }}"
+        formation: default
+        candidate_priority: 50
+        replication_quorum: true
+  - description: The node db02 with a quarter of its 8 GiB of memory for shared_buffers and more memory for each query; a replica restarts for shared_buffers through maintenance, and on the primary of a formation with replicas the task refuses the restart until another node is the primary.
+    config: |
+      pg_auto_failover_node:
+        name: db02
+        data_directory: /var/lib/postgresql/18/main
+        postgresql_major_version: 18
+        port: 5432
+        host_name: 10.20.0.22
+        listen_address: 10.20.0.22
+        monitor_host_name: 10.20.0.31
+        monitor_port: 5432
+        autoctl_node_password: "{{ .secrets.autoctl_node_password }}"
+        replication_password: "{{ .secrets.pgautofailover_replicator_password }}"
+        formation: default
+        candidate_priority: 50
+        replication_quorum: true
+        postgresql_settings:
+          shared_buffers: 2GB
+          work_mem: 64MB
+        restart_postgresql_for_new_settings: on_a_replica
+  - description: Remove the node from its formation and keep its data directory.
+    config: |
+      pg_auto_failover_node:
+        data_directory: /var/lib/postgresql/18/main
+        state: absent

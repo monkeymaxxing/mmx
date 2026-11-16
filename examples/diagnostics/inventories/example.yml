@@ -1,0 +1,5 @@
+nodes:
+  app:
+    address: app.example.com
+    vars:
+      greeting: Hello from this node

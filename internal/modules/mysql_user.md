@@ -1,0 +1,316 @@
+# `mysql_user`
+
+`mysql_user` manages one account inside a MySQL or MariaDB server that is
+already installed and running: the account's password and its privileges.
+The database the account works in is a
+[`mysql_database`](mysql_database.md) task. Both modules work with MySQL
+and with MariaDB.
+
+The module runs the server's own client program on the node: `mariadb`, or
+`mysql` on a node that has no `mariadb`. The server's package brings the
+client. MMX sends SQL to the client and reads the server's catalog (the
+server's own tables that list its accounts, privileges, and databases)
+before and after, so a rerun that finds everything in place changes nothing.
+Installing the server, its configuration files, and starting it are
+package, `file`, and `systemd_service` tasks. The examples
+[A MariaDB server for one application](mysql_database.md#a-mariadb-server-for-one-application)
+and [The same tasks for a MySQL server](mysql_database.md#the-same-tasks-for-a-mysql-server)
+show them, with an account and a database.
+
+Without connection fields, a task uses the server on the same node through
+the server's local socket: MMX runs the client as root, which the server
+accepts as `root@localhost`. For a server on another machine, or a server
+that needs a password from root, the module takes the connection fields
+that `mysql_database` takes too. The page
+[A MySQL or MariaDB server on another machine, or another login](../../docs/how-to/manage-a-database.md#a-database-server-on-another-machine)
+describes them and how a task fails when it cannot reach the server or its
+login is refused. The design section
+[How a task reaches the server](../../docs/changing-mmx/design/modules-applications.md#how-a-task-reaches-the-server)
+has the design and its reasons. A task with connection fields hands the
+client its login in a file in the
+[node task's private directory](../../docs/reference/secrets.md#a-node-tasks-private-directory),
+which only root can open and which MMX removes after the task.
+
+## Examples
+
+### An account for an application
+
+```yaml
+- mysql_user:
+    name: shop
+    may_connect_from: "10.0.%"
+    password: "{{ .secrets.shop_database_password }}"
+    privileges:
+      - grant_on: "shop.*"
+        grant: [SELECT, INSERT, UPDATE, DELETE]
+    privileges_not_listed: remove
+```
+
+The task creates the account `shop@10.0.%`: the user name `shop`, which may
+connect from every machine whose address starts with `10.0.`. The password
+of `shop@10.0.%` comes from the secret `shop_database_password`.
+The account may read and change the rows of every table in the database
+`shop`, and holds no other privilege. The result's `reason` says what the
+task did:
+
+```text
+created the account shop@10.0.%; granted DELETE, INSERT, SELECT, UPDATE on shop.*
+```
+
+A dryrun says each thing that a run would do, with the word "would":
+
+```text
+would create the account shop@10.0.%; would grant DELETE, INSERT, SELECT, UPDATE on shop.*
+```
+
+### An account without a password
+
+Some accounts have no password by intent, such as the one that a load
+balancer's health check logs in with:
+
+```yaml
+- mysql_user:
+    name: health-check
+    may_connect_from: "10.0.0.%"
+    allow_creating_account_without_password: true
+```
+
+The result's `reason` then says "created the account
+health-check@10.0.0.% without a password".
+
+### Remove an account
+
+```yaml
+- mysql_user:
+    name: shop
+    may_connect_from: "10.0.%"
+    state: absent
+```
+
+`state: absent` removes the account and accepts only `name`,
+`may_connect_from`, and the connection fields. An account that does not
+exist is unchanged. A task that removed the account says "removed the
+account shop@10.0.%"; a dryrun says "would remove the account
+shop@10.0.%".
+
+## How it works
+
+The result's `value` has `created`, which is true when the task created the
+account. The result's `value` also has `changed_attributes`, which lists
+what differed on an existing account: `password`, `privileges`, or both.
+
+A dryrun reads the catalog, changes nothing, and reports `would_change`
+with the same `value` as a run.
+
+`may_connect_from` is the host part of the account. In MySQL and MariaDB,
+`shop@localhost` and `shop@%` are two different accounts, so the task always
+names the host part. MMX compares the host part in lower case, as MySQL and
+MariaDB store the host part.
+
+### The password
+
+MMX never sends the password to the server. The servers keep no password,
+only a value computed from it, the stored value. MMX reads the account's
+stored value, computes a value from the task's password, and compares the
+computed value with the stored value. When the values match, MMX leaves the
+password unchanged. No login attempt is
+needed for the comparison.
+
+To set a password, MMX computes the stored value and sends only the
+computed value. The module handles password syntax
+differences between MySQL and MariaDB, including differences between
+versions of MySQL or MariaDB.
+
+- **The method.** MMX can compare and set passwords for the authentication
+  methods `mysql_native_password` and `caching_sha2_password`. A new
+  account gets the server's own method for new accounts:
+  `mysql_native_password` on MariaDB and `caching_sha2_password` on MySQL.
+  MMX preserves an existing account's method.
+
+  MMX computes the new stored value with the account's method, with the
+  salt length and the number of rounds that the server uses.
+- **Another method.** For an account with another authentication method, a
+  task with `password` fails and names the method. `root@localhost` is such
+  an account on every MariaDB and on a MySQL whose root logs in through
+  `auth_socket`, such as Ubuntu's MySQL. Leave `password` out to manage only
+  the privileges of such an account.
+- **An empty `password`** is refused when the project loads: the servers
+  take it as "no password", and anyone could then log in to the account.
+- **A server that checks passwords.** A MariaDB server with a password
+  check plugin refuses every stored value while its setting
+  `strict_password_validation` is on, because it can check only a clear
+  password. A task that would set a password then fails, in a run and in a
+  dryrun, and names the setting: a task that creates the account, or one
+  whose `password` differs from the stored value. A task whose `password`
+  the account already has does not fail.
+- **Where the stored value shows.** The servers write the statement, with
+  the stored value, into their general log and binary log when those are
+  on. MariaDB's client prints a statement that fails. MMX replaces the
+  stored value in what the task reports, whole or in part.
+
+A secret in `password` does not hide the task's result. MMX shows
+`[redacted]` wherever a text of the result holds the password or its stored
+value
+([A login does not hide a node task's result](../../docs/reference/secrets.md#a-login-does-not-hide-a-node-tasks-result)).
+
+### An account without a password
+
+A MySQL or MariaDB account without a password lets anyone log in as the
+account from the machines in `may_connect_from`, with all the account's
+privileges. A forgotten `password` line must not create an account that
+anyone in `may_connect_from` can use without a password. So a task that
+would create an account and has no `password` fails, in a run and in a
+dryrun, unless the task says
+`allow_creating_account_without_password: true`.
+
+The failure explains access without a password and tells you to add
+`password` or `allow_creating_account_without_password: true`.
+MMX does not automatically retry the failed node task
+(`failure_kind: config`). For an existing account,
+`allow_creating_account_without_password` changes nothing, and MMX leaves
+the account's password unchanged. A task cannot specify
+`allow_creating_account_without_password` together with `password`.
+
+### The privileges
+
+MMX compares the task's list with the rows of the server's catalog
+(`information_schema`) and sends only the `GRANT` and `REVOKE` statements
+that are missing.
+
+- Database names in `grant_on` are literal. `grant_on: shop_db.*` grants
+  only on `shop_db`; MMX escapes `_` and `%` before sending SQL.
+  To grant on matching databases, replace `grant_on` with
+  `grant_on_databases_matching: shop_%`. The database pattern in
+  `grant_on_databases_matching` has no `.*` suffix.
+  With MySQL `partial_revokes` enabled, `_` and `%` are literal, so
+  `grant_on_databases_matching: shop_%` does not match `shop_orders` and
+  the server needs one `grant_on` entry per database.
+
+- Write the names in `grant_on` plain, also a name with a dash or a space, such as
+  `my-shop.*`. MMX puts each name into backticks itself when it writes the
+  statement. So MMX refuses a `grant_on` that holds a backtick: the backticks
+  would become a part of the name.
+- `grant` holds the privilege names as the server writes them, such as
+  `SELECT` or `CREATE TEMPORARY TABLES`, in upper or lower case.
+- `grant: [ALL]` means every privilege that the server has for that kind of
+  `grant_on`. The list grows with the server's version, so MMX compares with the
+  server's own list; a rerun on a newer version then grants `ALL` again.
+- `GRANT OPTION` in `grant` lets the account pass its privileges at that `grant_on`
+  to other accounts.
+- `privileges_not_listed` has no default. `remove` means that the account
+  afterwards holds exactly the listed privileges and no other: none on
+  another database or table, on a column, or on a stored procedure or
+  function. MMX revokes what it read, row by row. With `keep`, the task only
+  adds. Roles and proxy rights are not touched by either: they are
+  memberships, not privileges on a thing.
+- `privileges: []` with `privileges_not_listed: remove` takes every
+  privilege away.
+- **A kind of stored routine that MMX cannot revoke.** MMX knows how to
+  revoke privileges on stored procedures and functions. For a privilege on
+  another kind of routine, such as a package of MariaDB or a library of
+  MySQL 9, a run with `remove` fails before it changes anything, and a
+  dryrun reports `not_checked`.
+- On MySQL, `GRANT OPTION` at `*.*` also covers the dynamic privileges,
+  such as `BACKUP_ADMIN`, each of which carries its own option: the account
+  has the option when it has it for everything that it holds at `*.*`. MMX
+  reads the dynamic privileges from the grant table `mysql.global_grants`,
+  and takes a row of `information_schema.USER_PRIVILEGES` only for a
+  privilege that no account's row of that table names. The statements are
+  the same as for MariaDB.
+- **A table that does not exist.** The servers grant a privilege on a table
+  only when the table exists, unless `CREATE` is among the privileges. A
+  task that would grant on a missing table fails in a run as a missing
+  prerequisite and names the table; a dryrun reports `not_checked`, because
+  an earlier node task may create the table.
+- **A privilege's name that the server refuses** fails the run with the
+  server's message, as a configuration error that is not tried again. That
+  also holds for a name at a `grant_on` where it does not apply, such as `SUPER`
+  on one database. A dryrun does not ask the server about names. After its
+  statements the task reads the account again and fails when the account is
+  still not what the task asks for, as when the server keeps a privilege
+  under another name than the task writes.
+
+### A lock that another session holds
+
+A statement of `mysql_user` that changes the server waits 10 seconds for a
+lock that another session holds, as one of `mysql_database` does; the task
+then fails and is tried again.
+[A lock that another session holds](mysql_database.md#a-lock-that-another-session-holds)
+on the `mysql_database` page has the details.
+
+A `mysql_user` task is no tracked input. In the `changes` of a node task
+block it runs like anywhere else, and the block's `systemd_service` task or
+command does not follow it: an account in the server is no reason to restart
+a service.
+
+### Server certificate verification
+
+With `database_server_host`, the client verifies the server by default.
+The [`mysql_database` connection section](mysql_database.md#server-certificate-verification)
+states the client requirements and how to supply a trusted CA file.
+`dangerously_skip_server_certificate_check: true` disables verification.
+A local socket connection is unchanged.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, AlmaLinux 10.
+
+The suite `tests/integration/mysql_databases.py` runs on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10 (in Incus containers on the Debian family, in virtual machines on the Red Hat family): MariaDB 10.11 and 11.8 on the Debian family, MariaDB 10.5 on Rocky Linux 9 and 10.11 on AlmaLinux 10, and MySQL 8.0 on Rocky Linux 9 and 8.0 and 8.4 on Ubuntu 24.04 and 26.04 and 8.4 on AlmaLinux 10, which package
+it. On Ubuntu 26.04 it is MariaDB 11.8.6 and MySQL 8.4.11. The suite also passed
+on Hetzner Cloud servers with Debian 13.
+
+Not tested: MySQL from the vendor's own repository, as on Debian, which
+packages only MariaDB; and a database server that hides stored passwords
+from its administrator, as some managed database services do.
+
+[Limits on each distribution](../../docs/reference/limits-on-each-distribution.md) says what is limited for this module on [Debian 12](../../docs/reference/limits-on-each-distribution.md#debian-12) and [Debian 13](../../docs/reference/limits-on-each-distribution.md#debian-13), and why.
+
+## Why it works this way
+
+- **Remote servers are verified by default.** SQL and login information
+  must reach the intended server. A named CA keeps verification;
+  `dangerously_skip_server_certificate_check` removes that protection,
+  following [protective choices](../../docs/changing-mmx/design/modules.md#protective-choices-come-in-three-levels).
+
+- **MMX sends only the stored value of a password.** MariaDB writes a
+  statement with a clear password into its general log. The stored value is
+  not the password. So MMX also does not send the clear password to a
+  MariaDB server that checks passwords.
+- **A new account needs `password` or `allow_creating_account_without_password: true`.**
+  An account without a password is open to everyone who can reach the server
+  from `may_connect_from`. That must be written on the task, not follow from
+  a missing line. The permission's name says that it applies only when
+  creating the account; an existing account's password stays.
+- **An empty `password` is refused.** It is "no password" to the servers:
+  anyone could log in to the account.
+- **`may_connect_from` is required.** The same user name with two host
+  parts is two accounts with two passwords and two sets of privileges. A
+  default would create or change the wrong one.
+- **`privileges_not_listed` has no default.** It decides whether a rerun
+  takes privileges away from an account.
+- **`remove` reaches every place:** other databases and tables, columns, and
+  stored routines. The reader sees one list and must be able to take it for
+  all the account may do. A privilege on a column or on another database
+  that survived would be invisible in the task.
+- **Privileges are compared as rows of the server's catalog,** not as the
+  text of `SHOW GRANTS`, which differs between MySQL and MariaDB and between
+  their versions.
+- **MySQL's dynamic privileges are read from the grant table.** After
+  `REVOKE GRANT OPTION ON *.*`, MySQL's `information_schema.USER_PRIVILEGES`
+  shows each dynamic privilege twice, once still with the option, and keeps
+  showing a dynamic privilege that is revoked after that, until the server
+  reads its tables again (measured on MySQL 8.0.46 and 9.7.1). The grant
+  table `mysql.global_grants` is right at every moment. Revoking every
+  privilege first would avoid the wrong rows, but an account that the task
+  logs in with would lose every privilege with the first statement and could
+  not grant them back. So a task that takes the option of `*.*` away is one
+  plain statement, and the account keeps every privilege that it holds.
+- **Database names in `grant_on` are literal.** An underscore in an application
+  database name must not grant access to other databases.
+  `grant_on_databases_matching` states a deliberate wildcard grant, following
+  [protective choices](../../docs/changing-mmx/design/modules.md#protective-choices-come-in-three-levels).
+  The name `grant_on` also avoids YAML 1.1 interpreting `on` as a boolean.
+- **A grant on a missing table is a missing prerequisite in a run and
+  `not_checked` in a dryrun.** The servers refuse such a grant, and an
+  earlier node task, or the application's first start, may still create the
+  table. A dryrun must not claim a grant that a run cannot make.

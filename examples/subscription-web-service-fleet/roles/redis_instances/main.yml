@@ -1,0 +1,93 @@
+# Several Redis instances on one server, each with its own port, memory
+# limit, eviction policy, and persistence, each its own systemd service. The
+# distribution's Redis; its own instance on port 6379 stays off.
+inputs:
+  # Each entry: {name, port, persisted, maxmemory, maxmemory_policy}.
+  instances: {type: list, required: true}
+  # A restart empties the cache instances: a routine run refuses it until the
+  # command line approves it.
+  restart_approved: {type: boolean, required: true}
+  # The persisted instance whose append-only log is copied every five
+  # minutes, and where the copy goes.
+  persisted_instance_name: {type: string, required: true}
+  persisted_instance_backup_dir: {type: string, required: true}
+
+node_tasks:
+  # The package creates the system account redis.
+  - apt_package:
+      packages:
+        - {name: redis-server, version: newest_when_first_installed}
+        - {name: redis-tools, version: newest_when_first_installed}
+        - {name: rsync, version: newest_when_first_installed}
+
+  # The package's own instance on port 6379 stays off: the instances below
+  # replace it.
+  - systemd_service:
+      name: redis-server
+      state: stopped
+      start_at_boot: false
+
+  - directory: {path: /etc/redis, owner: redis, group: redis, permissions_mode: "0755"}
+  - directory: {path: /var/lib/redis, owner: redis, group: redis, permissions_mode: "0750"}
+  - directory: {path: /var/log/redis, owner: redis, group: redis, permissions_mode: "0750"}
+
+  - task_block:
+      id: redis_instances
+      changes:
+        - file:
+            path: /etc/redis/common.conf
+            template: files/common.conf.tmpl
+            owner: redis
+            group: redis
+            permissions_mode: "0640"
+        - loop: "{{ .inputs.instances }}"
+          as: instance
+          file:
+            path: "/etc/redis/{{ .instance.name }}.conf"
+            template: files/instance.conf.tmpl
+            owner: redis
+            group: redis
+            permissions_mode: "0640"
+        - loop: "{{ .inputs.instances }}"
+          as: instance
+          systemd_unit:
+            name: "redis-{{ .instance.name }}.service"
+            template: files/instance.service.tmpl
+      checks_before_restart_or_reload:
+        - assert:
+            that: "{{ .inputs.restart_approved }}"
+            message: >-
+              Redis must restart to load this change, and a restart empties
+              the cache instances, so the applications are slow until the
+              caches fill again. Run again off-peak with
+              --var redis_restart_approved=true.
+      activate:
+        - loop: "{{ .inputs.instances }}"
+          as: instance
+          systemd_service:
+            name: "redis-{{ .instance.name }}"
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - loop: "{{ .inputs.instances }}"
+          as: instance
+          wait_for:
+            tcp_port_accepts_connections: "{{ .instance.port }}"
+            wait_at_most: 30s
+
+  # A copy of the persisted instance's append-only log every five minutes,
+  # on the same server; a real project copies it to another machine too.
+  - directory:
+      path: "{{ .inputs.persisted_instance_backup_dir }}"
+      owner: redis
+      group: redis
+      permissions_mode: "0750"
+  - cron_job:
+      name: "redis-{{ .inputs.persisted_instance_name }}-backup"
+      cron_schedule: "*/5 * * * *"
+      run_as_user_account: root
+      env:
+        PERSISTED_INSTANCE_NAME: "{{ .inputs.persisted_instance_name }}"
+        BACKUP_DIR: "{{ .inputs.persisted_instance_backup_dir }}"
+      command: /usr/bin/flock -n "/run/redis-$PERSISTED_INSTANCE_NAME-backup.lock" rsync --archive --chown=redis:redis "/var/lib/redis/$PERSISTED_INSTANCE_NAME-appendonlydir/" "$BACKUP_DIR/$PERSISTED_INSTANCE_NAME-appendonlydir/" >> "/var/log/redis/$PERSISTED_INSTANCE_NAME-backup.log" 2>&1

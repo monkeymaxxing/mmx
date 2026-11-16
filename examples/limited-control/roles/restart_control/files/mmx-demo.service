@@ -1,0 +1,10 @@
+[Unit]
+Description=MMX limited-control demonstration application
+
+[Service]
+User=mmx-demo
+Group=mmx-demo
+ExecStart=/usr/bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

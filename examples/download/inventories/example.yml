@@ -1,0 +1,4 @@
+nodes:
+  app:
+    address: your-server
+    ssh_user: your-admin

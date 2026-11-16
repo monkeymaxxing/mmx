@@ -1,0 +1,39 @@
+# A daily dump of every MySQL database by a systemd timer, kept for a number
+# of days in /var/backups/mysql, on the MySQL server that the inventory names.
+inputs:
+  # Only one server makes the scheduled backups; on the others the script
+  # is there for a person to run.
+  backup_schedule_enabled: {type: boolean, required: true}
+  backup_retention_days: {type: integer, required: true}
+
+node_tasks:
+  - directory:
+      path: /var/backups/mysql
+      owner: root
+      group: root
+      permissions_mode: "0700"
+
+  - file:
+      path: /usr/local/bin/mysql-backup
+      source: files/mysql-backup
+      owner: root
+      group: root
+      permissions_mode: "0750"
+
+  # As root through the server's socket, which needs no password.
+  - when: "{{ .inputs.backup_schedule_enabled }}"
+    systemd_scheduled_job:
+      name: mysql-backup
+      script: /usr/local/bin/mysql-backup
+      env:
+        MYSQL_BACKUP_RETENTION_DAYS: "{{ .inputs.backup_retention_days }}"
+      cron_schedule: "15 3 * * *"
+      run_missed_job_after_downtime: true
+      stop_a_run_after: 6h
+
+      run_as_user_account: root
+  - when: {not: "{{ .inputs.backup_schedule_enabled }}"}
+    systemd_scheduled_job:
+      name: mysql-backup
+      state: absent
+      run_as_user_account: root

@@ -1,0 +1,9 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - role: web_server
+        inputs:
+          port: 18080
+          message: Managed by MMX

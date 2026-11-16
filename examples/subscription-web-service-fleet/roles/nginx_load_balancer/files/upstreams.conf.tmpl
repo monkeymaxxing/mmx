@@ -1,0 +1,24 @@
+# Managed by MMX (role nginx_load_balancer): the application servers behind
+# the load balancer, from the inventory groups main_application_servers and
+# brand_site_servers. A server with a higher weight gets more requests.
+{{- $nodes := .inputs.inventory_nodes }}
+
+upstream main_application_api {
+{{- range .inputs.main_application_servers }}
+    server {{ (index $nodes .).address }}:8080 weight={{ (index $nodes .).vars.load_balancer_weight_for_main_application }};
+{{- end }}
+}
+
+upstream main_application_web_pages {
+{{- range .inputs.main_application_servers }}
+    server {{ (index $nodes .).address }}:8081 weight={{ (index $nodes .).vars.load_balancer_weight_for_main_application }};
+{{- end }}
+}
+{{- range $site := .inputs.brand_sites }}
+
+upstream brand_site_{{ $site.name }} {
+{{- range $.inputs.brand_site_servers }}
+    server {{ (index $nodes .).address }}:{{ $site.application_port }} weight={{ (index $nodes .).vars.load_balancer_weight_for_brand_sites }};
+{{- end }}
+}
+{{- end }}

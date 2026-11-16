@@ -1,0 +1,27 @@
+# memcached for the applications' caches, from the distribution's package.
+inputs:
+  memory_mib: {type: integer, required: true}
+
+node_tasks:
+  - task_block:
+      id: memcached
+      changes:
+        - apt_package:
+            packages:
+              - {name: memcached, version: newest_when_first_installed}
+        - file:
+            path: /etc/memcached.conf
+            template: files/memcached.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        - systemd_service:
+            name: memcached
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - wait_for:
+            tcp_port_accepts_connections: 11211
+            wait_at_most: 30s

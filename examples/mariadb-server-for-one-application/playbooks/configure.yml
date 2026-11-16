@@ -1,0 +1,39 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # MariaDB's server from the distribution's own packages. The server's
+      # package brings the client program mariadb, which the two database
+      # tasks below run.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: mariadb-server, version: newest_when_first_installed}]}
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: mariadb-server, version: newest_when_first_installed}]}
+
+      # On Debian and Ubuntu the package makes the data directory, and MMX
+      # keeps a package from starting its service while it installs. On the
+      # Red Hat family the first start makes the data directory. So on every
+      # distribution this task is the first start.
+      - systemd_service:
+          name: mariadb
+          state: running
+          start_at_boot: true
+
+      # The two tasks run mariadb as root, which the server accepts as
+      # root@localhost through its socket: no login to write.
+      - mysql_database:
+          name: "{{ .vars.application_database }}"
+          character_set: utf8mb4
+
+      # The account holds every privilege on its own database and nothing
+      # else. MMX sends the server only the stored form of the password.
+      - mysql_user:
+          name: "{{ .vars.application_account }}"
+          may_connect_from: "{{ .vars.application_connects_from }}"
+          password: "{{ .secrets.shop_database_password }}"
+          privileges:
+            - grant_on: "{{ .vars.application_database }}.*"
+              grant: [ALL]
+          privileges_not_listed: remove

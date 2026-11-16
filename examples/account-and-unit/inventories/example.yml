@@ -1,0 +1,4 @@
+nodes:
+  app:
+    address: replace-with-your-node
+    ssh_user: root

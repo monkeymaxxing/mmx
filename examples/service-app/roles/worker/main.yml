@@ -1,0 +1,57 @@
+inputs:
+  message: {type: string, required: true}
+  label: {type: string, required: true}
+
+node_tasks:
+  - group:
+      name: mmx-worker
+      system: true
+
+  - user:
+      create_home_directory: false
+      name: mmx-worker
+      system: true
+      primary_group: mmx-worker
+      home: /srv/mmx-worker
+
+  - directory:
+      path: /srv/mmx-worker
+      owner: mmx-worker
+      group: mmx-worker
+      permissions_mode: "0750"
+
+  - task_block:
+      id: worker
+      changes:
+        - file:
+            path: /srv/mmx-worker/worker.sh
+            source: files/worker.sh
+            permissions_mode: "0755"
+        - file:
+            path: /srv/mmx-worker/message
+            content: "{{ .inputs.message }}\n"
+            owner: mmx-worker
+            group: mmx-worker
+            permissions_mode: "0640"
+        - systemd_unit:
+            name: mmx-worker.service
+            template: files/worker.service
+      activate:
+        - systemd_service:
+            name: mmx-worker
+            start_at_boot: true
+            refresh: reload
+            state: running
+      verify:
+        - wait_for:
+            path_exists: /srv/mmx-worker/loaded
+            wait_at_most: 10s
+        # A reload must also publish the requested contents, not just the path.
+        - shell:
+            script: cat /srv/mmx-worker/loaded
+            changed_when: false
+          time_limit: 10s
+          retry:
+            max_tries: unlimited
+            until:
+              equals: ["{{ .this_node_task.stdout }}", "{{ .inputs.label }}: {{ .inputs.message }}\n"]

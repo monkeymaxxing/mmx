@@ -1,0 +1,100 @@
+# `assert`
+
+`assert` checks a condition on the node and fails with a message when the
+condition does not hold. The condition is written like `when`: a boolean
+reference or one of the [conditions](../../docs/reference/shared-module-behavior.md#conditions) such as
+`equals` or `number_at_most`. It changes nothing.
+
+`assert` reads values; it does not observe the node by itself. To check
+command output or an HTTP response, first run the node task that observes it,
+such as [`shell`](shell.md) or [`http`](http.md), then assert on its result.
+To wait until something becomes true, use [`wait_for`](wait_for.md).
+
+## Examples
+
+### Refuse a distribution that a role does not support
+
+```yaml
+- assert:
+    that:
+      equals: ["{{ .node.distribution.id }}", debian]
+    message: "The app role supports Debian only, not {{ .node.distribution.id }}"
+```
+
+On a node that is not Debian, the node task fails with the message as the
+reason. The fleet stage fails on the node running the assertion.
+
+### Check a command's output
+
+```yaml
+- id: migrations
+  shell:
+    run_as_user_account: app
+    run_from_directory: /srv/app/current
+    script: bin/migrate --status
+    changed_when: false
+
+- assert:
+    that:
+      contains: ["{{ .node_tasks.migrations.stdout }}", "up to date"]
+    message: "Migrations are pending on {{ .node.name }}"
+```
+
+The `shell` task runs `bin/migrate --status` as the account `app` and
+changes nothing. `assert` then reads its output and fails the node's fleet
+stage when the output does not say `up to date`.
+
+## How it works
+
+- `that` is checked like `when`. True succeeds unchanged; false fails the
+  task, and so the node's fleet stage, with `message` as the reason. Without
+  a `message`, the reason is the condition as written.
+- References in `that` and `message` resolve like any argument.
+- The reason shows unless its text reads a secret. A `message` that reads a
+  secret, or a result of a node task whose result is hidden, shows as
+  `details suppressed for a task using secrets`. Any other message shows,
+  and so does the condition as written: also when `that` reads a secret,
+  and also after a node task of the same role or node task block that read
+  one. A role call or node task block that fails because of the assert
+  shows the same reason. The page
+  [which node tasks have a hidden result](../../docs/reference/secrets.md#which-node-tasks-have-a-hidden-result)
+  gives the rule for every node task.
+- It runs during dryrun. A value that is not known yet there reports not
+  checked.
+- It evaluates once and rejects `retry`, because its values do not change
+  between tries.
+- `assert` is accepted in a node task block's
+  `checks_before_restart_or_reload`, because it changes nothing. The page
+  [Checks before a restart or reload](../../docs/reference/playbook-file.md#task_block-fields)
+  shows it there, making a routine run refuse a restart that empties a
+  cache.
+
+## Errors and what they mean
+
+- **The condition is false.** The node's fleet stage fails with the message.
+  Correct the node or the value that the message names, then run again.
+- **`assert needs that: a boolean reference or a predicate`.** The task has
+  no `that`.
+- **A value's type, structure, or text format is invalid for the condition.**
+  A condition such as `number_at_most` with the text `about 3` fails the node
+  task and names the value. MMX treats the invalid value as an error, never
+  as a false condition. The
+  [conditions](../../docs/reference/shared-module-behavior.md#conditions) list the rules.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Arch Linux, openSUSE Leap 16.1, Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The base suite covers this module (`account_units.py`) and runs on every tested distribution.
+
+## Why it works this way
+
+- **`retry` is rejected.** The values that `assert` reads do not change
+  between tries.
+- **The reason shows after a node task that read a secret.** Such later
+  node tasks are hidden because they may print what the reading task wrote
+  on the node, such as a configuration file with a password. An assert
+  reads no file on the node: its text comes only from values, and a value
+  that holds a secret, also a hidden node task's result, stays a secret
+  value. So MMX knows whether the text holds a secret, and an assert that
+  refuses a run can say why.

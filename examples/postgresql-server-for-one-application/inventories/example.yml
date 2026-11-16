@@ -1,0 +1,4 @@
+nodes:
+  database01:
+    address: database01.example.com
+    ssh_user: admin

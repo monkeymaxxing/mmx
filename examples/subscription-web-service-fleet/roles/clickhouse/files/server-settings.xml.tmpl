@@ -1,0 +1,25 @@
+<!-- Managed by MMX (role clickhouse): settings over the package's config.xml.
+     Every other setting is the package's default. -->
+<clickhouse>
+    <!-- Reports connect over the internal network. Every IPv4 address, and
+         IPv6's localhost, where clickhouse-client connects first; listen_try
+         keeps the server up on a machine without IPv6. -->
+    <listen_host>0.0.0.0</listen_host>
+    <listen_host>::1</listen_host>
+    <listen_try>1</listen_try>
+
+    <!-- The data server also runs MySQL, Redis, and Solr: a cap for the
+         whole server and small caches. -->
+    <max_server_memory_usage>{{ .inputs.max_server_memory_bytes }}</max_server_memory_usage>
+    <mark_cache_size>{{ .inputs.mark_cache_bytes }}</mark_cache_size>
+    <!-- Used only by a query that sets use_uncompressed_cache. -->
+    <uncompressed_cache_size>{{ .inputs.uncompressed_cache_bytes }}</uncompressed_cache_size>
+
+    <!-- The package logs at trace level, a line for every step of every
+         query. ClickHouse rotates its own logs: at most 7 files of 100 MB. -->
+    <logger>
+        <level>information</level>
+        <size>100M</size>
+        <count>7</count>
+    </logger>
+</clickhouse>

@@ -1,0 +1,13 @@
+nodes:
+  database:
+    address: database.example.com
+    ssh_user: deploy
+
+vars:
+  # The application's database and its account. The account may connect
+  # from the machines that this pattern names: localhost for an application
+  # on the database server itself, an address pattern such as 10.0.% for
+  # application servers in that network.
+  application_database: shop
+  application_account: shop
+  application_connects_from: localhost

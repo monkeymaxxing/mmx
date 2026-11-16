@@ -1,0 +1,34 @@
+inputs:
+  port: {type: integer, required: true}
+  greeting: {type: string, default: Hello}
+
+node_tasks:
+  - id: config
+    file:
+      path: /var/tmp/mmx-diagnostics.conf
+      permissions_mode: '0644'
+      content: |
+        port={{ .inputs.port }}
+        greeting={{ .inputs.greeting }}
+
+  - id: inspect
+    shell:
+      script: |
+        if test -e /var/tmp/mmx-diagnostics.conf; then
+          cat /var/tmp/mmx-diagnostics.conf
+        else
+          echo NOT_INSTALLED
+        fi
+      dryrun: |
+        if test -e /var/tmp/mmx-diagnostics.conf; then
+          cat /var/tmp/mmx-diagnostics.conf
+        else
+          echo NOT_INSTALLED
+        fi
+      changed_when: false
+      failed_when:
+        matches: ['{{ .this_node_task.stderr }}', '(?m)^ERROR:']
+
+  - show: '{{ .node_tasks.inspect.stdout }}'
+    when:
+      contains: ['{{ .node_tasks.inspect.stdout }}', 'port=']

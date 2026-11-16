@@ -1,0 +1,39 @@
+# The nginx servers of the brand sites on an application server, one port
+# for each site, behind the load balancer. One Rails application serves every
+# brand site; each site is its own release directory, and Passenger tells the
+# application which site it is by BRAND_SITE_NAME.
+inputs:
+  # Each entry: {name, domain, application_port, repository}.
+  brand_sites: {type: list, required: true}
+  applications_dir: {type: string, required: true}
+  server_environment: {type: string, required: true}
+
+node_tasks:
+  - task_block:
+      id: brand_site_nginx_servers
+      changes:
+        - loop: "{{ .inputs.brand_sites }}"
+          as: site
+          file:
+            path: "/etc/nginx/sites-enabled/{{ .site.domain }}.conf"
+            template: files/brand_site.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - shell:
+            script: nginx -t
+            dryrun: nginx -t
+            changed_when: false
+      activate:
+        - systemd_service:
+            name: nginx
+            state: running
+            refresh: reload
+
+  - file:
+      path: /etc/logrotate.d/brand_sites
+      template: files/brand_sites.logrotate.tmpl
+      owner: root
+      group: root
+      permissions_mode: "0644"

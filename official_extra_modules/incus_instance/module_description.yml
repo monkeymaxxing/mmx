@@ -1,0 +1,133 @@
+summary: >-
+  Manages one Incus container or virtual machine on the node: its profiles,
+  its configuration, its devices, and whether it runs.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The instance's name in Incus, such as shop-test.
+  state:
+    type: string
+    required: true
+    allowed_values: [running, stopped, deleted_with_all_its_data]
+    description: >-
+      running: the instance exists and runs. stopped: the instance exists and
+      is shut down. deleted_with_all_its_data: the instance is gone, with its
+      root disk and its snapshots; this state accepts only name and
+      incus_project.
+  image_when_created:
+    type: string
+    required: false
+    description: >-
+      The image that a new instance is created from: an image of another server
+      with that server's name in front, such as images:debian/13, or an image
+      of the node's own Incus by its alias or its fingerprint, which Incus
+      must have before the task runs. Required when the instance does not
+      exist yet, and used only then.
+  instance_type:
+    type: string
+    required: false
+    allowed_values: [container, virtual_machine]
+    description: >-
+      Required with running and stopped: container or virtual_machine.
+      Incus creates an instance of the type of its image, so an image of the other type fails the task,
+      and so does an existing instance of the other type.
+  profiles:
+    type: list_of_strings
+    required: false
+    description: >-
+      Required with running and stopped. Replaces the whole ordered list of
+      the instance's Incus profiles; a later profile overrides an earlier
+      one. An empty list means no profile.
+  config:
+    type: mapping_of_strings
+    required: false
+    description: >-
+      Incus configuration keys of the instance with their values as text,
+      such as limits.cpu with the value "2". Needs config_keys_not_listed. A
+      value reaches Incus through standard input only.
+  config_keys_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: >-
+      Required with config. remove: config is the whole configuration of the
+      instance, and every other key of the instance is removed. keep: the
+      keys in config are set, and every other key stays. Incus's own
+      volatile.* and image.* keys are never removed.
+  devices:
+    type: any
+    required: false
+    description: >-
+      The instance's own devices by name. Each device is a mapping of Incus
+      device options with their values as text, such as type with the value
+      disk. Replaces each listed device's whole definition, also with
+      devices_not_listed: keep. Needs devices_not_listed.
+  devices_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: >-
+      Required with devices. remove: devices holds all of the instance's own
+      devices, and every other own device is removed. keep: the listed
+      devices are set, and every other own device stays. A device that a
+      profile gives the instance is not the instance's own and is left alone.
+  wait_for_shutdown_at_most:
+    type: string
+    required: false
+    description: >-
+      How long state stopped waits for the instance to shut down: a positive
+      duration of whole seconds, such as 30s or 2m. The default is 2m.
+      Incus takes a timeout in whole seconds.
+  power_off_when_shutdown_takes_longer:
+    type: boolean
+    required: false
+    description: >-
+      What happens when the wait of wait_for_shutdown_at_most ends and the
+      instance still runs. true: the task stops the instance at once, as if
+      its power were cut. false, the default: the task fails.
+  incus_project:
+    type: string
+    required: false
+    description: >-
+      The Incus project that holds the instance. The default is Incus's
+      project default. The project must exist; this is not the MMX project.
+outputs:
+  created:
+    type: boolean
+    description: True when this task created the instance; in a dryrun, true when a run would create it.
+examples:
+  - description: A Debian 13 container that runs, with two CPUs, 4 GiB of memory, and port 8080 of the node passed on to port 80 inside it.
+    config: |
+      incus_instance:
+        name: shop-test
+        state: running
+        image_when_created: images:debian/13
+        profiles: [default]
+        config:
+          limits.cpu: "2"
+          limits.memory: 4GiB
+          boot.autostart: "true"
+        config_keys_not_listed: remove
+        devices:
+          web:
+            type: proxy
+            listen: tcp:0.0.0.0:8080
+            connect: tcp:127.0.0.1:80
+        devices_not_listed: remove
+        instance_type: container
+  - description: Shut the instance down, wait up to 60 seconds, and stop it at once when it has not shut down by then.
+    config: |
+      incus_instance:
+        name: shop-test
+        state: stopped
+        wait_for_shutdown_at_most: 60s
+        power_off_when_shutdown_takes_longer: true
+        instance_type: container
+        profiles: [default]
+  - description: Delete the instance of the Incus project staging with its root disk and its snapshots.
+    config: |
+      incus_instance:
+        name: shop-test
+        state: deleted_with_all_its_data
+        incus_project: staging

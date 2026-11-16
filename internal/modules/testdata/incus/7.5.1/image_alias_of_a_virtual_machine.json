@@ -1,0 +1,15 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"description": "",
+		"target": "c7a63ffcf4c17b7cc579bb7f4f3d12b5adad54212e921a9110fb295822c33cf8",
+		"name": "mmx-test-vm",
+		"type": "virtual-machine"
+	}
+}
+

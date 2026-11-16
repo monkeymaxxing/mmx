@@ -1,0 +1,12 @@
+# Managed by MMX (role memcached). Read by the package's
+# systemd-memcached-wrapper: one option per line. Every other option is
+# memcached's default; its output goes to the journal.
+
+# memcached refuses to run as root; the package's account memcache.
+-u memcache
+# Memory for items, in MiB; memcached grows to this size.
+-m {{ .inputs.memory_mib }}
+# The port that the applications' services.yml names.
+-p 11211
+# The application servers connect over the internal network.
+-l {{ .node.network.default_ipv4_address }},127.0.0.1

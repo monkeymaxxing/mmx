@@ -1,0 +1,14 @@
+# Managed by MMX (role main_application_nginx_servers): the main
+# application's web pages, behind the load balancer.
+server {
+    listen 8081;
+    root {{ .inputs.application_dir }}/current/public;
+
+    passenger_enabled on;
+    # RAILS_ENV and RACK_ENV of the application.
+    passenger_app_env {{ .inputs.server_environment }};
+    # The settings that Bundler installed the release's gems with.
+    passenger_env_var BUNDLE_DEPLOYMENT true;
+    passenger_env_var BUNDLE_PATH vendor/bundle;
+    passenger_env_var BUNDLE_WITHOUT development:test;
+}

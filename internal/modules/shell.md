@@ -1,0 +1,522 @@
+# `shell`
+
+`shell` runs a command on the node: its `script` runs with `bash -c`, as
+root unless the task names another account with `run_as_user_account`. Use
+it for custom commands and existing tools that no module covers.
+
+A bare `shell` task runs in written order on every requested attempt,
+including in a node task block's `activate` phase, so it must be safe to
+repeat. It is not triggered by another node task reporting a change. Use
+explicit conditions, guards, or a script that inspects the current state
+when work should be conditional. A command that must run because a file,
+package, or checkout changed says so with
+[`only_when_tracked_inputs_changed`](#run-a-command-after-a-change). It
+reports changed when it runs, and exit code zero means success. MMX does not
+infer anything from the script's contents or output beyond the declared
+rules below.
+
+Where a systemd unit applies a file, a
+[`systemd_service`](systemd_service.md) task on that unit is the first
+choice: `systemd-sysctl.service` applies `/etc/sysctl.d/`, and
+`nftables.service` applies a firewall file that is the node's whole
+firewall. A firewall file that keeps the rules of other tools, such as
+Docker, ufw, or firewalld, holds a table of its own and is loaded with
+`nft --file` as a command that follows a change; see
+[One nftables file instead](ufw.md#one-nftables-file-instead). Work that needs structured
+results beyond `stdout_json` belongs in a
+[module of the project's own](../../docs/changing-mmx/design/modules.md#the-projects-own-modules).
+The ad hoc command `mmx run-command` runs a command the same way; see
+[ad hoc commands](../../docs/reference/shared-module-behavior.md#run_as_user_account).
+
+## Examples
+
+### Run a command after a change
+
+Many programs do not read their configuration themselves: something has to be
+rebuilt after a file changes. `postmap` rebuilds a Postfix lookup table,
+`update-ca-certificates` rebuilds the certificate store, and touching
+`tmp/restart.txt` restarts an application under Passenger. Put the command in
+the `activate` phase of the node task block that writes the file, give the
+task an `id`, and add `only_when_tracked_inputs_changed: true`:
+
+```yaml
+# roles/postfix_virtual_map/main.yml
+node_tasks:
+  - task_block:
+      id: postfix_virtual_map
+      changes:
+        - file:
+            permissions_mode: "0644"
+            path: /etc/postfix/virtual
+            source: files/virtual
+      activate:
+        - id: rebuild_virtual_map
+          shell:
+            script: postmap /etc/postfix/virtual
+            only_when_tracked_inputs_changed: true
+```
+
+`postmap` now runs on the node when `/etc/postfix/virtual` changed and is
+skipped on an unchanged run. It also runs on the next run when a run wrote
+the file and stopped before the command, for example because the connection
+dropped.
+
+### Run a command when new application code arrives
+
+`only_when_tracked_inputs_changed` also makes new application code trigger
+a command. After `git` checks out a new commit, MMX runs `touch` on
+Passenger's restart file:
+
+```yaml
+# roles/shop_code/main.yml
+inputs:
+  release:
+    type: string
+    required: true
+
+node_tasks:
+  - task_block:
+      id: shop_code
+      changes:
+        - git:
+            repo: https://github.com/example/shop.git
+            check_out_tag: "{{ .inputs.release }}"
+            path: /srv/shop
+            run_as_user_account: deploy
+      activate:
+        - id: tell_passenger_to_restart
+          shell:
+            script: touch /srv/shop/tmp/restart.txt
+            run_as_user_account: deploy
+            only_when_tracked_inputs_changed: true
+```
+
+### Run a command only once
+
+Some commands must run one time on each node but provide no check for
+whether the work already succeeded: a vendor's setup script, a first import.
+`run_only_once_marker_file` names a file that MMX creates after the command
+succeeded. While the file exists, MMX skips the command:
+
+```yaml
+- shell:
+    script: percona-release setup ps80
+    run_only_once_marker_file: /var/lib/mmx/commands_run_once/percona_release_setup
+```
+
+To run the command again on purpose, delete the file on the node. Keep these
+files in `/var/lib/mmx/commands_run_once/`; MMX creates the directory.
+
+### Run as an application account
+
+```yaml
+- shell:
+    run_as_user_account: app
+    run_from_directory: /srv/app/current
+    script: bin/migrate
+    env:
+      DATABASE_URL: "{{ .secrets.database_url }}" # a secret name you choose
+```
+
+The script, guards, and dryrun command all run as the account `app` on the
+node. MMX looks up the account when the node task runs, so an earlier node
+task can create it. The account must be able to enter `run_from_directory`.
+
+### Report a change by the exit code
+
+For a script that exits `0` when already correct and `2` after updating:
+
+```yaml
+- shell:
+    script: /usr/local/bin/update-config
+    success_exit_codes: [0, 2]
+    changed_when:
+      equals: ["{{ .this_node_task.exit_code }}", 2]
+```
+
+Use `changed_when: false` for read-only commands.
+
+### Ask a program whether to run
+
+```yaml
+- shell:
+    script: /usr/local/bin/update-app
+    run_only_if_this_command_succeeds:
+      script: /usr/local/bin/app-needs-update
+      true_exit_codes: [0]
+      false_exit_codes: [3]
+```
+
+The check runs first on the node. Exit code 0 runs `update-app`, and exit
+code 3 skips `update-app`. The mapping form is for a check with conventions
+different from the [default exit codes](#guards).
+
+### A command with its own dryrun
+
+```yaml
+- shell:
+    script: /usr/local/bin/configure-app
+    dryrun: /usr/local/bin/configure-app --dry-run
+```
+
+During a dryrun, MMX runs only the `dryrun` command.
+
+### A script that only reads
+
+```yaml
+- id: hostname_checksum
+  shell:
+    script: sha256sum /etc/hostname
+    run_script_in_dryrun: true
+    changed_when: false
+```
+
+With `run_script_in_dryrun: true`, a dryrun runs `script` as written, where it
+would run the `dryrun` command. Use it for a script that changes nothing, so
+you do not keep a second copy of the script in `dryrun` that can drift from
+the first. A dryrun must not change a node, and MMX does not check that the
+script only reads. The guards, `run_as_user_account`, `run_from_directory`,
+`env`, and the result rules apply as in a run. MMX refuses the setting together
+with `dryrun` (two answers to the same question), `run_only_once_marker_file`,
+and `only_when_tracked_inputs_changed` (a dryrun already reports whether the
+command would run, and running the script there would run work that is meant to
+run once or only after a change).
+
+### A command that prints a secret
+
+Some commands print a secret, such as one that creates an access token. Mark
+such a command with `output_is_secret: true`:
+
+```yaml
+- id: new_token
+  shell:
+    script: /usr/local/bin/myapp create-token
+    changed_when: false
+    output_is_secret: true
+```
+
+Its `stdout` and `stderr` are then secret: MMX never prints them and never
+saves them, on the controller machine or on the node. An output made from them
+is secret too, so a later fleet stage can pass the token to other nodes; see
+[secrets that start on a node](../../docs/reference/secrets.md#secrets-that-start-on-a-node).
+The exit code and status stay visible.
+
+## How it works
+
+### The environment of a command
+
+`shell` does not load a login shell, profile files, or `BASH_ENV`. Its
+environment is the
+[fixed base that every command gets](../../docs/reference/shared-module-behavior.md#the-environment-of-a-command)
+plus `env`, and the command runs from `/`
+unless `run_from_directory` names another directory. Pass values through
+`env` rather than substituting them into the script. A script that needs
+initialization, such as a language version manager, sources it explicitly.
+
+`script`, `dryrun`, and the scripts of the two guards run as written: MMX
+fills in no reference there. Validation therefore refuses a reference to a
+value MMX knows in them, such as `echo {{ .vars.swap_mib }}`, which the
+shell would get with its braces. Pass the value through `env` and read the
+variable:
+
+```yaml
+- shell:
+    script: echo "$SWAP_MIB"
+    env:
+      SWAP_MIB: "{{ .vars.swap_mib }}"
+```
+
+A template for another tool, such as `docker inspect -f '{{.State.Status}}'`,
+names no value MMX knows and runs as written.
+
+An `env` value that is a list or a mapping, such as one whole reference to a
+list in `vars`, reaches the script as JSON text on one line. With
+`listen_ports: [80, 443]` in `vars`, this script prints `[80,443]`:
+
+```yaml
+- shell:
+    script: echo "$LISTEN_PORTS"
+    env:
+      LISTEN_PORTS: "{{ .vars.listen_ports }}"
+```
+
+The script reads the text with a JSON tool, such as `jq`. A reference within
+other text, such as `"ports {{ .vars.listen_ports }}"`, cannot hold a list or
+a mapping, and validation refuses it.
+
+Every command MMX runs on a node, a `shell` script, a `git` checkout, or an
+installer, starts with umask 022, as systemd starts its services: a file it
+creates is readable by other accounts unless the command sets another mode.
+
+`env` values, including secrets, reach the process only through its
+environment, never its command line or the script text. That environment is
+readable by the account's other processes, as any process environment is.
+
+Time limits follow the node task
+[timing design](../../docs/changing-mmx/design/execution.md#task-retries-have-explicit-conditions-and-limits).
+
+A program that the script starts in the background with its output
+redirected, such as `nohup worker >/var/log/worker.log 2>&1 &`, keeps
+running after the script ends. A program that still holds the script's
+output open 0.2 seconds after the script ends fails the node task: MMX keeps
+what was written until then and ends the programs left in the script's
+process group. A program that must keep running is a service; manage it
+with [`systemd_service`](systemd_service.md).
+
+### Running as another account
+
+`run_as_user_account` names a local account. The node runner executable,
+`mmx-runner`, is the MMX program installed on each node and already runs as
+root. For the shell task, `mmx-runner` starts the script, `dryrun` command,
+and command guards directly as the named account. The command guards are
+`run_only_if_this_command_succeeds` and `skip_if_this_command_succeeds`.
+
+MMX reads the account's user ID (UID) and primary group ID (GID) from
+`/etc/passwd` on the node. MMX also reads supplementary group memberships
+from `/etc/group`. The account lookup is also used to resolve file owners.
+No password, sudo, `su`, or login shell is involved, so a `nologin` service
+account works. MMX opens no PAM session: the command gets no login-session
+setup from Linux's Pluggable Authentication Modules. There is no
+`become` setting
+([privilege design](../../docs/changing-mmx/design/execution.md#privilege-has-one-ordinary-path)).
+The node runner executable checks `skip_if_this_path_exists` and
+`run_only_if_this_path_exists` paths itself. Relative guard paths start at
+`run_from_directory`, which defaults to `/`, just as the script does.
+A symlinked working directory follows the link before `..` selects its parent.
+The guard and script use the same path.
+
+The environment is the same fixed base with `HOME`, `USER`, and `LOGNAME`
+taken from the account, then `env` on top. Profile files still do not load.
+The command still runs from `/` unless `run_from_directory` is set. Output
+suppression works as for root tasks.
+
+### Result rules
+
+A task fails if its exit code is not in `success_exit_codes` **or**
+`failed_when` matches. `changed_when` does not affect success, and a failed
+command still reports changed by default. `changed_when` and `failed_when`
+take a boolean or a condition that reads `.this_node_task.exit_code`,
+`.this_node_task.stdout`, `.this_node_task.stderr`, and
+`.this_node_task.stdout_json` (standard output parsed as JSON, when valid),
+with the ordinary [conditions](../../docs/reference/shared-module-behavior.md#conditions).
+
+A shell change result only drives reporting: it does not queue a service
+reload or make a command safe for dryrun. File validators and
+`validate`-phase commands accept only exit 0 and report unchanged. The
+[configuration design](../../docs/changing-mmx/design/configuration.md#task-results-and-runtime-variables)
+explains how to assign a result name with `id` and read the named result.
+
+### Guards
+
+| Guard | Run only when |
+|---|---|
+| `skip_if_this_path_exists: /path` | The path does not exist. |
+| `run_only_if_this_path_exists: /path` | The path exists. |
+| `run_only_if_this_command_succeeds: <check>` | The check command succeeds. |
+| `skip_if_this_command_succeeds: <check>` | The check command does not succeed. |
+| `run_only_once_marker_file: /path` | The marker file does not exist. |
+
+Guards are optional; when several are present, all must allow the command.
+Guards run before the command, also during dryrun, so check commands must be
+read-only. A skip reports its reason. An error reading a guard path fails the
+task rather than counting as absent.
+
+Command checks distinguish true, false, and a failed inspection:
+
+| Check result | Meaning | `run_only_if_this_command_succeeds` | `skip_if_this_command_succeeds` |
+|---|---|---|---|
+| Exit `0` | True | Run | Skip |
+| Exit `1` | False | Skip | Run |
+| Any other exit, timeout, or launch failure | Inspection failed | Fail task | Fail task |
+
+In the mapping form, an explicit list of `true_exit_codes` or
+`false_exit_codes` replaces its default; overlapping lists are a validation
+error. `skip_if_this_command_succeeds` reverses only the true or false
+answer, never a failed inspection. Guard codes apply only to the check, not
+to the guarded command. For decisions based on output or earlier results,
+use `.node_tasks` and `when`.
+
+`skip_if_this_path_exists` looks similar to `run_only_once_marker_file` but is different: it
+skips the command when a path that the command itself makes exists. The
+marker file is for commands that leave no such path.
+
+### Commands that follow tracked inputs
+
+- **What the command follows.** The command follows tracked inputs declared
+  in the `changes` section of the node task block containing the command.
+  Tracked inputs include files, links, systemd unit files, packages, Git
+  checkouts, installations by a language or tool installer, Docker images, and state managed
+  by modules that are not core. A `systemd_service` task in the command's
+  node task block would follow the listed resources too. The
+  [execution design](../../docs/changing-mmx/design/execution.md#node-task-blocks-complete-the-change)
+  lists the tracked inputs. The command does not see a file that another
+  block, another role, or another program wrote. There is no separate list
+  of paths to keep in step.
+- **How MMX remembers.** For each such command MMX keeps a command record on
+  the node in `/var/lib/mmx/command_records/`: the hash of each tracked input
+  as it was when the command last succeeded. The command runs when an input
+  differs from the record. Comparing tracked input hashes with saved hashes
+  is also how MMX decides whether to restart a service
+  ([execution design](../../docs/changing-mmx/design/execution.md#service-reloads-follow-configuration-hashes)),
+  so a command and a service follow a change by the same rule.
+- **After a failed run.** Before the command starts, MMX saves the record as
+  "not finished"; it saves it as finished only after the command succeeded.
+  A run that stopped anywhere in between leaves a record that does not
+  match, and the next run runs the command, although the `file` task then
+  reports unchanged.
+- **The first run.** With no record yet, MMX takes the inputs as they are on
+  the node before the block's first write. The command runs if the block
+  then changes one of them, and does not run if everything was already as
+  declared. A change made before MMX's first run counts as already applied.
+  A module that is not core counts by the fingerprint that its node task
+  reports: the command runs if that task changes something, and does not run
+  if it changes nothing.
+- **What names the record.** The project's `project_name` and the task's
+  result path, the name `mmx results` shows: the `id` of each role call
+  around it, the node task block's `id`, and the task's `id`. That is why the
+  task and its node task block need an `id`. Renaming one of them starts a
+  new record, which takes the current inputs and does not run the command,
+  so finish a successful run before renaming one. Two different commands
+  anywhere in the project, in any playbook, need different result paths;
+  `mmx validate` and every run refuse two with the same result path.
+  In a loop, each item has its own record under its loop key; such a loop
+  requires a `key`, because without one an item is named by its position in
+  the list. Inside a fleet stage loop or a `for_each_node` loop, each
+  iteration also has its own record, so iterations that reach one node, such
+  as a load balancer drained for each application node, do not share a
+  record ([the key](../../docs/changing-mmx/design/execution.md#a-command-that-follows-a-change-has-the-same-record)).
+- A `shell` task in `activate` without the field runs on every run.
+- Dryrun reads the record and writes nothing. It reports `would_change` with
+  the reason, for example "would run: tracked input /etc/postfix/virtual
+  would change".
+- A command that must run once ever, such as creating an application's first
+  administrator, does not follow a change. Use
+  [`run_only_once_marker_file`](#run-a-command-only-once).
+- The page
+  [Checks before a restart or reload](../../docs/reference/playbook-file.md#task_block-fields)
+  also run before such a command.
+
+### Marker files
+
+- MMX writes the file only after the command succeeded. A command that
+  failed, or a run that stopped in the middle of it, runs again next time.
+- The skipped node task reports "the shell command has already run; delete the marker file
+  /var/lib/mmx/... to run the shell command again". The message shows the marker file's
+  full path and explains how to repeat the guarded command.
+- Dryrun reads the file: the node task reports `would_change` when the file
+  is missing and is skipped when it exists.
+
+### The `dryrun` command
+
+During a dryrun, MMX runs only the declared `dryrun` command, with the same
+`run_as_user_account`, `run_from_directory`, and `env`, and applies the result
+rules to it; a reported change becomes `would_change`. Without one, guards can
+still establish a skip; otherwise the task is skipped with its change
+unknown. The author is responsible for the dryrun command being read-only. With
+`run_script_in_dryrun: true`, a dryrun runs `script` instead, under the same
+responsibility.
+
+### Secret output
+
+A node task that reads a secret through `env` already has its output
+suppressed; it needs no `output_is_secret`. With `output_is_secret: true`,
+the command's `changed_when` and `failed_when` still read its output on the
+node. The [secret rules](../../docs/changing-mmx/design/configuration.md#secrets) own
+what happens to such a value in outputs and after `mmx resume`.
+
+A command that promises never to print a secret can set
+`output_holds_no_secret: true`. This makes configuration check errors useful
+without requiring you to read hidden details on the node. In a run and a
+dryrun, MMX shows that command's standard output, standard error, and failure
+reason even when the node task read a secret. Before showing those texts,
+MMX replaces every secret value the node job holds or the node task read
+with `[redacted]`. It also replaces each value without surrounding whitespace,
+each nonempty line without surrounding whitespace, the keys of a secret
+mapping, and the JSON text MMX gives a secret list or mapping through `env`.
+It uses the same replacement rules as a
+[login handed only to a tool](../../docs/reference/secrets.md#secrets-in-files-output-and-history).
+MMX cannot know other forms, such as part of a line or its Base64 text; the
+program's promise must cover those too.
+
+The node task stays secret. Its differences, module outputs, and any output
+made from its standard output remain hidden. The field defaults to `false`;
+setting both `output_holds_no_secret` and `output_is_secret` to `true` is
+refused when MMX loads the project. The same promise is available on the
+`shell` inside a [`file` check](file.md#check-a-file-that-holds-secrets).
+
+A token that later fleet stages need after an interruption belongs in a file
+on the node, read with [`read_file`](read_file.md): `mmx resume` can read a
+file again, but it never runs a completed command again to get its output.
+
+## Errors and what they mean
+
+- **A missing account in `run_as_user_account`.** The node task fails. A
+  dryrun reports it as not checked, because an earlier node task may create
+  the account.
+- **A check command that exits with another code than 0 or 1, times out, or
+  does not start.** The inspection failed, and the task fails. It never
+  counts as "no". Give the mapping form the exit codes the check uses.
+- **An error reading a guard path.** The task fails rather than counting the
+  path as absent.
+- **"details suppressed for a task using secrets".** A failed command with
+  secret output reports "details suppressed for a task using secrets" in
+  place of the failure reason. The failure reason could quote secret output.
+  The displayed suppression message also names a file on the node where
+  root can read the actual failure reason and the command's output
+  ([which node tasks have a hidden result](../../docs/reference/secrets.md#which-node-tasks-have-a-hidden-result)).
+- **Validation errors for `only_when_tracked_inputs_changed`.** Validation
+  rejects the field anywhere outside an `activate` phase, and two different
+  commands anywhere in the project with the same result path.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Arch Linux, openSUSE Leap 16.1, Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The base suite covers this module (`vm.py test`, `fleet.py`, `deployment.py`) and runs on every tested distribution.
+
+The suite `account_units.py` covers `run_only_once_marker_file`, a command
+with `only_when_tracked_inputs_changed`, and
+`checks_before_restart_or_reload`. `release_directories.py` covers a Git
+checkout as a tracked input of such a command. `server_resources.py` covers
+application-user commands. The whole catalog runs these suites on Debian 12 and 13 and Ubuntu 24.04 and 26.04 ([validation record](../../docs/changing-mmx/validation.md)).
+
+## Why it works this way
+
+- **No setting that selects an interpreter.** Bash can run any interpreter,
+  so there is one way to do it.
+- **No read-only shorthand of `shell`.** The `dryrun` command already shows
+  what a run would do without changing the node.
+- **One `shell` for custom commands, with no `command` and `shell` split.**
+  Pipes and redirects just work, and there is one execution mode to learn.
+- **Shell is noninteractive Bash without profile or rc loading, also with
+  `run_as_user_account`.** Shell behavior is consistent across nodes;
+  initialization is explicit in the script.
+- **A bare `shell` task tries once.** Module tasks that reconcile managed
+  resources, such as files and packages, are safe to repeat. Arbitrary
+  scripts may not be. Automatic repeats require the node task to set
+  `retry`; see [node task retries](../../docs/reference/playbook-file.md#node-task-retries-and-time-limits).
+- **A script's output never sets its own result.** `stdout_json` only lets
+  conditions and later tasks read JSON output as data. Structured results
+  use the module protocol; one JSON contract is enough.
+- **Guards have names that say what happens, and a failed check is not
+  "no".** A broken check never counts as false.
+- **A command that follows a change uses the service record.** There is no
+  second mechanism with its own list of paths: one mechanism for one
+  pattern, and it already recovers after an interrupted run.
+- **A command record is in `/var/lib/mmx/`, a service record in
+  `/run/mmx/`.** A reboot clears `/run/mmx/`: after a reboot the service has
+  started with the files on disk. A reboot does not run `postmap`, so a
+  command's record survives a reboot.
+- **A marker file, not a hidden record.** You can inspect, list, and delete
+  the `run_only_once_marker_file` with ordinary tools. Restoring a backup
+  of the node restores the marker file together with the data the command
+  created.
+- **Prefer a guard that asks the program over a marker file.** A migration
+  guarded by `skip_if_this_command_succeeds: bin/migrate --is-up-to-date` is
+  still right after someone restored an old database; a marker file would
+  wrongly say "already done".
+- **Path guards name their condition.** `skip_if_this_path_exists` skips the
+  command when the path exists. `run_only_if_this_path_exists` runs the
+  command only when the path exists. A relative path
+  uses the command’s directory, so the guard and the script check the same
+  file.

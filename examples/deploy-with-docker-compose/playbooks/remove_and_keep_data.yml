@@ -1,0 +1,11 @@
+fleet_stages:
+  - id: remove_and_keep_data
+    nodes: all
+
+    node_tasks:
+      # The containers and the project's network go. The named volume
+      # shop_web_data stays with its data, and so do /opt/shop and the image.
+      - docker_compose_project:
+          compose_project_dir: /opt/shop
+          compose_project_name: shop
+          state: containers_removed_named_volumes_kept

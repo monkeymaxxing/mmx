@@ -1,0 +1,9 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - role: diagnostics_config
+        inputs:
+          port: '{{ .vars.port }}'
+          greeting: '{{ .vars.greeting }}'

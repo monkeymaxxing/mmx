@@ -1,0 +1,64 @@
+# The main application's background workers: one systemd service for each
+# queue group, all part of the target main-application-workers.target, which
+# the deploy playbook restarts for a new release.
+#
+# The services run the deployed release in <application_dir>/current.
+# Before the first deployment there is none, so the target starts only when
+# that link exists; the deploy playbook starts it otherwise.
+inputs:
+  application_dir: {type: string, required: true}
+  server_environment: {type: string, required: true}
+  # Queue group to the number of worker processes, such as
+  # {"default": 2, "long_running": 1}.
+  worker_processes_per_queue_group: {type: mapping, required: true}
+  # Queue group to {queues: [...]} for a group that names its queues, or {}
+  # for one that works the queues of its own name.
+  worker_queue_groups: {type: mapping, required: true}
+
+node_tasks:
+  - directory:
+      path: /home/deploy/logs
+      owner: deploy
+      group: deploy
+      permissions_mode: "0775"
+
+  - file:
+      path: /etc/logrotate.d/main_application_workers
+      source: files/main_application_workers.logrotate
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  - task_block:
+      id: main_application_workers
+      changes:
+        - systemd_unit:
+            name: main-application-workers.target
+            content: |
+              [Unit]
+              Description=All workers of the main application
+
+              [Install]
+              WantedBy=multi-user.target
+        - loop: "{{ .inputs.worker_processes_per_queue_group }}"
+          as: worker
+          systemd_unit:
+            name: "main-application-workers-{{ .worker.key }}.service"
+            template: files/main-application-workers.service.tmpl
+      activate:
+        - loop: "{{ .inputs.worker_processes_per_queue_group }}"
+          as: worker
+          systemd_service:
+            name: "main-application-workers-{{ .worker.key }}.service"
+            start_at_boot: true
+            state: do_not_start_or_stop
+        # Started once a release is deployed; enabled from the start.
+        - systemd_service:
+            name: main-application-workers.target
+            start_at_boot: true
+            state: do_not_start_or_stop
+
+  - when: {path_exists: "{{ .inputs.application_dir }}/current"}
+    systemd_service:
+      name: main-application-workers.target
+      state: running

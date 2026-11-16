@@ -1,0 +1,26 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"config": {
+			"features.images": "true",
+			"features.networks": "true",
+			"features.networks.zones": "true",
+			"features.profiles": "true",
+			"features.storage.buckets": "true",
+			"features.storage.volumes": "true"
+		},
+		"description": "Default Incus project",
+		"name": "default",
+		"used_by": [
+			"/1.0/profiles/default",
+			"/1.0/images/5006248f5b77219a9678226e6877086dd8c9f5584ab7c54340400f0f7de7edde",
+			"/1.0/networks/incusbr0"
+		]
+	}
+}
+

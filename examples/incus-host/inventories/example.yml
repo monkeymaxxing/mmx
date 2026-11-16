@@ -1,0 +1,4 @@
+nodes:
+  incus01:
+    address: incus01.example.com
+    ssh_user: admin

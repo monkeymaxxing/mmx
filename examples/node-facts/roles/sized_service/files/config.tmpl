@@ -1,0 +1,2 @@
+workers = {{ .node.cpu.count }}
+cache_mib = {{ percent .node.memory.total_mib .inputs.cache_percent }}

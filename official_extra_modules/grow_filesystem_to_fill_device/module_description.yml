@@ -1,0 +1,23 @@
+summary: Grows a mounted ext4 or XFS filesystem to fill its block device, without shrinking, checking, repairing, or creating a filesystem.
+inputs:
+  device:
+    type: string
+    required: true
+    description: Absolute path of the block device holding the filesystem, such as /dev/disk/by-id/scsi-0HC_Volume_101 or /dev/data/postgresql. The filesystem must be mounted for writing.
+  filesystem_type:
+    type: string
+    required: true
+    allowed_values: [ext4, xfs]
+    description: The filesystem expected on the device. A different type is a missing prerequisite; nothing is replaced.
+outputs: {}
+examples:
+  - description: Grow a mounted ext4 filesystem after its provider enlarged the volume.
+    config: |
+      grow_filesystem_to_fill_device:
+        device: /dev/disk/by-id/scsi-0HC_Volume_101
+        filesystem_type: ext4
+  - description: Grow a mounted XFS filesystem after someone grew its logical volume by hand.
+    config: |
+      grow_filesystem_to_fill_device:
+        device: /dev/data/postgresql
+        filesystem_type: xfs

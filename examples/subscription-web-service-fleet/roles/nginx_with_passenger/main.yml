@@ -1,0 +1,56 @@
+# nginx with Phusion Passenger on the application servers, which runs the
+# Rails applications. Open-source Passenger from Phusion's public apt
+# repository: Ubuntu packages Passenger only for Apache.
+inputs:
+  passenger_min_instances: {type: integer, required: true}
+  memory_per_passenger_process_mib: {type: integer, required: true}
+
+node_tasks:
+  - apt_repository:
+      name: phusion-passenger
+      uris: [https://oss-binaries.phusionpassenger.com/apt/passenger]
+      suites: ["{{ .node.distribution.codename }}"]
+      components: [main]
+      # Phusion signs the repository with its 2025 key
+      # (C6F4 48ED 4BC8 0A4E 9525  7250 D870 AB03 3FB4 5BD1); the file
+      # without the year still holds the key of 2013.
+      signing_key_url: https://oss-binaries.phusionpassenger.com/auto-software-signing-gpg-key-2025.txt
+      signing_key_sha256: deb63bf7fa9f2f88c773e0dde3803510ea264087947dc534d54e4bd13e192aa7
+
+  - task_block:
+      id: nginx_with_passenger
+      changes:
+        - apt_package:
+            packages:
+              - {name: nginx, version: newest_when_first_installed}
+              - {name: libnginx-mod-http-passenger, version: newest_when_first_installed}
+        # Passenger's core process, which nginx starts, inherits this limit,
+        # and holds two file handles for each request it queues or passes on.
+        - systemd_unit:
+            name: nginx.service
+            drop_in: 90-open-files.conf
+            content: |
+              [Service]
+              LimitNOFILE=65536
+        - file:
+            path: /etc/nginx/nginx.conf
+            template: files/nginx.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        # The package's welcome page on port 80; on Ubuntu a link to
+        # sites-available.
+        - symlink:
+            path: /etc/nginx/sites-enabled/default
+            state: absent
+      validate:
+        - shell:
+            script: nginx -t
+            dryrun: nginx -t
+            changed_when: false
+      activate:
+        - systemd_service:
+            name: nginx
+            state: running
+            start_at_boot: true
+            refresh: reload

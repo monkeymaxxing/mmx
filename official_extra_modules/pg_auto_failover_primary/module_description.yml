@@ -1,0 +1,31 @@
+summary: Makes one node of a pg_auto_failover formation its primary with a planned switchover, on the monitor's server.
+inputs:
+  monitor_data_directory:
+    type: string
+    required: true
+    description: The monitor's data directory on this server, as its pg_auto_failover_monitor task gives it, such as /var/lib/postgresql/18/monitor.
+  formation:
+    type: string
+    required: true
+    description: The formation, such as default.
+  node_name:
+    type: string
+    required: true
+    description: The node that becomes the primary. It must be a healthy replica (secondary) of the formation, or the primary already, which the monitor has assigned a primary's state.
+outputs:
+  primary_node_name:
+    type: string
+    description: The formation's primary after the task, which is node_name.
+examples:
+  - description: Make db02 the primary of the formation default, as before maintenance on db01.
+    config: |
+      pg_auto_failover_primary:
+        monitor_data_directory: /var/lib/postgresql/18/monitor
+        formation: default
+        node_name: db02
+  - description: Make the node that the variable new_primary names the primary.
+    config: |
+      pg_auto_failover_primary:
+        monitor_data_directory: /var/lib/postgresql/18/monitor
+        formation: default
+        node_name: "{{ .vars.new_primary }}"

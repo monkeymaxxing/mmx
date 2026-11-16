@@ -1,0 +1,97 @@
+# `group`
+
+`group` manages one local group on the node: that it exists, its ID, the
+accounts that have it as a supplementary group, or its removal. The `group`
+module runs the node's native group tools.
+
+Use [`user`](user.md) for an account, including its primary group and, from
+the account's side, its supplementary groups. Configure each supplementary
+membership through only a `user` task's `supplementary_groups` or a `group`
+task's `supplementary_members`.
+
+## Examples
+
+### Create a group with a fixed ID
+
+```yaml
+- group:
+    name: app
+    gid: 1200
+```
+
+`gid` takes an integer or a whole typed reference: a single `{{ ... }}`
+expression that supplies an integer. It chooses the value for a new group and
+checks the value of an existing group. Omit it to keep the node's native
+allocation for a new group and the existing value of a current group.
+
+### Make a list of accounts the whole membership of a group
+
+```yaml
+- group:
+    name: deploy
+    supplementary_members: [barbara, ci]
+    supplementary_members_not_listed: remove
+```
+
+`supplementary_members` lists the accounts that have the group as a
+supplementary group. The listed accounts must exist.
+`supplementary_members_not_listed` is required when you set
+`supplementary_members`.
+
+With `supplementary_members_not_listed: remove`, the list contains every
+account that should have the group as a supplementary group. So deleting a
+name from `supplementary_members` removes the account's supplementary
+membership on the next run. With `supplementary_members_not_listed: keep`,
+the task adds listed accounts and keeps unlisted supplementary members.
+
+### Remove a group
+
+```yaml
+- group:
+    name: deploy
+    state: absent
+```
+
+## How it works
+
+- `system` affects only which ID the node allocates when the group is
+  created.
+- A `gid` mismatch or a collision with another group fails before the group
+  changes. MMX does not renumber groups.
+- An account whose primary group is the group named by `name` keeps the
+  primary membership with `supplementary_members_not_listed: remove` or
+  `supplementary_members_not_listed: keep`. `supplementary_members` and
+  `supplementary_members_not_listed` do not change the account's primary
+  group membership. `supplementary_members: []` with
+  `supplementary_members_not_listed: remove` removes every supplementary member.
+- `supplementary_members_not_listed` follows the
+  [rule for a task that owns a list](../../docs/changing-mmx/design/modules.md#a-task-that-owns-a-list-says-what-happens-to-the-rest).
+- `state: absent` accepts only `name` and `state`. The `group` task removes
+  the group with the node's native tools, without force. A missing group is
+  unchanged.
+- A run and a dryrun list what changed, or would change, in the result's
+  `value`: `group_created`, `members_added`, and `members_removed`. A run
+  that fails lists only what it changed before the failure, so a node task
+  in `on_failure` can read what happened.
+- Group changes do not request a service restart or reload.
+
+## Errors and what they mean
+
+- **An ID mismatch or collision.** The task fails before the group changes.
+- **`account ci does not exist yet`.** A listed member does not exist.
+  Create the account with a [`user`](user.md) task before the `group` task.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Arch Linux, openSUSE Leap 16.1, Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The base suite covers this module (`account_units.py`, `directory_resources.py`) and runs on every tested distribution.
+
+The suite `account_units.py` covers group members. The `group` fields of
+this page are tested on Debian 12 and 13 and Ubuntu 24.04 and 26.04 ([validation
+record](../../docs/changing-mmx/validation.md)).
+
+## Why it works this way
+
+- **Membership names say supplementary.** An account's primary group stays
+  separate, so the task cannot silently remove its primary membership.

@@ -1,0 +1,6 @@
+vars: {region: north, port: 80}
+nodes:
+  web1: {address: web1.invalid, vars: {port: 8080, tier: small}}
+  web2: {address: web2.invalid, vars: {tier: large}}
+groups:
+  web: {nodes: [web1, web2], vars: {region: south, port: 9090}}

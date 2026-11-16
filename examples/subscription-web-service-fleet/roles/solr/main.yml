@@ -1,0 +1,139 @@
+# Apache Solr 9 in standalone mode with the main application's search core,
+# and its nightly backup. Apache's archive, checked by its SHA-256, unpacked
+# root-owned into its own directory, and the distribution's Java. Solr writes
+# only to its home, data, log, and backup directories.
+inputs:
+  solr_version: {type: string, required: true}
+  solr_archive_url: {type: string, required: true}
+  solr_archive_sha256: {type: string, required: true}
+  # The memory of Solr's Java heap, such as 2g.
+  java_heap_size: {type: string, required: true}
+  # SOLR_HOME, with solr.xml and one directory for each core.
+  data_dir: {type: string, required: true}
+  core_name: {type: string, required: true}
+  backup_dir: {type: string, required: true}
+  # Only one server makes the nightly backups; on the others the script is
+  # there for a person to run.
+  backup_schedule_enabled: {type: boolean, required: true}
+  # A restart stops search for a minute or two: a routine run refuses it
+  # until the command line approves it.
+  restart_approved: {type: boolean, required: true}
+
+node_tasks:
+  # The same IDs on every server, so backups copied between servers keep
+  # their owner.
+  - group: {name: solr, gid: 1110}
+  - user:
+      name: solr
+      uid: 1110
+      primary_group: solr
+      supplementary_groups: []
+      supplementary_groups_not_listed: remove
+      home: /var/solr
+      shell: /usr/sbin/nologin
+      create_home_directory: false
+
+  # Solr's start script needs lsof to see whether its port is free.
+  - apt_package:
+      packages:
+        - {name: openjdk-17-jre-headless, version: newest_when_first_installed}
+        - {name: curl, version: newest_when_first_installed}
+        - {name: lsof, version: newest_when_first_installed}
+
+  - unpack_archive:
+      url: "{{ .inputs.solr_archive_url }}"
+      sha256: "{{ .inputs.solr_archive_sha256 }}"
+      path: "/opt/solr-{{ .inputs.solr_version }}"
+      unpack_without_wrapping_folder: true
+
+  # The account's home, where Java keeps its own files.
+  - directory: {path: /var/solr, owner: solr, group: solr, permissions_mode: "0750"}
+  - directory: {path: /var/log/solr, owner: solr, group: solr, permissions_mode: "0750"}
+  - directory: {path: "{{ .inputs.data_dir }}", owner: solr, group: solr, permissions_mode: "0750"}
+  - directory: {path: "{{ .inputs.data_dir }}/{{ .inputs.core_name }}", owner: solr, group: solr, permissions_mode: "0750"}
+  - directory: {path: "{{ .inputs.data_dir }}/{{ .inputs.core_name }}/conf", owner: solr, group: solr, permissions_mode: "0750"}
+  - directory: {path: "{{ .inputs.data_dir }}/{{ .inputs.core_name }}/data", owner: solr, group: solr, permissions_mode: "0750"}
+
+  - task_block:
+      id: solr
+      changes:
+        - symlink:
+            path: /opt/solr
+            target: "solr-{{ .inputs.solr_version }}"
+        - file:
+            path: "{{ .inputs.data_dir }}/solr.xml"
+            source: files/solr.xml
+            owner: solr
+            group: solr
+            permissions_mode: "0640"
+        - file:
+            path: "{{ .inputs.data_dir }}/{{ .inputs.core_name }}/core.properties"
+            template: files/core.properties.tmpl
+            owner: solr
+            group: solr
+            permissions_mode: "0640"
+        - file:
+            path: "{{ .inputs.data_dir }}/{{ .inputs.core_name }}/conf/schema.xml"
+            source: files/schema.xml
+            owner: solr
+            group: solr
+            permissions_mode: "0640"
+        - file:
+            path: "{{ .inputs.data_dir }}/{{ .inputs.core_name }}/conf/solrconfig.xml"
+            source: files/solrconfig.xml
+            owner: solr
+            group: solr
+            permissions_mode: "0640"
+        - file:
+            path: /etc/default/solr.in.sh
+            template: files/solr.in.sh.tmpl
+            owner: root
+            group: solr
+            permissions_mode: "0640"
+        - systemd_unit:
+            name: solr.service
+            template: files/solr.service.tmpl
+      checks_before_restart_or_reload:
+        - assert:
+            that: "{{ .inputs.restart_approved }}"
+            message: >-
+              Solr must restart to load this change, and search stops until
+              Solr has loaded its core again. Run again off-peak with
+              --var solr_restart_approved=true.
+      activate:
+        - systemd_service:
+            name: solr
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - wait_for:
+            url_responds: "http://127.0.0.1:8983/solr/{{ .inputs.core_name }}/select?q=*:*"
+            response_body_contains: numFound
+            wait_at_most: 120s
+
+  - directory:
+      path: "{{ .inputs.backup_dir }}"
+      owner: solr
+      group: solr
+      permissions_mode: "0750"
+  - file:
+      path: /usr/local/bin/solr-backup
+      source: files/solr-backup
+      owner: root
+      group: solr
+      permissions_mode: "0750"
+  - when: "{{ .inputs.backup_schedule_enabled }}"
+    systemd_scheduled_job:
+      name: solr-backup
+      script: /usr/local/bin/solr-backup
+      run_as_user_account: solr
+      env:
+        SOLR_CORE: "{{ .inputs.core_name }}"
+        SOLR_BACKUP_DIR: "{{ .inputs.backup_dir }}"
+      cron_schedule: "15 2 * * *"
+  - when: {not: "{{ .inputs.backup_schedule_enabled }}"}
+    systemd_scheduled_job:
+      name: solr-backup
+      state: absent
+      run_as_user_account: root

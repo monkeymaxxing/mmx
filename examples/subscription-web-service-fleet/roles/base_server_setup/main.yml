@@ -1,0 +1,253 @@
+# The base setup of every server: administrators' tools, the locale, the time
+# zone and time synchronisation, the administrators' accounts, sudo and SSH
+# hardening, automatic security updates, the company's internal certificate
+# authority, the shell prompt, the load balancer's names in /etc/hosts, and a
+# recovery account for the console.
+inputs:
+  # The Rails environment; on production servers the prompt shows the host
+  # name in red.
+  server_environment: {type: string, required: true}
+  time_zone: {type: string, required: true}
+  # Each entry: {name, full_name, uid}. The account's public keys are in
+  # files/public_keys/administrators/<name>.pub.
+  administrator_accounts: {type: list, required: true}
+  # When apt's daily upgrade timer starts its two-hour window, such as "08:00".
+  unattended_upgrade_start_time: {type: string, required: true}
+  # Host names, separated by spaces, that resolve to the load balancer from
+  # inside the network.
+  names_resolved_to_load_balancer: {type: string, required: true}
+  load_balancer_address: {type: string, required: true}
+  # The prompt shows the account deploy in its own colour.
+  deploy_account_uid: {type: integer, required: true}
+  recovery_account_password_hash: {type: string, required: true, secret: true}
+
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: sudo, version: newest_when_first_installed}
+        - {name: lshw, version: newest_when_first_installed}
+        - {name: nethogs, version: newest_when_first_installed}
+        - {name: git, version: newest_when_first_installed}
+        - {name: vim, version: newest_when_first_installed}
+        - {name: traceroute, version: newest_when_first_installed}
+        - {name: acl, version: newest_when_first_installed}
+        - {name: htop, version: newest_when_first_installed}
+        - {name: ca-certificates, version: newest_when_first_installed}
+        - {name: fail2ban, version: newest_when_first_installed}
+        - {name: screen, version: newest_when_first_installed}
+        - {name: unattended-upgrades, version: newest_when_first_installed}
+        - {name: mosh, version: newest_when_first_installed}
+        - {name: tmux, version: newest_when_first_installed}
+        - {name: ncdu, version: newest_when_first_installed}
+        - {name: unzip, version: newest_when_first_installed}
+        - {name: curl, version: newest_when_first_installed}
+        - {name: rsync, version: newest_when_first_installed}
+        - {name: locales, version: newest_when_first_installed}
+
+  - locale:
+      name: en_US.UTF-8
+      use_as_system_default: true
+
+  # IPMI exists only on physical servers.
+  - when: {equals: ["{{ .node.virtualization.type }}", none]}
+    apt_package:
+      packages:
+        - {name: ipmitool, version: newest_when_first_installed}
+
+  # One time zone everywhere, also on servers in other regions.
+  - time_zone:
+      name: "{{ .inputs.time_zone }}"
+
+  # Time synchronisation: logs, cron jobs, and TLS certificates need the right
+  # time.
+  - apt_package:
+      packages:
+        - {name: systemd-timesyncd, version: newest_when_first_installed}
+  - systemd_service:
+      name: systemd-timesyncd
+      state: running
+      start_at_boot: true
+
+  # A coloured prompt: red host names in production.
+  - file:
+      path: /etc/bash_prompt
+      template: files/bash_prompt.sh.tmpl
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - line:
+      insert_at_end_of_file: true
+      path: /root/.profile
+      line: source /etc/bash_prompt
+
+  # vim as the editor of every account.
+  - file:
+      path: /etc/profile.d/vim.sh
+      source: files/vim.sh
+      owner: root
+      group: root
+      permissions_mode: "0644"
+  - update_alternatives:
+      name: editor
+      program_path: /usr/bin/vim.basic
+
+  # The administrators, with the same user and group IDs on every server.
+  - loop: "{{ .inputs.administrator_accounts }}"
+    as: account
+    group:
+      name: "{{ .account.name }}"
+      gid: "{{ .account.uid }}"
+  - loop: "{{ .inputs.administrator_accounts }}"
+    as: account
+    user:
+      create_home_directory: true
+      name: "{{ .account.name }}"
+      uid: "{{ .account.uid }}"
+      primary_group: "{{ .account.name }}"
+      supplementary_groups: [sudo]
+      supplementary_groups_not_listed: keep
+      full_name: "{{ .account.full_name }}"
+      shell: /bin/bash
+  - loop: "{{ .inputs.administrator_accounts }}"
+    as: account
+    line:
+      insert_at_end_of_file: true
+      path: "/home/{{ .account.name }}/.profile"
+      line: source /etc/bash_prompt
+  - loop: "{{ .inputs.administrator_accounts }}"
+    as: account
+    authorized_keys:
+      for_user_account: "{{ .account.name }}"
+      key_files_on_controller_machine: ["files/public_keys/administrators/{{ .account.name }}.pub"]
+      keys_not_listed: keep
+
+  # Members of the group sudo use sudo without a password: they log in with
+  # keys only and have no password.
+  - file:
+      path: /etc/sudoers.d/90-sudo-group-without-password
+      content: "%sudo ALL=(ALL:ALL) NOPASSWD:ALL\n"
+      owner: root
+      group: root
+      permissions_mode: "0440"
+      check_new_file:
+        shell:
+          script: visudo -cf "$NEW_FILE"
+          dryrun: visudo -cf "$NEW_FILE"
+          env: {NEW_FILE: "{{ .new_file.path }}"}
+
+  # SSH: keys only, root only with a key, and logs that name the key of each
+  # login. sshd takes the first value it reads, and sshd_config includes
+  # sshd_config.d/*.conf first.
+  - task_block:
+      id: ssh_server_hardening
+      changes:
+        - file:
+            path: /etc/ssh/sshd_config.d/10-ssh-hardening.conf
+            content: |
+              PermitRootLogin prohibit-password
+              PermitEmptyPasswords no
+              PubkeyAuthentication yes
+              PasswordAuthentication no
+              LogLevel VERBOSE
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: sshd -t -f "$NEW_FILE"
+                dryrun: sshd -t -f "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+      validate:
+        - shell:
+            script: sshd -t
+            dryrun: sshd -t
+            changed_when: false
+      activate:
+        # Ubuntu starts sshd through ssh.socket; reload the daemon only
+        # where it runs.
+        - systemd_service:
+            name: ssh
+            state: do_not_start_or_stop
+            refresh: reload
+
+  # GitHub's host keys for the server's own ssh, which Bundler uses for a
+  # gem that a Gemfile names by its GitHub repository over SSH, and people
+  # use for Git.
+  - file:
+      path: /etc/ssh/ssh_known_hosts
+      source: files/github_known_hosts
+      owner: root
+      group: root
+      permissions_mode: "0644"
+
+  # Automatic security updates. Their window starts at a different hour on
+  # the first server of each role, so a bad update shows on the others
+  # first.
+  - task_block:
+      id: automatic_security_updates
+      changes:
+        - file:
+            path: /etc/apt/apt.conf.d/20auto-upgrades
+            source: files/20auto-upgrades
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - file:
+            path: /etc/apt/apt.conf.d/50unattended-upgrades
+            source: files/50unattended-upgrades
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - systemd_unit:
+            name: apt-daily-upgrade.timer
+            drop_in: 90-upgrade-window.conf
+            content: |
+              [Timer]
+              OnCalendar=
+              OnCalendar=*-*-* {{ .inputs.unattended_upgrade_start_time }}
+              RandomizedDelaySec=2h
+              Persistent=true
+      activate:
+        - systemd_service:
+            name: apt-daily-upgrade.timer
+            state: running
+            start_at_boot: true
+
+  # The company's internal certificate authority, trusted by every program.
+  - task_block:
+      id: company_internal_certificate_authority
+      changes:
+        - file:
+            path: /usr/local/share/ca-certificates/company-internal-certificate-authority.crt
+            source: files/company-internal-certificate-authority.crt
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      activate:
+        - id: rebuild_certificate_store
+          shell:
+            script: update-ca-certificates
+            only_when_tracked_inputs_changed: true
+
+  # Requests from inside the network to the public names stay inside: they
+  # go to the load balancer's internal address.
+  - line:
+      insert_at_end_of_file: true
+      path: /etc/hosts
+      match: "# names of the load balancer$"
+      line: "{{ .inputs.load_balancer_address }} {{ .inputs.names_resolved_to_load_balancer }} # names of the load balancer"
+
+  # The account for the IPMI or KVM console, when SSH does not work. Last:
+  # a task that reads a secret hides its result and those after it.
+  - group: {name: recovery, gid: 5001}
+  - user:
+      create_home_directory: true
+      name: recovery
+      uid: 5001
+      primary_group: recovery
+      supplementary_groups: [sudo]
+      supplementary_groups_not_listed: keep
+      full_name: console recovery account
+      shell: /bin/bash
+      password_hash: "{{ .inputs.recovery_account_password_hash }}"
+      apply_password_hash: on_every_run

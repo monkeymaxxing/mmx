@@ -1,0 +1,16 @@
+# Managed by MMX (role brand_site_nginx_servers): the brand site
+# {{ .site.domain }}, behind the load balancer.
+server {
+    listen {{ .site.application_port }};
+    root {{ .inputs.applications_dir }}/{{ .site.name }}/current/public;
+
+    passenger_enabled on;
+    # RAILS_ENV and RACK_ENV of the application.
+    passenger_app_env {{ .inputs.server_environment }};
+    # Which brand site the shared application serves here.
+    passenger_env_var BRAND_SITE_NAME {{ .site.name }};
+    # The settings that Bundler installed the release's gems with.
+    passenger_env_var BUNDLE_DEPLOYMENT true;
+    passenger_env_var BUNDLE_PATH vendor/bundle;
+    passenger_env_var BUNDLE_WITHOUT development:test;
+}

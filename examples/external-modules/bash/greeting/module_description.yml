@@ -1,0 +1,20 @@
+summary: Makes sure a file holds a greeting for one person.
+inputs:
+  path:
+    type: string
+    required: true
+    description: The absolute path of the file that holds the greeting; its directory must exist.
+  person:
+    type: string
+    required: true
+    description: The name of the person to greet, such as Barbara.
+outputs:
+  greeting:
+    type: string
+    description: The greeting the file holds, such as "Hello, Barbara!" and a newline.
+examples:
+  - description: Greet Barbara in /tmp/greeting.txt.
+    config: |
+      greeting:
+        path: /tmp/greeting.txt
+        person: Barbara

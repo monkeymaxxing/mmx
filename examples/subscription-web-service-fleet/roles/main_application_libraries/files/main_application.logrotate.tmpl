@@ -1,0 +1,15 @@
+# Managed by MMX (role main_application_libraries): the logs of the running
+# release of the main application and of its API.
+{{ .inputs.application_dir }}/current/log/*.log {{ .inputs.application_dir }}/current/api/log/*.log {
+  # The logs belong to deploy, in directories that deploy may write.
+  su deploy deploy
+  # logrotate looks every day; a log rotates once it has 1 GB.
+  size 1G
+  # Nine old logs, compressed.
+  rotate 9
+  compress
+  # The application keeps its log open: copy the log, then empty it.
+  copytruncate
+  # A release that has not written a log yet is fine.
+  missingok
+}

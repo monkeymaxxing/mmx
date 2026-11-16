@@ -1,0 +1,6 @@
+# The controller-side harness rewrites these settings per run.
+project_name: fleet_bench
+default_inventory: fleet
+max_nodes_at_once: 1000
+vars:
+  version: "1"

@@ -1,0 +1,155 @@
+# `git`
+
+`git` checks out a tag, branch, or commit ID of a Git repository into a
+directory of its own on a node, such as one release of an application. The
+node runs the `git` command, so install the node's `git` package first. For a
+release published as an archive, use [`unpack_archive`](unpack_archive.md).
+
+## Examples
+
+### Check out a release over SSH
+
+```yaml
+- git:
+    repo: git@github.com:example/app.git
+    check_out_tag: "{{ .vars.release }}"
+    path: "/srv/app/releases/{{ .vars.release }}"
+    run_as_user_account: app
+    ssh_private_key: "{{ .secrets.deploy_key }}" # a secret name you choose
+    # Use the repository host's verified SSH host key.
+    ssh_known_hosts_lines: "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+```
+
+On the node, MMX runs every Git command as the account `app`. The initial
+clone is shallow and built in a staging directory. A later run resolves the
+selected tag on the remote and fetches when the commit changed.
+`follow_branch` instead follows a branch head on each run. The result's value includes `commit` and
+`previous_commit`.
+
+With `run_as_user_account`, every Git command runs as that account, following the same
+rules as `shell.run_as_user_account`. The account owns the tree and hooks do
+not run as root.
+
+### Restart a service when the commit changes
+
+In a node task block's `changes`, a `git` task contributes the ID of the commit
+it checked out as a tracked input, the way a package contributes its version.
+A new commit therefore causes what the block's `activate` says: a
+`systemd_service` restart or reload, or a
+[command that follows a change](shell.md#run-a-command-after-a-change),
+such as touching `tmp/restart.txt` for Passenger. The files of the tree are
+not hashed. If a run stops after the checkout and before the restart, the next
+run still restarts. A release can also go to its own versioned path, with a
+tracked [`symlink`](symlink.md) that switches to it, as
+[`unpack_archive`](unpack_archive.md#unpack-a-release-and-switch-a-symlink)
+shows.
+
+## How it works
+
+### Repository and reference
+
+`repo` is an `https://` URL, an SSH location (`ssh://` or `user@server:path`),
+or a local path or `file://` URL. Give exactly one selector:
+`follow_branch` follows a branch on each run; `check_out_tag` names a tag;
+`check_out_commit` names a full 40-character hexadecimal commit ID. Branches
+and tags are looked up only in their own namespace, so the same name can
+exist in both without changing what the task selects. A missing `git` command
+fails the node task, and dryrun reports it not checked.
+
+### Checkout
+
+When `path` is missing, MMX initializes a repository in a staging directory
+beside it (`.mmx-staging-<name>`), fetches the commit, checks it out, and
+renames the directory into place. The parent of `path` must exist. When
+`path` is a checkout of the same `repo`, MMX resolves the selected branch or
+tag on the remote and, if the commit differs, fetches it and checks it out
+as a detached commit.
+
+The task reports changed when the checked-out commit changes; its result value
+has `commit` and `previous_commit` (null after a clone; equal to `commit` when
+unchanged).
+
+On an unchanged rerun, MMX resolves the selected branch or tag and compares
+the resolved commit ID with the checked-out commit ID. A commit ID selector
+needs no network lookup. MMX fetches nothing unless `full_history: true` must
+deepen a shallow checkout. Deepening reports changed even when the commit
+stays the same. Dryrun resolves the target commit on the remote
+and reports it with the current one, writing nothing.
+
+Fetches are shallow: only the target commit is downloaded. `full_history: true`
+fetches the whole history for tools that need it, deepening an existing
+shallow checkout. `check_out_commit` needs a server that allows fetching a
+commit directly, as GitHub and GitLab do; otherwise use `full_history: true`,
+which fetches every branch and checks out the commit from them. Submodules and
+Git LFS content are not fetched.
+
+Without `run_as_user_account`, root runs Git and owns the tree.
+
+### Files edited on the node
+
+An existing destination that is not a Git checkout whose origin matches
+`repo` fails the node task without making changes, on every run.
+`files_changed_in_checkout_on_node` says what
+happens when someone edited files that Git tracks in the checkout on the node:
+
+- `stop_with_an_error` (default): the node task fails without making changes,
+  and the failure reason lists the edited tracked files.
+- `discard_the_changes`: MMX restores the edited tracked files to the
+  checked-out commit before moving to the new commit. The result's
+  `value.restored_files` lists the restored tracked files. A dryrun lists
+  the tracked files that would be restored and restores nothing.
+
+Untracked and ignored files, such as build output, stay with
+`stop_with_an_error` and with `discard_the_changes`.
+
+### Credentials
+
+Credentials are private values, normally `.secrets` references, delivered only
+to nodes that use them:
+
+- HTTPS: optional `username` and `password` (a token), accepted only with an
+  `https://` repo. Normal TLS verification applies. A `repo` URL containing
+  credentials is rejected.
+- SSH: `ssh_private_key`, a private key, and `ssh_known_hosts_lines`, the server's host-key
+  lines, which an SSH repo requires; both are accepted only with an SSH repo.
+  Host keys are checked strictly; the node's own SSH configuration and agent
+  are not used.
+
+Credentials reach Git through files in the node task's private directory,
+which MMX makes for this one node task in
+`/run/mmx/private_task_directories/` on the node. Only the account that runs
+Git can open the directory. The node keeps `/run` in memory (tmpfs), so
+the files are written to no disk filesystem. MMX removes the directory when the node task ends, also
+when the task fails or is cancelled, and removes one that a killed node job
+worker process left behind
+([details](../../docs/reference/secrets.md#a-node-tasks-private-directory)).
+Git's credential helpers are turned off, so no helper stores credentials.
+Credentials never appear in the URL, command line, `.git/config`, or results.
+
+MMX hands `username`, `password`, and `ssh_private_key` only to Git as a login, so a
+secret in them does not hide the task's result: it shows `commit` and
+`previous_commit`, and a failure shows the reason that Git or SSH gives, such
+as `Permission denied (publickey)`. If the failure reason from Git or SSH
+contains the secret, MMX replaces the secret with `[redacted]`.
+[A login does not hide a node task's result](../../docs/reference/secrets.md#a-login-does-not-hide-a-node-tasks-result)
+has the rule. `ssh_known_hosts_lines` is no login: a secret in it hides the result.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Arch Linux, openSUSE Leap 16.1, Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The base suite covers this module (`release_directories.py` checks out a repository with `git` as a tracked input and switches a release directory to it) and runs on every tested distribution.
+
+## Why it works this way
+
+- **The default for files edited on the node fails the Git node task.** An
+  edit on a server is often an urgent fix that someone has not yet committed.
+  MMX does not discard an edit unless the task says to discard the edit.
+- **With `run_as_user_account`, Git runs as the account named by
+  `run_as_user_account`.** Hooks or configuration in the checkout directory
+  named by `path` never run as root.
+
+- **The selector names the Git namespace.** A branch and a tag can share a
+  name; the task states whether to follow a branch or deploy a fixed release.
+- **Full history also applies at an unchanged commit.** Build tools that use
+  history need the checkout deepened even when no code update is needed.

@@ -1,0 +1,18 @@
+nodes:
+  web:
+    address: shop.example.com
+    ssh_user: deploy
+
+vars:
+  # The site. The certificate covers this name and its www name.
+  site_name: shop.example.com
+  # The contact address of this server's account at the certificate authority.
+  certificate_account_email: admin@example.com
+  # The systemd service of the web server, which the script reloads after
+  # each new certificate.
+  web_server_service: nginx
+  # The certificate authority. This is Let's Encrypt. While you try the
+  # example, write Let's Encrypt's test server here,
+  # https://acme-staging-v02.api.letsencrypt.org/directory: it issues
+  # certificates that no browser trusts and has much higher limits.
+  certificate_authority_url: https://acme-v02.api.letsencrypt.org/directory

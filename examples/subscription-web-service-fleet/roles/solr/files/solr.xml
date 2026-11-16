@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Managed by MMX (role solr): Solr in standalone mode. Every other
+     setting is Solr's default. -->
+<solr>
+  <!-- Solr reads -Dsolr.allowPaths (solr.in.sh) only through this element;
+       the nightly backups go to a directory outside SOLR_HOME. -->
+  <str name="allowPaths">${solr.allowPaths:}</str>
+</solr>

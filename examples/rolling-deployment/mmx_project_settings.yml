@@ -1,0 +1,10 @@
+project_name: rolling_demo
+default_inventory: example
+
+vars:
+  release: v2
+  schema: 2
+  site: example
+node_task_defaults:
+  retry:
+    pause_between_tries: 200ms

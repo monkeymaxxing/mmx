@@ -1,0 +1,40 @@
+summary: Manages one ZFS filesystem dataset and its properties, with the zfs program; the pool must exist.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The dataset as ZFS names it, the pool and the datasets below it with / between them, such as tank/clickhouse.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, deleted_with_all_its_data]
+    description: present (the default) creates the dataset and sets its listed properties. deleted_with_all_its_data deletes the dataset and everything in it, and accepts only name; a dataset that has child datasets or snapshots fails the task.
+  properties:
+    type: mapping_of_strings
+    required: false
+    description: ZFS properties with their values as text, each under the name that zfs get prints, such as compression lz4 or quota 10G. Only the listed properties are managed; a property that the task does not list keeps its value.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the dataset, and in a dryrun when a run would create it.
+examples:
+  - description: A dataset for ClickHouse with compression and a record size that suits its files.
+    config: |
+      zfs_dataset:
+        name: tank/clickhouse
+        properties:
+          compression: lz4
+          recordsize: 128K
+  - description: A dataset with a quota, without access times, and with a property of your own, which has a colon in its name.
+    config: |
+      zfs_dataset:
+        name: tank/backups
+        properties:
+          quota: 500G
+          atime: "off"
+          "com.example:owner": storage-team
+  - description: Destroy a dataset and everything in it.
+    config: |
+      zfs_dataset:
+        name: tank/old-clickhouse
+        state: deleted_with_all_its_data

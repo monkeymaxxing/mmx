@@ -1,0 +1,124 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # Podman from the distribution's own packages. skopeo is the program
+      # with which a dryrun of a podman_image task with pull_image: always
+      # asks the registry which image a tag names now; a run needs only
+      # podman.
+      #
+      # On Debian and Ubuntu, Podman's package only recommends the programs
+      # that pods, the containers of an ordinary account, and Podman's own
+      # networks need. A server whose apt installs no recommended packages
+      # lacks them, so the task names them:
+      #   catatonit          for pods
+      #   uidmap             for the containers of an ordinary account
+      #   slirp4netns        for the network of those containers, with Podman 4 and older
+      #   dbus-user-session  so that the account's own systemd keeps those containers
+      #   netavark           for the networks of containers
+      #   aardvark-dns       for the names of the containers on one network
+      #   nftables           the firewall program that netavark runs on Debian 13
+      #   passt              for the network of an ordinary account's containers, with Podman 5
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package:
+          packages:
+            - {name: podman, version: newest_when_first_installed}
+            - {name: skopeo, version: newest_when_first_installed}
+            - {name: catatonit, version: newest_when_first_installed}
+            - {name: uidmap, version: newest_when_first_installed}
+            - {name: slirp4netns, version: newest_when_first_installed}
+            - {name: dbus-user-session, version: newest_when_first_installed}
+            - {name: netavark, version: newest_when_first_installed}
+            - {name: aardvark-dns, version: newest_when_first_installed}
+            - {name: nftables, version: newest_when_first_installed}
+            - {name: passt, version: newest_when_first_installed}
+
+      # On the Red Hat family, Podman's package requires all of these
+      # programs itself.
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: podman, version: newest_when_first_installed}, {name: skopeo, version: newest_when_first_installed}]}
+
+      # Podman has no daemon to configure. Its settings are drop-in files.
+      - task_block:
+          id: podman_registries
+          changes:
+            - file:
+                path: /etc/containers/registries.conf.d/50-image-registry.conf
+                permissions_mode: "0644"
+                content: |
+                  [[registry]]
+                  location = "{{ .vars.image_registry_location }}"
+                  insecure = {{ .vars.image_registry_serves_plain_http }}
+
+      # Every Sunday at 04:00, delete the images in the system's (root's)
+      # image store that no container uses and that are older than seven days.
+      - task_block:
+          id: podman_image_cleanup
+          changes:
+            - systemd_unit:
+                name: podman-image-cleanup.service
+                content: |
+                  [Unit]
+                  Description=Delete unused Podman images that are older than seven days
+                  [Service]
+                  Type=oneshot
+                  ExecStart=/usr/bin/podman image prune --all --force --filter until=168h
+            - systemd_unit:
+                name: podman-image-cleanup.timer
+                content: |
+                  [Unit]
+                  Description=Delete unused Podman images every Sunday
+                  [Timer]
+                  OnCalendar=Sun 04:00
+                  Persistent=true
+                  [Install]
+                  WantedBy=timers.target
+          activate:
+            - systemd_service:
+                name: podman-image-cleanup.timer
+                state: running
+                start_at_boot: true
+
+      # An ordinary account for containers that run without root. The
+      # system's account tools give an ordinary account its ranges of
+      # sub-user and sub-group IDs, which Podman needs, and give none to a
+      # system account: so system: false.
+      - user:
+          name: "{{ .vars.container_account }}"
+          system: false
+          home: "/home/{{ .vars.container_account }}"
+          create_home_directory: true
+
+      # The account has its own image store, so it gets its own cleanup
+      # timer, which runs in the account's own systemd.
+      - task_block:
+          id: podman_image_cleanup_of_the_account
+          changes:
+            - systemd_unit:
+                name: podman-image-cleanup.service
+                in_systemd_of_user_account: "{{ .vars.container_account }}"
+                content: |
+                  [Unit]
+                  Description=Delete this account's unused Podman images that are older than seven days
+                  [Service]
+                  Type=oneshot
+                  ExecStart=/usr/bin/podman image prune --all --force --filter until=168h
+            - systemd_unit:
+                name: podman-image-cleanup.timer
+                in_systemd_of_user_account: "{{ .vars.container_account }}"
+                content: |
+                  [Unit]
+                  Description=Delete this account's unused Podman images every Sunday
+                  [Timer]
+                  OnCalendar=Sun 04:00
+                  Persistent=true
+                  [Install]
+                  WantedBy=timers.target
+          activate:
+            - systemd_service:
+                name: podman-image-cleanup.timer
+                in_systemd_of_user_account: "{{ .vars.container_account }}"
+                state: running
+                start_at_boot: true

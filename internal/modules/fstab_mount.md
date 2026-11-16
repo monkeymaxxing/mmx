@@ -1,0 +1,141 @@
+# `fstab_mount`
+
+`fstab_mount` keeps one line of `/etc/fstab` and the live mount in step with
+it, through `mount`, `umount`, and `findmnt` on the node. The task's line is
+the one whose mount point is `mount_point`; the task owns that one line and leaves
+every other line and comment alone.
+
+A bind mount is not managed here: write a `.mount` unit with
+[`systemd_unit`](systemd_unit.md) for it. A `.mount` unit is also the
+alternative for a mount that a service should require by name. An NFS export is a file in
+`/etc/exports.d/` written with [`file`](file.md), and a
+[`systemd_service`](systemd_service.md) node task on the NFS server with
+`refresh: reload`.
+
+## Examples
+
+### Mount a filesystem by its label
+
+Create the mount point first:
+
+```yaml
+- directory:
+    path: /srv/data
+
+- fstab_mount:
+    check_filesystem_at_boot: never
+    mount_point: /srv/data
+    mount_source: LABEL=data
+    filesystem_type: ext4
+    options: [noatime]
+    state: mounted
+```
+
+On the node, MMX writes or corrects the `/etc/fstab` line for `/srv/data`.
+If `/srv/data` has no live mount, MMX then mounts the filesystem at
+`/srv/data`. If the mount options change, MMX remounts `/srv/data`.
+Dryrun reports the line difference and whether a mount or remount would
+happen.
+
+`mount_source` is a device, a tag such as `LABEL=data` or `UUID=...`, or a network
+location such as `nfs01:/export/data`. `options` is required: list each option, or write `[defaults]`.
+`check_filesystem_at_boot` is also required: `never` skips `fsck`,
+`as_root_filesystem` selects its first check order, and
+`after_root_filesystem` checks after the root filesystem.
+
+### Unmount and remove the line
+
+```yaml
+- fstab_mount:
+    mount_point: /srv/data
+    state: unmounted_and_removed_from_fstab
+```
+
+With `state: unmounted_and_removed_from_fstab`, MMX unmounts `/srv/data`
+and removes the `/etc/fstab` line for `/srv/data`. The `/srv/data` directory
+stays. A mount that a process still uses fails the node task with the
+system's message, such as `target is busy`.
+
+## How it works
+
+### Writing `/etc/fstab`
+
+MMX writes `/etc/fstab` the way it writes any file: a new file beside the
+old one, renamed into place, so the node never sees half a file. Before the
+rename, `findmnt --verify` must accept the new file; otherwise the node task
+fails with findmnt's report and `/etc/fstab` stays as it was. A rejected
+line, such as one for a mount point that does not exist, would otherwise
+stop the node at its next boot. After a change, MMX runs `systemctl
+daemon-reload`, because systemd makes its mount and swap units from
+`/etc/fstab`.
+
+### When MMX remounts
+
+`fstab_mount` remounts in two cases. The first is a change of the listed
+options: MMX remounts with the new options before it writes the line, so a
+run that was cut off in between remounts again. The second is a live mount
+whose flags differ from the listed options: `ro` or `rw`, `nosuid`,
+`nodev`, `noexec`, `noatime`, `relatime`, or `strictatime`, `nodiratime`,
+and `nosymfollow`, and the filesystem flags `sync`, `dirsync`, `lazytime`,
+and `mand`.
+
+A filesystem's own options, such as `commit=30` for ext4 or `size=2G` for
+tmpfs, are not compared with the live mount. When a remount cannot apply an
+option, the node task fails and says to unmount and mount again.
+
+### Another source or type at the path
+
+If something with another source or type is already mounted at the path,
+the node task fails and names the existing and requested sources and
+filesystem types. MMX changes nothing. A tag such as
+`LABEL=data` counts as the same source as the device `findfs` finds for it.
+
+### Programs
+
+The programs come with the node's base system: `findmnt` from `util-linux`,
+and `mount` and `umount` from `mount` on Debian and Ubuntu and `util-linux`
+elsewhere. A missing program fails the node task with its package, and dryrun
+reports the node task not checked.
+
+## Errors and what they mean
+
+| The reason holds | What the error means, and what to do |
+|---|---|
+| `/srv/data has /dev/sdc1 (xfs) mounted, and the task asks for LABEL=data (ext4); changing what is mounted under a running application is a decision for a person: unmount it first with state: unmounted_and_removed_from_fstab` | Something else is mounted at the path. Unmount it first with the other state, then run again. |
+| `findmnt --verify did not accept the new /etc/fstab, so it was not written: ...` | The new line is wrong, such as one for a mount point that does not exist. The reason ends with findmnt's report. `/etc/fstab` stays as it was. |
+| `the mount point /srv/data does not exist yet; create the directory first, such as with a directory task` | Create the mount point with a [`directory`](directory.md) node task before the `fstab_mount` node task. A dryrun reports the node task not checked. |
+| `after the remount, the live mount of ... still needs ..., which a remount did not apply; ...` | Some options take effect only when the filesystem is mounted. Unmount the filesystem with `state: unmounted_and_removed_from_fstab`, then run again. |
+| `/etc/fstab has 2 lines for /srv/data (lines ...); keep exactly one matching line and remove the extra matching lines by hand` | Remove duplicate lines for `/srv/data` by hand until `/etc/fstab` contains exactly one line for `/srv/data`. |
+| `target is busy` | `state: unmounted_and_removed_from_fstab` failed with the system's message, because a process still uses the mount. Stop the process using the mount, then run again. |
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, AlmaLinux 10.
+
+The suites `tests/integration/storage.py` and
+`tests/integration/partitions_and_lvm.py` test mounts on loop devices in
+virtual machines. The suites run on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10. The tests need virtual machines because
+mounts need the guest's own kernel. The [validation
+record](../../docs/changing-mmx/validation.md) has the
+latest results.
+
+## Why it works this way
+
+- **Each path names its role.** `mount_source` is the mounted resource;
+  `mount_point` is the directory where the node exposes that resource.
+
+- **Mount options and boot checks are explicit.** The right choices depend
+  on the filesystem and its use, following the
+  [required-setting rule](../../docs/changing-mmx/design/modules.md#a-setting-with-no-safe-guess-is-required).
+- **The task owns one line, not the whole `/etc/fstab`.** The installer and
+  the administrator write the `/etc/fstab` lines outside the node task's
+  line.
+- **Another source or type fails the task.** Changing what is mounted under
+  a running application is a decision for a person.
+- **A filesystem's own options are not compared with the live mount.** The
+  kernel shows filesystem-specific options in forms chosen by the kernel
+  and leaves out default values for filesystem-specific options.
+  Comparing filesystem-specific options would therefore remount on every
+  run.
+- **`findmnt --verify` checks the new file before the rename.** A rejected
+  line would otherwise stop the node at its next boot.

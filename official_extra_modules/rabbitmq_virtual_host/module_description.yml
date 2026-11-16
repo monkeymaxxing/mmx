@@ -1,0 +1,28 @@
+summary: Manages one virtual host of a RabbitMQ server.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The virtual host's name, such as shop. It must not start with a hyphen.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, deleted_with_all_its_data]
+    description: >-
+      present (the default) creates the virtual host when it is missing.
+      deleted_with_all_its_data deletes the virtual host with its queues, its
+      messages, its policies, and every user's permissions on it.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the virtual host, or in a dryrun would create it.
+examples:
+  - description: Make sure the RabbitMQ server has the virtual host shop.
+    config: |
+      rabbitmq_virtual_host:
+        name: shop
+  - description: Delete the virtual host shop-test with every queue and message in it.
+    config: |
+      rabbitmq_virtual_host:
+        name: shop-test
+        state: deleted_with_all_its_data

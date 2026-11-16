@@ -1,0 +1,45 @@
+
+
+
+
+fleet_stages:
+  - id: tasks
+    nodes: web
+
+    node_tasks:
+      - id: each_site
+        loop: "{{ .vars.sites }}"
+        as: site
+        show: "site {{ .site }} on port {{ .vars.port }}"
+
+      - loop: {small: 1, large: 2}
+        as: size
+        when: {equals: ["{{ .size.key }}", "{{ .vars.tier }}"]}
+        show: "{{ .size.value }}"
+
+      - loop: "{{ .node.addresses }}"
+        as: address
+        show: "listen {{ .address }}:{{ .vars.port }}"
+
+      - loop: [1, 2]
+        as: n
+        key: "n{{ .n }}"
+        when: {equals: ["{{ .node.cpu_count }}", 4]}
+        show: "{{ .n }}"
+
+      - show: "{{ .node_tasks.each_site.items[1].value }}"
+  - id: rollout
+    loop: "{{ .vars.sites }}"
+    as: site
+    key: "{{ .site }}"
+    when: {not: {equals: ["{{ .site }}", beta]}}
+    fleet_stages:
+      - id: deploy
+        nodes: web
+
+        node_tasks:
+          - show: "deploy {{ .site }} in {{ .vars.region }}"
+
+          - loop: "{{ .inventory.groups.web }}"
+            as: peer
+            show: "{{ .site }} peer {{ .peer }}"

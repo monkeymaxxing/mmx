@@ -1,0 +1,115 @@
+# The nginx load balancer: TLS for the public names, the upstreams of the
+# application servers, and the maintenance pages. The distribution's
+# open-source nginx with its Brotli module; the package's daily log rotation
+# stays.
+inputs:
+  # Each entry: {name, domain, application_port, repository}.
+  brand_sites: {type: list, required: true}
+  api_host_name: {type: string, required: true}
+  main_application_host_name: {type: string, required: true}
+  # The certificate whose files serve the API and the web pages, such as
+  # example.com for a certificate of example.com and *.example.com.
+  main_application_certificate_name: {type: string, required: true}
+  # Where each certificate's directory with fullchain.pem and privkey.pem is:
+  # /etc/letsencrypt/live, or the self-signed certificates of a test.
+  tls_certificate_dir: {type: string, required: true}
+  # Node names of the inventory groups, and .inventory.nodes for their
+  # addresses and weights.
+  main_application_servers: {type: list, required: true}
+  brand_site_servers: {type: list, required: true}
+  inventory_nodes: {type: mapping, required: true}
+
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: nginx, version: newest_when_first_installed}
+        - {name: libnginx-mod-http-brotli-filter, version: newest_when_first_installed}
+
+  # The web roots of the maintenance pages, one for each public site. The
+  # playbook load_balancer_maintenance_pages switches the pages on and off.
+  - directory: {path: /var/www, owner: root, group: root, permissions_mode: "0755"}
+  - loop: [main_application, main_application_api]
+    as: webroot
+    directory:
+      path: "/var/www/{{ .webroot }}"
+      owner: www-data
+      group: www-data
+  - loop: "{{ .inputs.brand_sites }}"
+    as: site
+    directory:
+      path: "/var/www/{{ .site.domain }}"
+      owner: www-data
+      group: www-data
+  - loop: [main_application, main_application_api]
+    as: webroot
+    file:
+      path: "/var/www/{{ .webroot }}/maintenance.html"
+      source: files/maintenance.html
+      owner: www-data
+      group: www-data
+      permissions_mode: "0644"
+  - loop: "{{ .inputs.brand_sites }}"
+    as: site
+    file:
+      path: "/var/www/{{ .site.domain }}/maintenance.html"
+      source: files/maintenance.html
+      owner: www-data
+      group: www-data
+      permissions_mode: "0644"
+
+  - directory: {path: /etc/nginx/includes, owner: root, group: root, permissions_mode: "0755"}
+
+  # nginx.conf reads only conf.d/, so the package's sites-enabled/default
+  # stays unused.
+  - task_block:
+      id: nginx_load_balancer
+      changes:
+        - file:
+            path: /etc/nginx/nginx.conf
+            template: files/nginx.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - file:
+            path: /etc/nginx/includes/proxy_headers.conf
+            source: files/includes/proxy_headers.conf
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - file:
+            path: /etc/nginx/conf.d/upstreams.conf
+            template: files/upstreams.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - file:
+            path: /etc/nginx/conf.d/main_application_servers.conf
+            template: files/main_application_servers.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - file:
+            path: /etc/nginx/conf.d/brand_site_servers.conf
+            template: files/brand_site_servers.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - shell:
+            script: nginx -t
+            dryrun: nginx -t
+            changed_when: false
+      activate:
+        - systemd_service:
+            name: nginx
+            state: running
+            start_at_boot: true
+            refresh: reload
+      verify:
+        - wait_for:
+            tcp_port_accepts_connections: 80
+            wait_at_most: 30s
+        - wait_for:
+            url_responds: http://127.0.0.1:8080/nginx_status
+            response_body_contains: Active connections
+            wait_at_most: 30s

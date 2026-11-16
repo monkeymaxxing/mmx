@@ -1,0 +1,34 @@
+# The nginx servers of the main application on an application server: its
+# API on port 8080 and its web pages on port 8081, both behind the load
+# balancer. Passenger runs the release that <application_dir>/current
+# points to.
+inputs:
+  application_dir: {type: string, required: true}
+  server_environment: {type: string, required: true}
+
+node_tasks:
+  - task_block:
+      id: main_application_nginx_servers
+      changes:
+        - file:
+            path: /etc/nginx/sites-enabled/main_application_api.conf
+            template: files/main_application_api.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+        - file:
+            path: /etc/nginx/sites-enabled/main_application_web_pages.conf
+            template: files/main_application_web_pages.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - shell:
+            script: nginx -t
+            dryrun: nginx -t
+            changed_when: false
+      activate:
+        - systemd_service:
+            name: nginx
+            state: running
+            refresh: reload

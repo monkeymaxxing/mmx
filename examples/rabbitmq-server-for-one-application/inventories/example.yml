@@ -1,0 +1,11 @@
+nodes:
+  message_broker:
+    address: rabbitmq.example.com
+    ssh_user: deploy
+
+vars:
+  # The application's virtual host and the user that the application logs
+  # in as. A virtual host is a separate set of queues and exchanges inside
+  # one RabbitMQ server.
+  application_virtual_host: shop
+  application_user: shop

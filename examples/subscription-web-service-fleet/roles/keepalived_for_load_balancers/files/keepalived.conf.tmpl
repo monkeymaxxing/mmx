@@ -1,0 +1,48 @@
+# Managed by MMX (role keepalived_for_load_balancers). The load balancer with
+# the higher priority holds the virtual address while its nginx answers.
+global_defs {
+  # VRRP version 3, the current standard.
+  vrrp_version 3
+  # keepalived runs only scripts that root owns, as root.
+  enable_script_security
+  script_user root
+}
+
+# A person moves the address away by creating /etc/keepalived/manual-failover.
+vrrp_script manual_failover {
+  script "/usr/local/libexec/keepalived/check-manual-failover"
+  interval 10
+  weight -60
+}
+
+# A load balancer whose nginx does not answer gives the address up.
+vrrp_script nginx_answers {
+  script "/usr/local/libexec/keepalived/check-nginx"
+  interval 3
+  weight -60
+}
+
+vrrp_instance load_balancer {
+  interface {{ .inputs.network_interface }}
+  priority {{ .inputs.priority }}
+  virtual_router_id {{ .inputs.virtual_router_id }}
+  # nginx on this server answers on the virtual address too.
+  accept
+{{- if .inputs.peer_nodes }}
+  # The peers by their addresses, for networks that drop multicast.
+  unicast_src_ip {{ (index .inputs.inventory_nodes .node.name).address }}
+  unicast_peer {
+{{- range .inputs.peer_nodes }}
+    {{ (index $.inputs.inventory_nodes .).address }}
+{{- end }}
+  }
+{{- end }}
+  virtual_ipaddress {
+    {{ .inputs.virtual_address }}
+  }
+  track_script {
+    nginx_answers
+    manual_failover
+  }
+  notify "/usr/local/libexec/keepalived/log-state-change"
+}

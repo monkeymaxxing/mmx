@@ -1,0 +1,9 @@
+project_name: mongodb_server_for_one_application
+default_inventory: example
+
+# The two passwords come from the environment of the controller machine.
+# Remove these three lines to keep them in the project's encrypted vault
+# instead (mmx secrets edit).
+secrets_from_env:
+  mongodb_admin_password: MONGODB_ADMIN_PASSWORD
+  shop_mongodb_password: SHOP_MONGODB_PASSWORD

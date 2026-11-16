@@ -1,0 +1,40 @@
+# Test scaffolding: self-signed certificates in place of Let's Encrypt's, for
+# test machines that must not ask a public certificate authority. Each
+# certificate's directory holds fullchain.pem and privkey.pem, as certbot's
+# does, so nginx reads both the same way.
+inputs:
+  certificate_dir: {type: string, required: true}
+  # As for the role lets_encrypt_certificates: each certificate covers one
+  # name and its wildcard name, and is named after the name.
+  certificate_names: {type: list, required: true}
+
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: openssl, version: newest_when_first_installed}
+
+  - directory: {path: "{{ .inputs.certificate_dir }}", owner: root, group: root, permissions_mode: "0755"}
+  - loop: "{{ .inputs.certificate_names }}"
+    as: certificate_name
+    directory:
+      path: "{{ .inputs.certificate_dir }}/{{ .certificate_name }}"
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+  # openssl makes the key and the certificate once; a rerun finds the
+  # certificate and does nothing.
+  - loop: "{{ .inputs.certificate_names }}"
+    as: certificate_name
+    shell:
+      script: |
+        set -euo pipefail
+        openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+          -subj "/CN=$CERTIFICATE_NAME" \
+          -addext "subjectAltName=DNS:$CERTIFICATE_NAME,DNS:*.$CERTIFICATE_NAME" \
+          -keyout "$DIRECTORY/privkey.pem" -out "$DIRECTORY/fullchain.pem"
+        chmod 0600 "$DIRECTORY/privkey.pem"
+      env:
+        CERTIFICATE_NAME: "{{ .certificate_name }}"
+        DIRECTORY: "{{ .inputs.certificate_dir }}/{{ .certificate_name }}"
+      skip_if_this_path_exists: "{{ .inputs.certificate_dir }}/{{ .certificate_name }}/fullchain.pem"

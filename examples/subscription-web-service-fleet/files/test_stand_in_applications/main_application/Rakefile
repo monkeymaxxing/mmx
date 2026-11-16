@@ -1,0 +1,33 @@
+# Test stand-in for the main application's rake tasks: the queue workers and
+# the jobs that cron runs.
+def release
+  File.read(File.join(__dir__, "RELEASE")).strip
+end
+
+task :environment do
+  $stdout.sync = true
+end
+
+namespace :jobs do
+  desc "Work the queues forever, like the application's queue workers"
+  task work: :environment do
+    loop do
+      puts "#{Time.now.utc} main_application worker release=#{release} " \
+           "queue_group=#{ENV['QUEUE_GROUP']} queues=#{ENV['QUEUES']} workers=#{ENV['WORKERS']}"
+      sleep 10
+    end
+  end
+end
+
+# The jobs that cron runs; each writes one line to its log, with the
+# arguments it was given, such as reports:send_summary[weekly].
+%w[
+  billing:renew_subscriptions
+  sessions:delete_expired
+  reports:send_summary
+].each do |name|
+  desc "Stand-in for #{name}"
+  task name, [:period] => :environment do |_task, arguments|
+    puts "#{Time.now.utc} #{name}#{arguments.to_a.empty? ? '' : arguments.to_a.inspect} release=#{release} RAILS_ENV=#{ENV['RAILS_ENV']}"
+  end
+end

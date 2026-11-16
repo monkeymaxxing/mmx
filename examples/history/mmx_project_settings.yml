@@ -1,0 +1,3 @@
+project_name: collected_history
+default_inventory: example
+run_history_retention: 24h

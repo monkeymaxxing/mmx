@@ -1,0 +1,54 @@
+node_tasks:
+  - group: {name: mmx-operators, system: true}
+
+  - group: {name: mmx-demo, system: true}
+
+  - user: {create_home_directory: false, name: mmx-demo, primary_group: mmx-demo, system: true}
+
+  - directory: {path: /usr/local/libexec, permissions_mode: "0755", owner: root, group: root}
+
+  - task_block:
+      id: demo_application
+      changes:
+        - systemd_unit:
+            name: mmx-demo.service
+            template: files/mmx-demo.service
+      activate:
+        - systemd_service: {name: mmx-demo, start_at_boot: true, state: running}
+
+  - file:
+      path: /usr/local/libexec/mmx-demo-result
+      source: files/result.sh
+      permissions_mode: "0755"
+      owner: root
+      group: root
+
+  - file:
+      path: /etc/tmpfiles.d/mmx-demo-control.conf
+      source: files/tmpfiles.conf
+      permissions_mode: "0644"
+      owner: root
+      group: root
+
+  # Boot creates the runtime paths; this repairs a missing path or drifted
+  # type, mode, or owner. Keep it in step with tmpfiles.conf.
+  - shell:
+      script: systemd-tmpfiles --create /etc/tmpfiles.d/mmx-demo-control.conf
+      skip_if_this_command_succeeds: |
+        test "$(stat -c '%A %U %G' /run/mmx-demo-control)" = 'drwxr-xr-x root root' &&
+        test "$(stat -c '%A %U %G' /run/mmx-demo-control/result)" = '-rw-r--r-- root root' &&
+        test "$(stat -c '%A %U %G' /run/mmx-demo-request)" = 'drwxrwx--T root mmx-operators'
+
+  # The path unit starts the restart action; a changed action definition
+  # needs only the manager reload the unit task makes.
+  - task_block:
+      id: restart_control
+      changes:
+        - systemd_unit:
+            name: mmx-demo-restart.service
+            template: files/mmx-demo-restart.service
+        - systemd_unit:
+            name: mmx-demo-restart.path
+            template: files/mmx-demo-restart.path
+      activate:
+        - systemd_service: {name: mmx-demo-restart.path, start_at_boot: true, state: running}

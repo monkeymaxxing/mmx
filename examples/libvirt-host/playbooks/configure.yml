@@ -1,0 +1,74 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # On Debian and Ubuntu, apt installs "recommended" packages by default.
+      # For libvirt and QEMU those are several hundred more packages. This
+      # file turns that off for every apt command on the node.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        file:
+          path: /etc/apt/apt.conf.d/90-no-recommended-packages
+          permissions_mode: "0644"
+          content: |
+            APT::Install-Recommends "false";
+
+      # libvirt, its program virsh, QEMU for x86_64 virtual machines, and
+      # qemu-img for disk image files, from the distribution's own packages.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: libvirt-daemon-system, version: newest_when_first_installed}, {name: libvirt-clients, version: newest_when_first_installed}, {name: qemu-system-x86, version: newest_when_first_installed}, {name: qemu-utils, version: newest_when_first_installed}]}
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: libvirt-daemon-driver-qemu, version: newest_when_first_installed}, {name: libvirt-client, version: newest_when_first_installed}, {name: qemu-kvm-core, version: newest_when_first_installed}, {name: qemu-img, version: newest_when_first_installed}]}
+
+      # libvirt's daemon ends by itself while it has nothing to do, and its
+      # socket unit starts it again for the next request. So the unit to keep
+      # running is the socket. Debian and Ubuntu have one daemon, libvirtd.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        systemd_service:
+          name: libvirtd.socket
+          state: running
+          start_at_boot: true
+
+      # The Red Hat family has one daemon for each kind of work; virtqemud is
+      # the one for QEMU. Its service must be enabled too, or no virtual
+      # machine starts when the node boots. The packages enable it, and this
+      # task keeps it so.
+      - when: {not: {equals: ["{{ .node.package_manager }}", apt]}}
+        systemd_service:
+          name: virtqemud.socket
+          state: running
+          start_at_boot: true
+      - when: {not: {equals: ["{{ .node.package_manager }}", apt]}}
+        systemd_service:
+          name: virtqemud.service
+          state: do_not_start_or_stop
+          start_at_boot: true
+
+      # The definition of the virtual machine shop-db, which libvirt calls a
+      # domain: libvirt's XML, from a template. Only root reads the file,
+      # because such a file can hold a password.
+      - directory:
+          path: /etc/mmx-libvirt
+          permissions_mode: "0700"
+      - file:
+          path: /etc/mmx-libvirt/shop-db.xml
+          template: templates/shop-db.xml
+          permissions_mode: "0600"
+
+      # The disk of shop-db: an empty image file, made once. To start from
+      # an operating system's image, replace this task with one that puts
+      # that image at the same path.
+      - shell:
+          script: qemu-img create -f qcow2 /var/lib/libvirt/images/shop-db.qcow2 "${DISK_SIZE_GIB}G"
+          env:
+            DISK_SIZE_GIB: "{{ .vars.shop_db_disk_size_gib }}"
+          skip_if_this_path_exists: /var/lib/libvirt/images/shop-db.qcow2
+
+      # libvirt's definition follows the XML file, the virtual machine runs,
+      # and libvirt starts it at every boot of the node.
+      - libvirt_domain:
+          name: shop-db
+          state: running
+          domain_xml_file: /etc/mmx-libvirt/shop-db.xml
+          start_at_boot: true

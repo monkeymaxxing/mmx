@@ -1,0 +1,2 @@
+Error: Error occurred when starting proxy device: Error: Failed to listen on 127.0.0.1:18080: listen tcp 127.0.0.1:18080: bind: address already in use
+Try `incus info --show-log local:shop-test` for more info

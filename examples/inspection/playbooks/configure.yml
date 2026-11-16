@@ -1,0 +1,13 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - id: app_config
+        file:
+          path: /var/tmp/mmx-inspection-example
+          template: templates/app.conf
+          permissions_mode: "0644"
+
+      - id: describe
+        show: "Configured {{ .vars.instance }}"

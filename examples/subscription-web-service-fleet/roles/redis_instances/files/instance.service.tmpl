@@ -1,0 +1,19 @@
+# Managed by MMX (role redis_instances).
+[Unit]
+Description=Redis server, instance {{ .instance.name }}
+# Redis binds the server's network address, which exists only once the
+# network is up.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=redis
+Group=redis
+ExecStart=/usr/bin/redis-server /etc/redis/{{ .instance.name }}.conf
+# Redis keeps a file open for each of its up to 10000 clients; systemd's
+# default allows 1024.
+LimitNOFILE=65536
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

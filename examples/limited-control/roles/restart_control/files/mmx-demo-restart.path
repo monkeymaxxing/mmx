@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for an MMX demo application restart request
+Requires=systemd-tmpfiles-setup.service
+After=systemd-tmpfiles-setup.service
+
+[Path]
+DirectoryNotEmpty=/run/mmx-demo-request
+Unit=mmx-demo-restart.service
+
+[Install]
+WantedBy=multi-user.target

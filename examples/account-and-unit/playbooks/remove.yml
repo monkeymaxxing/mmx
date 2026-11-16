@@ -1,0 +1,26 @@
+fleet_stages:
+  - id: remove
+    nodes: all
+
+    node_tasks:
+      - systemd_service:
+          name: mmx-account-demo
+          state: stopped
+          start_at_boot: false
+
+      - systemd_unit:
+          name: mmx-account-demo.service
+          drop_in: 20-limits.conf
+          state: absent
+
+      - systemd_unit:
+          name: mmx-account-demo.service
+          state: absent
+
+      - user:
+          name: mmx-account-demo
+          state: absent
+
+      - group:
+          name: mmx-account-demo
+          state: absent

@@ -1,0 +1,23 @@
+# Managed by MMX (role redis_instances): the instance {{ .instance.name }}.
+include /etc/redis/common.conf
+
+port {{ .instance.port }}
+
+# The instance's memory limit ("0" for none) and what Redis does when it is
+# reached.
+maxmemory {{ .instance.maxmemory }}
+maxmemory-policy {{ .instance.maxmemory_policy }}
+
+# Each instance needs its own file names in the shared directory.
+dbfilename {{ .instance.name }}.rdb
+{{- if .instance.persisted }}
+
+# Every write is in the append-only log, so the data survives a restart.
+appendonly yes
+appenddirname {{ .instance.name }}-appendonlydir
+appendfilename {{ .instance.name }}.aof
+{{- else }}
+
+# A cache keeps nothing on disk.
+save ""
+{{- end }}

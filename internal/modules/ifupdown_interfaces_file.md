@@ -1,0 +1,416 @@
+# `ifupdown_interfaces_file`
+
+`ifupdown_interfaces_file` manages one file of ifupdown on a node, the Linux
+server MMX manages. ifupdown is the Debian package that configures network
+interfaces from `/etc/network/interfaces` at boot, through
+`networking.service`. The module writes either `/etc/network/interfaces`
+itself or one file directly in `/etc/network/interfaces.d`.
+`ifupdown_interfaces_file` then takes the interfaces that the change touches
+down with `ifdown` and brings them up with `ifup`.
+
+Three other modules do the same for the other network tools:
+[`netplan_file`](netplan_file.md) for Netplan,
+[`networkmanager_connection_file`](networkmanager_connection_file.md) for
+NetworkManager, and [`systemd_networkd_file`](systemd_networkd_file.md) for
+systemd-networkd.
+[Choose the module for the node's tool](../../docs/changing-mmx/design/modules-network.md#choose-the-module-for-the-nodes-tool)
+says which tool the measured test images use. The inputs work as
+[Inputs shared by all four modules](../../docs/changing-mmx/design/modules-network.md#inputs-shared-by-all-four-modules)
+describes, with one difference: this module takes `path`, not `name`. The
+other three modules take a file name in one fixed directory. Debian's
+installer and the installers of some server providers put the main
+interface's settings in `/etc/network/interfaces` itself, so this module
+must reach that file. `path` is either `/etc/network/interfaces` or
+`/etc/network/interfaces.d/<name>`, where `<name>` has only letters,
+digits, underscores (`_`), and hyphens (`-`).
+
+The module takes the whole file in ifupdown's own format, as
+`interfaces(5)` describes it. Addresses, routes, VLANs, and bridges stay in
+ifupdown's configuration format. MMX does not give addresses, routes, VLANs,
+or bridges a second set of fields.
+
+A wrong network file can cut the node off from your controller machine,
+where you run `mmx`. Before changing the file, MMX saves its previous state
+and arms a systemd timer on the node. Your running `mmx` command must prove
+reachability over new connections before and after activation. If the proof
+fails, the node restores the previous file and brings its interfaces up
+again by itself. It does this even if the controller machine disconnects,
+the node job worker process dies, or the node restarts. The node job worker
+process is the program that carries out the node's tasks. The
+[execution design](../../docs/changing-mmx/design/execution.md#reachability-confirmation-and-owed-restore)
+owns this mechanism, reachability confirmation and owed restore.
+
+## Examples
+
+### A second card in its own file
+
+The complete playbook below gives a second card an address. Replace
+`enp6s0` with the second card's name on your node. The playbook leaves the
+main card's settings alone.
+
+```yaml
+fleet_stages:
+  - id: network
+    nodes: web01
+    node_tasks:
+      - ifupdown_interfaces_file:
+          path: /etc/network/interfaces.d/60-second
+          content: |
+            auto enp6s0
+            iface enp6s0 inet static
+                address 10.0.0.5/24
+          restore_unless_controller_confirms_within: 2m
+```
+
+On node `web01`, MMX first checks that `/etc/network/interfaces` reads the
+file: Debian's main file has the line `source /etc/network/interfaces.d/*`.
+MMX checks the proposed file with ifupdown's own programs, writes
+`/etc/network/interfaces.d/60-second`, and runs `ifup enp6s0`. MMX then
+waits for the reachability confirmations.
+
+Run `mmx dryrun <playbook>` first, then `mmx run <playbook>`. The dryrun
+says which interfaces the change would take down and bring up. After each
+file change, the node job worker process waits for every required
+confirmation before starting the next node task. An unchanged
+file causes no `ifdown`, no `ifup`, and no confirmation wait.
+
+To change the address later, write the whole file again with the new
+address. MMX takes `enp6s0` down with the previous file, which removes the
+old address, and brings it up with the new file.
+
+### A route on the main interface, in the main file
+
+Debian's installer, and the installers of some server providers, give the
+main interface a stanza in `/etc/network/interfaces`. A stanza is an
+`iface` line followed by the interface's option lines, such as `address`
+and `gateway` below. To add a route to the main interface, manage the whole
+`/etc/network/interfaces` file. Start from the node's current file, which
+`cat /etc/network/interfaces` shows, and change only what you mean to
+change:
+
+```yaml
+- ifupdown_interfaces_file:
+    path: /etc/network/interfaces
+    content: |
+      source /etc/network/interfaces.d/*
+
+      auto lo
+      iface lo inet loopback
+
+      auto enp5s0
+      iface enp5s0 inet static
+          address 203.0.113.10/24
+          gateway 203.0.113.1
+          up ip route add 198.51.100.0/24 via 203.0.113.1 dev enp5s0
+```
+
+Keep the `source` line exactly as the node's file has it: MMX refuses a
+change that alters it; see [Why it works this way](#why-it-works-this-way).
+Keep the address that the controller machine uses. On the node, MMX runs
+`ifdown` for `enp5s0` with a saved copy of the previous file, then
+`ifup enp5s0`. In the measurements, a ping every 0.1 seconds lost no
+answer during this change. An SSH connection that was open stayed open, and
+new connections worked at once. If the new file cuts the node off, the node
+puts the previous file back and brings `enp5s0` up with it.
+
+### A VLAN on the second card
+
+```yaml
+- ifupdown_interfaces_file:
+    path: /etc/network/interfaces.d/61-vlan
+    content: |
+      auto enp6s0.100
+      iface enp6s0.100 inet static
+          address 10.0.100.5/24
+```
+
+ifupdown reads the name `enp6s0.100` as VLAN 100 on the card `enp6s0`, and
+`ifup` creates the VLAN device itself. The dotted VLAN name `enp6s0.100`
+needs no other package.
+The form `vlan100` with a `vlan-raw-device` line needs the `vlan` package,
+and a bridge with `bridge_ports` needs `bridge-utils`. Install `vlan` for
+`vlan-raw-device`, or `bridge-utils` for `bridge_ports`, in an earlier node
+task with [`apt_package`](apt_package.md).
+
+### Remove a file
+
+```yaml
+- ifupdown_interfaces_file:
+    path: /etc/network/interfaces.d/61-vlan
+    state: absent
+```
+
+On the node, this takes `enp6s0.100` down with the file, which removes its
+address and the VLAN device, and then removes the file. The removal has the
+same confirmations and restore as a change.
+
+## How it works
+
+A run follows the steps of
+[What a run does](../../docs/changing-mmx/design/modules-network.md#what-a-run-does),
+which all four network modules share. Removal follows
+[What `state: absent` removes](../../docs/changing-mmx/design/modules-network.md#what-state-absent-removes),
+and several files follow
+[Several files run in playbook order](../../docs/changing-mmx/design/modules-network.md#several-files-run-in-playbook-order).
+The sections below describe the steps specific to `ifupdown_interfaces_file`.
+
+### The file and its metadata
+
+The file is owned by `root:root`. Optional `permissions_mode` sets the mode
+of the file named by `path`, such as `"0600"` for root-only access.
+Without `permissions_mode`, an existing file keeps its mode and a new file
+gets `0644`, readable by every account on the node.
+A key or password can also live in a root-only file that a stanza command reads. MMX creates a missing
+`/etc/network/interfaces.d` as `root:root`, mode `0755`, and leaves an
+existing directory alone. Files get the SELinux label of their path; Debian
+has no SELinux policy by default. Existing symlinks, directories, and
+special files at the destination are refused. Secrets in content or a
+template hide the task's result text and file difference.
+
+`state: absent` removes a file in `/etc/network/interfaces.d`. It is refused
+for `/etc/network/interfaces` when the project loads: ifupdown and
+`networking.service` need that file. For `absent`, omit `content` and
+`template`. The node task runs once; `retry`, `time_limit`, and
+`time_limit_per_try` are refused. Project defaults for these fields do not
+apply.
+
+### Checks before installation
+
+When the file would change, MMX checks the node before it changes anything:
+
+1. `ifup`, `ifdown`, `ifquery`, and `systemctl` are installed.
+2. `systemctl is-enabled networking.service` prints `enabled`. Otherwise
+   ifupdown would not apply the file at the next boot.
+3. The first line of `ifup --version` starts with `ifup version `, as
+   ifupdown 0.8 prints it. Another program named `ifup`, such as ifupdown2,
+   is refused.
+4. ifupdown reads the proposed file: `ifquery -i /dev/stdin --list`, with
+   the proposed file on standard input, finds syntax errors such as a
+   misplaced option.
+5. MMX's own reading of the existing and the proposed file refuses a
+   `mapping` stanza and a change of the `source`, `source-directory`, or
+   `rename` lines.
+6. For a file in `/etc/network/interfaces.d`, the `source` or
+   `source-directory` lines of `/etc/network/interfaces` must read it.
+   `source /etc/network/interfaces.d/*` is Debian's line. A relative
+   pattern is relative to `/etc/network`. MMX does not follow `source`
+   lines inside sourced files.
+7. When the change brings interfaces up,
+   `ifup --no-act --force -i /dev/stdin <interface>...`, with the proposed
+   file on standard input, finds missing settings. For example, a misspelled
+   `adress` line gives `ifup: missing required variable: address`.
+
+Steps 4 and 7 need no file on disk, so a dryrun runs them too. In their
+messages MMX writes the destination path in place of `/dev/stdin`. It
+discards what `ifup --no-act` prints on standard output: that is the list
+of commands with their values. A missing program or a service that is not
+enabled gives `not_checked` in a dryrun, because an earlier node task may
+provide it, and fails a run. The other checks fail a dryrun and a run alike.
+
+### Which interfaces a change touches
+
+MMX reads the file only far enough to know which interfaces change. MMX joins
+a line that ends in `\` with the next one and skips blank lines and
+comments. It reads the `iface` stanzas, the `auto` and `allow-` lines, and
+the `no-auto-down` and `no-scripts` lines. For each interface it compares the
+existing file with the proposed file: the interface's stanzas with their
+option lines, the stanzas they inherit from in the same file, its `auto` or
+`allow-` classes, and its flags. Spaces within a line and comments do not
+count. An interface changes when any of these differs. A new file has no
+interfaces before the change; a removed file has none after it.
+
+`lo` is never taken down, as `networking.service` never takes it down.
+
+MMX activates only interfaces with an `iface` stanza in the file named by
+`path`. MMX brings up an interface only when the file named by `path` lists
+the interface in `auto` or `allow-hotplug`, as Debian's installer writes
+the configuration. Keep each interface's `auto` line and `iface` stanza
+together in the file named by `path`. MMX refuses a change that would take
+down an interface that is up when the file named by `path` does not list
+the interface in `auto` or `allow-hotplug`: the restore could not bring the
+interface up again, and a node whose main card stays down is cut off.
+
+A change that touches no interface, such as a new comment, still installs
+the file and waits for the confirmations. Nothing is taken down or brought
+up.
+
+### Activation and its check
+
+After installation, MMX activates the change in this order:
+
+1. For each changed interface that the previous file declares and that
+   ifupdown lists as up (`ifquery --state <interface>`), in reverse order of
+   the file: `ifdown <vlan>` for each VLAN on the interface that ifupdown
+   lists as up, then `ifdown -i <saved copy of the previous file> <interface>`.
+2. For each changed interface that the new file declares, in the order of
+   the file: `ifup <interface>` for one in `auto`, and
+   `ifup --allow=hotplug <interface>` for one in `allow-hotplug`. The
+   second form skips an interface whose device does not exist, as at boot.
+3. `ifup <vlan>` for each VLAN that step 1 took down.
+
+The VLAN steps exist because taking an interface down takes its VLANs down
+too, and bringing it up brings them back without the routes that their
+stanzas add: in the guest suite, a VLAN kept its address but lost the route
+of its `up ip route add` line. MMX finds the VLANs on an interface from the
+kernel (`/sys/class/net/<interface>/upper_<vlan>`), so a VLAN declared in
+another file counts too; `ifdown` and `ifup` read its unchanged stanza from
+the files in place. A changed VLAN declared in the file named by `path` is
+taken down and brought up like any changed interface.
+
+The node saved both copies, of the previous and of the proposed file, in
+root-private storage under `/var/lib/mmx/owed_restores/<owed-restore-id>/`
+before installation. MMX runs one command per interface. A command that
+exits with a status other than 0 fails the task with what the tool wrote on
+standard error.
+
+Then MMX checks the result. Each interface brought up from `auto` must be
+listed as up. An interface from `allow-hotplug` must be listed as up when
+its device exists. Each VLAN that MMX took down must be listed as up again. A virtual device that MMX took down and did not bring up
+again, and that no file ifupdown reads declares any more (`ifquery
+<interface>` fails), must be gone. A failed command or check starts the
+restore at once.
+
+### What removal does
+
+`state: absent` takes down each interface of the file that ifupdown lists as
+up, with the file itself, and then removes the file. ifdown removes the
+interface's addresses. For a virtual device that the file declared, such as
+the VLAN `enp6s0.100` or a bridge, ifdown also removes the device; MMX
+checks that it is gone. MMX never deletes a physical card.
+
+### What a restore puts back
+
+A failed activation or check starts the restore at once. A missing
+reachability confirmation starts it when the node's deadline passes. The
+restore:
+
+1. puts back the previous bytes, owner, group, permissions, and
+   modification time, or removes the new file if none existed;
+2. runs `ifdown --force -i <saved copy of the proposed file> <interface>`
+   for each changed interface of the proposed file whose device exists or
+   that ifupdown lists as up, after `ifdown <vlan>` for each VLAN on it that
+   ifupdown lists as up;
+3. runs `ifup` for each changed interface that the previous file lists in
+   `auto` or `allow-hotplug`, and then `ifup <vlan>` for each VLAN that step
+   2 took down.
+
+After a node restart, the restore service starts after `network.target`.
+`networking.service` runs before `network.target`, so the restore follows
+boot's `ifup -a`, which brought up the proposed file. The restore puts back
+configuration, not a snapshot of every dynamic address. In the measurements,
+an interface back on DHCP got a different address from the DHCP server.
+
+A restored change remains a failed, changed node task. `mmx status <run-id>`
+shows the current restore outcome, also for an interrupted node job. A
+failed restore keeps the saved state and refuses another task for that file.
+After correcting its cause, start the service named in the failure message:
+`systemctl start mmx-owed-restore-<owed-restore-id>.service` on the node.
+
+## Errors and what they mean
+
+The texts shared by all four network modules, such as an expired
+confirmation, a restore that is still owed, and a failed restore, are in
+[Results and failure reasons](../../docs/changing-mmx/design/modules-network.md#results-and-failure-reasons).
+The texts particular to ifupdown:
+
+| The reason holds | What the reason means, and what to do |
+|---|---|
+| `The path must be /etc/network/interfaces or /etc/network/interfaces.d/<name>, where the name has only letters, digits, underscores, and hyphens, because source-directory reads only such names.` | The project does not load. Choose a name such as `60-second`, without a dot. |
+| `ifupdown_interfaces_file cannot remove /etc/network/interfaces: ...` | The project does not load. To remove an interface from the main file, write the main file without its stanza. |
+| `Cannot change <path>: ifup is not installed.` | A program is missing. `ifdown`, `ifquery`, and `systemctl` give the same text. Install `ifupdown` in an earlier node task. A dryrun reports it not checked. |
+| `Cannot change <path>: networking.service is not enabled, so ifupdown would not apply the network configuration file at boot; enable networking.service.` | Enable `networking.service` in an earlier node task. A dryrun reports it not checked. |
+| `ifupdown_interfaces_file needs ifupdown, the Debian package; this node's ifup reports "<line>".` | The node's `ifup` belongs to another program, such as ifupdown2, which activates files in another way. This module does not support it. |
+| `ifupdown does not accept the proposed <path>: <diagnostic>.` | `ifquery` or `ifup --no-act` refused the proposed file, for example `<path>:2: misplaced option` or `missing required variable: address`. Correct the file. Nothing was changed. |
+| `Cannot change <path>: the existing or proposed file uses a mapping stanza; ...` | Replace the `mapping` stanza with plain `iface` stanzas for the device names. |
+| `Cannot change <path>: the proposed file changes source, source-directory, or rename lines; ...` | Copy the `source`, `source-directory`, and `rename` lines unchanged from the node's file into the proposed configuration. |
+| `` Cannot change <path>: the main ifupdown file /etc/network/interfaces does not include the proposed file; add an include line such as `source /etc/network/interfaces.d/*` to the main ifupdown file. `` | See [the main file reads no other file](#the-main-file-reads-no-other-file). |
+| `Cannot change <path>: interface name "<name>" cannot be taken down and brought up by MMX; ...` | Interface names have at most 15 bytes, without spaces, a slash, or an equals sign, and do not start with a hyphen. A long name of a stanza that others inherit from counts too. |
+| `Cannot change <path>: interface <interface> is up, but the file has no auto or allow-hotplug line for the interface, so a restore could not bring the interface up again; ...` | The interface's `auto` line is in another file, or it has none and was brought up by hand. Move its `auto` or `allow-hotplug` line into this file, next to its stanza. Nothing was changed. |
+| `ifupdown did not accept <path>: <diagnostic>.` | `ifdown` or `ifup` failed during activation, or an interface from `auto` or a VLAN that MMX took down is not up afterwards. The node restores the previous file at once. |
+| `Cannot check whether ifupdown accepted <path>: <diagnostic>.` | MMX could not run its check after activation. The node restores. |
+| `ifdown left the virtual device <name> that <path> declared.` | The device still exists after `ifdown`. The node restores. |
+| `Cannot change <path>: the file changed while MMX read which interfaces the change takes down.` | Another program changed the file during the task. Run the playbook again. |
+
+### The main file reads no other file
+
+When `/etc/network/interfaces` has no `source` line for
+`/etc/network/interfaces.d`, ifupdown never reads a file there, so MMX
+refuses to write one. This module also refuses to add the line to the main
+file, because the line changes which files ifupdown reads only at the next
+boot. Add it with a [`line`](line.md) node task first:
+
+```yaml
+- line:
+    path: /etc/network/interfaces
+    line: source /etc/network/interfaces.d/*
+    insert_at_start_of_file: true
+```
+
+Do this while `/etc/network/interfaces.d` holds no file, as `ls
+/etc/network/interfaces.d` on the node shows: then the new line changes
+nothing until this module adds a file, with its confirmations and restore.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13.
+
+The suite `tests/integration/ifupdown_interfaces_files.py` runs on Debian 12
+and Debian 13 test guests that its setup switches to ifupdown, as Debian's
+installer and some server providers set nodes up:
+
+| Distribution | ifupdown |
+|---|---|
+| Debian 12 | 0.8.41 |
+| Debian 13 | 0.8.44+deb13u1 |
+
+The [validation record](../../docs/changing-mmx/validation.md#ifupdown-interfaces-file-module) gives the latest results.
+Measured by hand, not by the suite: a bridge with `bridge_ports`, which
+ifdown with its file deleted; a change of the main interface from a static
+address to DHCP and back; and stanzas for IPv4 and IPv6 of one interface.
+
+## Why it works this way
+
+- **`path`, not `name`.** The other three modules own a file in one fixed
+  directory. Debian's installer and the installers of some server providers
+  put the main interface's settings in `/etc/network/interfaces` itself, so
+  the module must reach that file as well as files in
+  `/etc/network/interfaces.d`.
+- **Names of letters, digits, `_`, and `-`.** `source
+  /etc/network/interfaces.d/*` reads every name but dot files, while
+  `source-directory` reads only names made from letters, digits, `_`, and
+  `-`. A name containing only letters, digits, `_`, and `-` works with
+  `source /etc/network/interfaces.d/*` and with `source-directory`.
+- **`ifdown` with the previous file.** ifdown takes an interface down only
+  with the stanza that brought it up. With the stanza gone from the files,
+  `ifdown enp6s0` printed `ignoring unknown interface`, exited 0, and left
+  the address and a bridge in place. With a saved copy of the old file,
+  `ifdown -i <copy>` removed the address and bridge device.
+- **`ifdown --force` with the proposed file in a restore.** A failed `ifup`
+  leaves the address configured but does not list the interface as up.
+  Plain `ifdown` then left the address; `ifdown --force` removed it, and it
+  exits 0 for a device that does not exist.
+- **`source`, `source-directory`, and `rename` lines stay as they are.** MMX
+  activates only the interfaces declared in the file named by `path`.
+  Removing `source /etc/network/interfaces.d/*` would prevent ifupdown from
+  reading the files in `/etc/network/interfaces.d` at the next boot.
+  At boot, ifupdown would not start interfaces declared only in
+  `/etc/network/interfaces.d`, outside any confirmation and restore.
+- **No `mapping` stanzas.** The interface that a mapping chooses is known
+  only when its script runs, so MMX cannot know which interface to take
+  down and up. Mappings are old and rare.
+- **`lo` is left alone.** Like `ifupdown_interfaces_file`,
+  `networking.service` never takes `lo` down. The service stops with
+  `ifdown -a --exclude=lo`.
+- **Permissions are optional.** Keeping an existing mode avoids exposing a
+  previously private file. New files default to `0644`, matching Debian's
+  installer and the ifupdown package; write `permissions_mode: "0600"` when
+  the file must be private.
+- **Checks through standard input.** `ifquery` and `ifup --no-act` read the
+  proposed file as `/dev/stdin`, so no candidate file appears where
+  ifupdown could read it, and a dryrun can check too. `ifup --no-act`
+  changed nothing in the measurements: ifupdown's state and the addresses
+  stayed as they were. `--force` is needed because `ifup` of an interface
+  that is up stops with `already configured`.
+- **ifupdown2 is not covered.** It installs programs with the same names,
+  as on some virtualization systems, but activates a changed file in
+  another way.

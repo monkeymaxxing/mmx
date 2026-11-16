@@ -1,0 +1,12 @@
+#!/bin/sh
+# A stand-in for gpasswd --add|--delete ACCOUNT -- GROUP.
+echo "gpasswd $*" >> "$MMX_FAKE_ACCOUNTS/calls"
+accounts=$MMX_FAKE_ACCOUNTS
+awk -F: -v OFS=: -v op="$1" -v member="$2" -v name="$4" '
+  $1 == name {
+    n = split($4, members, ","); out = ""
+    for (i = 1; i <= n; i++) if (members[i] != member && members[i] != "") out = out (out == "" ? "" : ",") members[i]
+    if (op == "--add") out = out (out == "" ? "" : ",") member
+    $4 = out
+  }
+  { print }' "$accounts/group" > "$accounts/group.new" && mv "$accounts/group.new" "$accounts/group"

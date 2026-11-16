@@ -1,0 +1,284 @@
+# The whole server configuration of the fleet, one fleet stage for each part
+# that the team applies on its own. Run everything, or some parts:
+#
+#   mmx run site --inventory production
+#   mmx run site --inventory production --only-fleet-stages nginx_load_balancers,keepalived
+#   mmx run site --inventory production --only-fleet-stages redis_and_memcached_servers --var redis_restart_approved=true
+#
+# Each fleet stage selects inventory groups, never node names, so the same
+# playbook configures the production fleet and the two test machines.
+command_line_vars:
+  # Restarts that interrupt the service need an approval on the command
+  # line: a routine run that would make one fails with a message and
+  # changes nothing on that server.
+  mysql_restart_approved:
+    type: boolean
+    default: false
+  redis_restart_approved:
+    type: boolean
+    default: false
+  solr_restart_approved:
+    type: boolean
+    default: false
+
+fleet_stages:
+  - id: base_server_setup
+    nodes: all
+
+    node_tasks:
+      - role: base_server_setup
+        inputs:
+          server_environment: "{{ .vars.server_environment }}"
+          time_zone: "{{ .vars.time_zone }}"
+          administrator_accounts: "{{ .vars.administrator_accounts }}"
+          unattended_upgrade_start_time: "{{ .vars.unattended_upgrade_start_time }}"
+          names_resolved_to_load_balancer: "{{ .vars.names_resolved_to_load_balancer }}"
+          load_balancer_address: "{{ .inventory.nodes[.vars.load_balancer_node].address }}"
+          deploy_account_uid: "{{ .vars.deploy_account_uid }}"
+          recovery_account_password_hash: "{{ .secrets.recovery_account_password_hash }}"
+
+  - id: nftables_firewall
+    nodes: all
+
+    node_tasks:
+      - role: nftables_firewall
+        inputs:
+          inventory_groups: "{{ .inventory.groups }}"
+          trusted_networks: "{{ .vars.trusted_networks }}"
+
+  # The account that owns and runs the applications.
+  - id: deploy_account
+    nodes: [main_application_servers, brand_site_servers, main_application_worker_servers, main_application_cron_job_servers]
+
+    node_tasks:
+      - role: deploy_account
+        inputs:
+          uid: "{{ .vars.deploy_account_uid }}"
+
+  # The data servers keep their working sets in memory. Swap is a last
+  # resort before the kernel's out-of-memory killer ends a server process.
+  - id: data_server_swap
+    nodes: [mysql_servers, redis_and_memcached_servers, solr_servers, clickhouse_servers]
+
+    node_tasks:
+      - sysctl_setting:
+          name: vm.swappiness
+          value: "1"
+      - swap_file:
+          path: /swapfile
+          size: "{{ .vars.swap_file_size }}"
+
+  - id: mysql_servers
+    nodes: mysql_servers
+
+    node_tasks:
+      - role: mysql_server
+        inputs:
+          server_id: "{{ .vars.mysql_server_id }}"
+          max_connections: "{{ .vars.mysql_max_connections }}"
+          innodb_buffer_pool_percent_of_memory: "{{ .vars.mysql_innodb_buffer_pool_percent_of_memory }}"
+          innodb_redo_log_capacity: "{{ .vars.mysql_innodb_redo_log_capacity }}"
+          innodb_io_capacity: "{{ .vars.mysql_innodb_io_capacity }}"
+          binary_log_retention_seconds: "{{ .vars.mysql_binary_log_retention_seconds }}"
+          restart_approved: "{{ .vars.mysql_restart_approved }}"
+          main_application_database_name: "{{ .vars.main_application_database_name }}"
+          main_application_database_account: "{{ .vars.main_application_database_account }}"
+          main_application_database_account_connects_from: "{{ .vars.main_application_database_account_connects_from }}"
+          main_application_database_password: "{{ .secrets.main_application_database_password }}"
+          clickhouse_copy_account: "{{ .vars.clickhouse_copy_account }}"
+          clickhouse_copy_database_password: "{{ .secrets.clickhouse_copy_database_password }}"
+
+      - role: mysql_backup
+        inputs:
+          backup_schedule_enabled: "{{ .vars.mysql_backup_schedule_enabled }}"
+          backup_retention_days: "{{ .vars.mysql_backup_retention_days }}"
+
+  - id: redis_and_memcached_servers
+    nodes: redis_and_memcached_servers
+
+    node_tasks:
+      - role: redis_instances
+        inputs:
+          instances: "{{ .vars.redis_instances }}"
+          restart_approved: "{{ .vars.redis_restart_approved }}"
+          persisted_instance_name: application-persistent
+          persisted_instance_backup_dir: /var/backups/redis
+
+      - role: memcached
+        inputs:
+          memory_mib: "{{ .vars.memcached_memory_mib }}"
+
+  - id: solr_servers
+    nodes: solr_servers
+
+    node_tasks:
+      - role: solr
+        inputs:
+          solr_version: "{{ .vars.solr_version }}"
+          solr_archive_url: "{{ .vars.solr_archive_url }}"
+          solr_archive_sha256: "{{ .vars.solr_archive_sha256 }}"
+          java_heap_size: "{{ .vars.solr_heap }}"
+          data_dir: /opt/solr-data
+          core_name: "{{ .vars.server_environment }}"
+          backup_dir: /var/backups/solr
+          backup_schedule_enabled: "{{ .vars.solr_backup_schedule_enabled }}"
+          restart_approved: "{{ .vars.solr_restart_approved }}"
+
+  - id: clickhouse_servers
+    nodes: clickhouse_servers
+
+    node_tasks:
+      - role: clickhouse
+        inputs:
+          clickhouse_version: "{{ .vars.clickhouse_version }}"
+          max_server_memory_bytes: "{{ .vars.clickhouse_max_server_memory_bytes }}"
+          max_query_memory_bytes: "{{ .vars.clickhouse_max_query_memory_bytes }}"
+          mark_cache_bytes: "{{ .vars.clickhouse_mark_cache_bytes }}"
+          uncompressed_cache_bytes: "{{ .vars.clickhouse_uncompressed_cache_bytes }}"
+          trusted_networks: "{{ .vars.trusted_networks }}"
+          mysql_server_address: "{{ .inventory.nodes[.vars.mysql_server_node].address }}"
+          mysql_database_name: "{{ .vars.main_application_database_name }}"
+          mysql_copy_account: "{{ .vars.clickhouse_copy_account }}"
+          mysql_copy_account_password: "{{ .secrets.clickhouse_copy_database_password }}"
+          copy_schedule_enabled: "{{ .vars.clickhouse_copy_schedule_enabled }}"
+          reporting_password: "{{ .secrets.clickhouse_reporting_password }}"
+
+  # One load balancer at a time, so a mistake reaches one of the two first.
+  - id: nginx_load_balancers
+    nodes: nginx_load_balancers
+    max_nodes_at_once: 1
+
+    node_tasks:
+      # nginx may bind the virtual address while keepalived holds it on the
+      # other load balancer.
+      - sysctl_setting:
+          name: net.ipv4.ip_nonlocal_bind
+          value: "1"
+
+      - when: "{{ .vars.certificates_from_lets_encrypt }}"
+        role: lets_encrypt_certificates
+        inputs:
+          certificate_names: "{{ .vars.tls_certificate_names }}"
+          account_email_when_registered: "{{ .vars.lets_encrypt_account_email }}"
+          cloudflare_api_token: "{{ .secrets.cloudflare_api_token }}"
+
+      - when: {not: "{{ .vars.certificates_from_lets_encrypt }}"}
+        role: test_self_signed_certificates
+        inputs:
+          certificate_dir: "{{ .vars.tls_certificate_dir }}"
+          certificate_names: "{{ .vars.tls_certificate_names }}"
+
+      - role: nginx_load_balancer
+        inputs:
+          brand_sites: "{{ .vars.brand_sites }}"
+          api_host_name: "{{ .vars.api_host_name }}"
+          main_application_host_name: "{{ .vars.main_application_host_name }}"
+          main_application_certificate_name: "{{ .vars.main_application_certificate_name }}"
+          tls_certificate_dir: "{{ .vars.tls_certificate_dir }}"
+          main_application_servers: "{{ .inventory.groups.main_application_servers }}"
+          brand_site_servers: "{{ .inventory.groups.brand_site_servers }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+
+  - id: keepalived
+    nodes: nginx_load_balancers
+
+    node_tasks:
+      - role: keepalived_for_load_balancers
+        inputs:
+          network_interface: "{{ .vars.keepalived_network_interface }}"
+          priority: "{{ .vars.keepalived_priority }}"
+          virtual_router_id: "{{ .vars.keepalived_virtual_router_id }}"
+          virtual_address: "{{ .vars.keepalived_virtual_address }}"
+          peer_nodes: "{{ .vars.keepalived_peer_nodes }}"
+          inventory_nodes: "{{ .inventory.nodes }}"
+
+  # Every server that runs the Ruby applications.
+  - id: ruby_and_nodejs
+    nodes: [main_application_servers, brand_site_servers, main_application_worker_servers, main_application_cron_job_servers]
+
+    node_tasks:
+      - role: ruby_and_bundler
+      - role: nodejs
+        inputs:
+          nodejs_major_version: "{{ .vars.nodejs_major_version }}"
+
+  # What the main application needs on every server that runs its code.
+  - id: main_application
+    nodes: [main_application_servers, main_application_worker_servers, main_application_cron_job_servers]
+
+    node_tasks:
+      - role: main_application_libraries
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+
+      # redis-cli and mysql, for people and checks on the application
+      # servers.
+      - apt_package:
+          packages:
+            - {name: redis-tools, version: newest_when_first_installed}
+            - {name: mysql-client, version: newest_when_first_installed}
+
+      - role: main_application_config
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+          server_environment: "{{ .vars.server_environment }}"
+          mysql_server_address: "{{ .inventory.nodes[.vars.mysql_server_node].address }}"
+          database_name: "{{ .vars.main_application_database_name }}"
+          database_account: "{{ .vars.main_application_database_account }}"
+          database_password: "{{ .secrets.main_application_database_password }}"
+          redis_and_memcached_server_address: "{{ .inventory.nodes[.vars.redis_and_memcached_node].address }}"
+          redis_instances: "{{ .vars.redis_instances }}"
+          solr_server_address: "{{ .inventory.nodes[.vars.solr_node].address }}"
+
+  - id: nginx_with_passenger
+    nodes: [main_application_servers, brand_site_servers]
+
+    node_tasks:
+      - role: nginx_with_passenger
+        inputs:
+          passenger_min_instances: "{{ .vars.passenger_min_instances }}"
+          memory_per_passenger_process_mib: "{{ .vars.memory_per_passenger_process_mib }}"
+
+  # One server at a time: a mistake that nginx -t cannot see reaches one
+  # server first.
+  - id: main_application_nginx_servers
+    nodes: main_application_servers
+    max_nodes_at_once: 1
+
+    node_tasks:
+      - role: main_application_nginx_servers
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+          server_environment: "{{ .vars.server_environment }}"
+
+  - id: brand_site_nginx_servers
+    nodes: brand_site_servers
+    max_nodes_at_once: 1
+
+    node_tasks:
+      - role: brand_site_nginx_servers
+        inputs:
+          brand_sites: "{{ .vars.brand_sites }}"
+          applications_dir: "{{ .vars.applications_dir }}"
+          server_environment: "{{ .vars.server_environment }}"
+
+  - id: main_application_workers
+    nodes: main_application_worker_servers
+
+    node_tasks:
+      - role: main_application_workers
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+          server_environment: "{{ .vars.server_environment }}"
+          worker_processes_per_queue_group: "{{ .vars.worker_processes_per_queue_group }}"
+          worker_queue_groups: "{{ .vars.worker_queue_groups }}"
+
+  - id: main_application_cron_jobs
+    nodes: main_application_cron_job_servers
+
+    node_tasks:
+      - role: main_application_cron_jobs
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+          server_environment: "{{ .vars.server_environment }}"
+          jobs: "{{ .vars.cron_jobs }}"

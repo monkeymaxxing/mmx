@@ -1,0 +1,77 @@
+summary: Manages one user of a RabbitMQ server, with its password, its tags, and its permissions.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The user's name, such as shop. It must not start with a hyphen.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: >-
+      present (the default) creates the user when it is missing and changes
+      what differs. absent deletes the user and accepts only name.
+  password:
+    type: string
+    required: false
+    private_value: true
+    description: >-
+      The user's password, usually a secret. Required when the task creates
+      the user. Omitted, the password of an existing user is not touched. It
+      must not be empty, start or end with white space, or hold a line break.
+  tags:
+    type: list_of_strings
+    required: false
+    description: >-
+      RabbitMQ's user tags, such as administrator, monitoring, and
+      management. Needs tags_not_listed. Omitted, the user's tags are not
+      touched.
+  tags_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: >-
+      Required with tags. remove makes tags the user's whole set of tags.
+      keep adds the listed tags and leaves the user's other tags alone.
+  permissions:
+    type: any
+    required: false
+    description: >-
+      A list of the user's permissions. Each entry names a virtual_host and
+      the three regular expressions configure, write, and read; all four are
+      required. Needs permissions_not_listed. Omitted, the user's permissions
+      are not touched.
+  permissions_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: >-
+      Required with permissions. remove clears the user's permissions on
+      every virtual host that permissions does not list. keep leaves them
+      alone.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the user, or in a dryrun would create it.
+examples:
+  - description: The user shop, with every permission on the virtual host shop and on no other.
+    config: |
+      rabbitmq_user:
+        name: shop
+        password: "{{ .secrets.shop_rabbitmq_password }}"
+        tags: []
+        tags_not_listed: remove
+        permissions:
+          - {virtual_host: shop, configure: ".*", write: ".*", read: ".*"}
+        permissions_not_listed: remove
+  - description: Give the existing user metrics the tag monitoring and keep its other tags and its password.
+    config: |
+      rabbitmq_user:
+        name: metrics
+        tags: [monitoring]
+        tags_not_listed: keep
+  - description: Delete the user guest, which every new RabbitMQ server has.
+    config: |
+      rabbitmq_user:
+        name: guest
+        state: absent

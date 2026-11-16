@@ -1,0 +1,84 @@
+fleet_stages:
+  - id: deploy
+    nodes: all
+
+    node_tasks:
+      # The project: its directory, the environment file, and the Compose
+      # file. docker_compose_project then creates the container, or recreates
+      # it when the Compose file, the environment file, or the image differs.
+      - task_block:
+          id: shop
+          changes:
+            - directory:
+                path: /opt/shop
+                permissions_mode: "0755"
+            # The directory that holds the configuration file is mounted, not
+            # the file: MMX replaces a file with a new one, and a container
+            # that mounts a single file keeps seeing the old one.
+            - directory:
+                path: /opt/shop/config
+                permissions_mode: "0755"
+            # The environment file comes before the Compose file that names
+            # it: docker compose config, the check below, reads it.
+            - file:
+                path: /opt/shop/web.env
+                permissions_mode: "0600"
+                content: |
+                  TZ={{ .vars.shop_time_zone }}
+            - file:
+                path: /opt/shop/compose.yaml
+                permissions_mode: "0644"
+                content: |
+                  services:
+                    web:
+                      image: {{ .vars.shop_image }}
+                      restart: unless-stopped
+                      ports: ["127.0.0.1:8080:8080"]
+                      env_file: [web.env]
+                      volumes:
+                        - ./config:{{ .vars.shop_config_dir_in_container }}:ro
+                        - web_data:/data
+                      healthcheck: {{ .vars.shop_health_check }}
+                  volumes:
+                    web_data:
+                      name: shop_web_data
+                check_new_file:
+                  shell:
+                    script: >-
+                      docker compose --project-directory /opt/shop
+                      --file "$NEW_FILE" config --quiet
+                    env:
+                      NEW_FILE: "{{ .new_file.path }}"
+          activate:
+            - docker_compose_project:
+                compose_project_dir: /opt/shop
+                compose_project_name: shop
+                state: running
+                pull_images: when_missing
+                containers_of_removed_services: remove
+
+      # The configuration file. Compose does not look at a mounted file, so
+      # this block says what follows a change: the application reads the
+      # file again, and the container keeps running. The wait stands here,
+      # after both blocks, because the application is healthy only once it
+      # has its configuration.
+      - task_block:
+          id: shop_config
+          changes:
+            - file:
+                path: "/opt/shop/config/{{ .vars.shop_config_file_name }}"
+                permissions_mode: "0644"
+                content: "{{ .vars.shop_config }}"
+          activate:
+            - id: reload_shop_config
+              shell:
+                script: >-
+                  docker compose --project-directory /opt/shop
+                  exec --no-TTY web $RELOAD_COMMAND
+                env:
+                  RELOAD_COMMAND: "{{ .vars.shop_reload_command }}"
+                only_when_tracked_inputs_changed: true
+          verify:
+            - wait_for:
+                docker_compose_project_is_ready: /opt/shop
+                wait_at_most: 2m

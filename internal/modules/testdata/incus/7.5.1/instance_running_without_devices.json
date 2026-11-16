@@ -1,0 +1,73 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"architecture": "x86_64",
+		"config": {
+			"image.description": "MMX test image",
+			"image.os": "mmxtest",
+			"image.release": "1",
+			"raw.lxc": "lxc.signal.halt=SIGTERM",
+			"volatile.base_image": "9f2edacdf87315c42b92fa89a502e582dcd862d984a0cd9caa2e3bb059aee98b",
+			"volatile.cloud-init.instance-id": "f06b5038-9f9b-4076-89fc-2eb473e426f0",
+			"volatile.eth0.host_name": "vethdd09cf85",
+			"volatile.eth0.hwaddr": "10:66:6a:38:bd:25",
+			"volatile.idmap.base": "0",
+			"volatile.idmap.current": "[{\"Isuid\":true,\"Isgid\":false,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000},{\"Isuid\":false,\"Isgid\":true,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000}]",
+			"volatile.idmap.next": "[{\"Isuid\":true,\"Isgid\":false,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000},{\"Isuid\":false,\"Isgid\":true,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000}]",
+			"volatile.last_state.idmap": "[]",
+			"volatile.last_state.power": "RUNNING",
+			"volatile.uuid": "2b58aae7-fefb-4212-8e4c-5a4a4e39b85a",
+			"volatile.uuid.generation": "2b58aae7-fefb-4212-8e4c-5a4a4e39b85a"
+		},
+		"devices": {},
+		"ephemeral": false,
+		"profiles": [
+			"default"
+		],
+		"stateful": false,
+		"description": "",
+		"created_at": "2026-10-10T09:52:29.079993467Z",
+		"expanded_config": {
+			"image.description": "MMX test image",
+			"image.os": "mmxtest",
+			"image.release": "1",
+			"raw.lxc": "lxc.signal.halt=SIGTERM",
+			"volatile.base_image": "9f2edacdf87315c42b92fa89a502e582dcd862d984a0cd9caa2e3bb059aee98b",
+			"volatile.cloud-init.instance-id": "f06b5038-9f9b-4076-89fc-2eb473e426f0",
+			"volatile.eth0.host_name": "vethdd09cf85",
+			"volatile.eth0.hwaddr": "10:66:6a:38:bd:25",
+			"volatile.idmap.base": "0",
+			"volatile.idmap.current": "[{\"Isuid\":true,\"Isgid\":false,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000},{\"Isuid\":false,\"Isgid\":true,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000}]",
+			"volatile.idmap.next": "[{\"Isuid\":true,\"Isgid\":false,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000},{\"Isuid\":false,\"Isgid\":true,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000}]",
+			"volatile.last_state.idmap": "[]",
+			"volatile.last_state.power": "RUNNING",
+			"volatile.uuid": "2b58aae7-fefb-4212-8e4c-5a4a4e39b85a",
+			"volatile.uuid.generation": "2b58aae7-fefb-4212-8e4c-5a4a4e39b85a"
+		},
+		"expanded_devices": {
+			"eth0": {
+				"name": "eth0",
+				"network": "incusbr0",
+				"type": "nic"
+			},
+			"root": {
+				"path": "/",
+				"pool": "default",
+				"type": "disk"
+			}
+		},
+		"name": "shop-test",
+		"status": "Running",
+		"status_code": 103,
+		"last_used_at": "2026-10-10T09:52:31.449073563Z",
+		"location": "none",
+		"type": "container",
+		"project": "default"
+	}
+}
+

@@ -1,0 +1,199 @@
+# `systemd_scheduled_job`
+
+A scheduled job is a command that a node runs by itself at set times, such
+as a nightly cleanup or a weekly report. `systemd_scheduled_job` lets the
+node's systemd run the job. MMX writes a oneshot service and a timer for the
+job. A oneshot service runs the script once and then ends. MMX checks the
+service and timer, then enables and starts the timer.
+
+MMX has two modules for scheduled jobs. `systemd_scheduled_job` is the one
+to use for new jobs. [`cron_job`](cron_job.md) writes one cron entry, for
+teams that keep their schedules in cron. With `systemd_scheduled_job`, a job
+has a multi-line script with the same rules as `shell`, secrets stay out of
+world-readable files, two runs never overlap, a missed run can be made up
+after downtime, output is in the journal instead of mail, and
+`systemctl list-timers` shows the next run.
+
+## Examples
+
+### Run a command on a schedule
+
+Two jobs of a Rails application, one node task for each through a loop:
+
+```yaml
+- loop:
+    billing-renew:
+      rake_task: "billing:renew"
+      cron_schedule: "10 0 * * *"
+    reports-weekly:
+      rake_task: "reports:weekly"
+      cron_schedule: "30 4 * * 1"
+  as: job
+  systemd_scheduled_job:
+    name: "platform-{{ .job.key }}"
+    cron_schedule: "{{ .job.value.cron_schedule }}"
+    run_as_user_account: deploy
+    run_from_directory: /home/deploy/platform/current
+    script: bundle exec rake "$RAKE_TASK"
+    env:
+      RAILS_ENV: production
+      RAKE_TASK: "{{ .job.value.rake_task }}"
+      API_TOKEN: "{{ .secrets.billing_api_token }}"
+```
+
+For each job, MMX writes two systemd units on the node:
+`platform-billing-renew.service`, which runs the script once, and
+`platform-billing-renew.timer`, which starts the service on the schedule.
+MMX checks both units with `systemd-analyze verify`, reloads systemd, and
+enables and starts the timer. At 00:10 every night, systemd runs the script
+with `bash -c` as the account `deploy`, in
+`/home/deploy/platform/current`, with the `env` values in its environment.
+
+The job's output goes to the systemd journal: `journalctl -u
+platform-billing-renew` shows the `billing-renew` job's output.
+`systemctl list-timers` shows when each job runs next. systemd never starts
+a run while the previous run of the same job is still going.
+
+### Write the schedule in systemd's form
+
+```yaml
+- systemd_scheduled_job:
+    name: reports-weekly
+    systemd_calendar_schedule: Mon *-*-* 04:30:00
+    run_as_user_account: deploy
+    script: /usr/local/bin/weekly-report
+```
+
+`cron_schedule` takes the five fields of a cron line: minute, hour, day of
+the month, month, and day of the week. MMX translates the cron fields into
+systemd's own calendar form: `10 0 * * *` becomes `*-*-* 00:10:00`, `30 4 * * 1`
+becomes `Mon *-*-* 04:30:00`, and `*/15 9-17 * * 1-5` becomes
+`Mon..Fri *-*-* 09..17:00/15:00`. To write systemd's form yourself, use
+`systemd_calendar_schedule` instead, such as `daily` or
+`Mon *-*-* 04:30:00`. A job takes exactly one schedule setting:
+`cron_schedule` or `systemd_calendar_schedule`.
+
+## How it works
+
+### The script
+
+`script` runs exactly as a [`shell`](shell.md) node task's script runs: with
+`bash -c`, without a login shell or profile files, with `PATH` set to the
+standard system directories and `LANG=C.UTF-8`. Write it as you would write
+it for `shell`; MMX does all the quoting systemd needs, so `%`, `$`, quotes,
+and backslashes reach bash as written. `run_as_user_account`,
+`run_from_directory`, and `env` work as on `shell`. Every task writes
+`run_as_user_account`; write `root` to run the job as root.
+
+### Secrets
+
+A secret in `env`, such as `API_TOKEN` above, never goes into the unit file,
+which every account on the node can read. MMX writes the secret value into
+`/etc/mmx/systemd_scheduled_jobs/<name>.env`, which only root can read
+(directory `0700`, file `0600`), and the service reads it from there. A job
+without a secret has no such file. Like every node task that reads a
+secret, the node task's result hides the unit differences and values.
+
+### The schedule
+
+The schedule is checked on the node with `systemd-analyze calendar`. A
+schedule systemd does not accept fails the node task before anything
+changes. A schedule with no future matching date and time, such as the
+30th of February, also fails the node task before anything changes.
+
+A `cron_schedule` that restricts both the day of the month and the day of
+the week, such as `0 0 1 * 1`, fails validation. Restrict only the day of
+the month or only the day of the week, or write `systemd_calendar_schedule`.
+A `cron_schedule` takes no `@` words such as `@daily`.
+Write `systemd_calendar_schedule: daily` instead.
+
+`random_delay` spreads job starts across nodes. The value is a duration,
+such as `15m`. systemd adds a random delay up to `random_delay` to each
+start, so many nodes do not start the same job at the same second.
+
+`run_missed_job_after_downtime: true` runs the job once after boot when the
+job's scheduled time passed while the node was off. The default, `false`,
+skips the missed run, as cron does.
+
+`stop_a_run_after` limits how long a job runs. The value is a duration,
+such as `2h`. systemd stops a run that takes longer than
+`stop_a_run_after`.
+
+### Every run
+
+Each time the node task runs, MMX compares the service unit file, timer unit
+file, and environment file with the node task's requirements. MMX checks
+that the timer is enabled and running, and checks the schedule systemd has
+loaded for the timer (`systemctl show
+--property=TimersCalendar`). It writes what differs, reloads systemd after a
+changed unit, and enables, starts, or restarts the timer as needed. A run
+that was interrupted, a unit edited by hand, and a timer stopped by hand are
+all put right the next time the node task runs.
+
+A dryrun shows the unit differences, the schedule in systemd's form
+(`value.systemd_calendar_expression`), when the job would run next
+(`value.next_start_time`, not counting `random_delay`), and whether the
+timer would be enabled, started, or restarted.
+
+### Removal
+
+Each unit file starts with a marker line, `# Managed by MMX:
+systemd_scheduled_job.`. `state: absent` stops and disables the timer and
+removes both units and the environment file. It refuses, before changing
+anything, a unit or environment file that lacks the marker line, because
+then MMX did not write it.
+
+A present job refuses, in a dryrun and in a run, before changing anything,
+an existing unit or environment file of its name that lacks the marker
+line. It also refuses a name that a package's unit already has in
+`/usr/lib/systemd/system` or `/lib/systemd/system`, such as `logrotate`,
+because a unit of the same name in `/etc/systemd/system` replaces the
+package's unit completely. Choose another `name`.
+
+### A job with other settings
+
+For settings `systemd_scheduled_job` does not offer, write a `.service` and
+a `.timer` by hand with [`systemd_unit`](systemd_unit.md). Use a
+[`systemd_service`](systemd_service.md) node task to enable and start the timer.
+
+## Errors and what they mean
+
+| The reason holds | What it means, and what to do |
+|---|---|
+| `refusing to write /etc/systemd/system/...: the file exists and lacks the MMX marker line ...` or `...: the system already has the unit ...` | Another tool, a person, or a package provides a unit of that name, and the job would overwrite or replace it. Nothing was changed. Choose another `name`. |
+| `systemd_scheduled_job: systemd's check of the new unit file failed: ...` | systemd rejected a unit. The diagnostic from `systemd-analyze verify` is in stderr, separate from the result's `reason`. |
+| `systemd_scheduled_job: systemd-analyze calendar refuses the schedule ...: ...` | systemd does not accept the schedule. Nothing was changed. |
+| `systemd_scheduled_job: the schedule ... never starts the job` | No future date and time match the schedule, such as the 30th of February. Nothing was changed. |
+| `cron_schedule ... restricts the day of the month (field 3) and the day of the week (field 5); ...` | Validation refuses the schedule. See the [reason for the `cron_schedule` rule](#why-it-works-this-way). Restrict only the day of the month or only the day of the week, or write `systemd_calendar_schedule`. |
+
+When starting or restarting the job's timer fails, MMX includes the timer's
+last systemd journal lines in the node task result's `reason` field. A
+[`systemd_service`](systemd_service.md) node task also includes journal
+lines in the result's `reason` field.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, AlmaLinux 10.
+
+The suite `tests/integration/scheduled_jobs.py` runs on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10, in containers on the first four and in virtual machines on the last two. The
+suite checks the node with `systemctl`, the unit files, and the jobs' own
+output.
+The [validation record](../../docs/changing-mmx/validation.md) has the latest results.
+
+## Why it works this way
+
+- **A `cron_schedule` that restricts both the day of the month and the day
+  of the week is refused.** cron runs such a job on every day that matches
+  either field, and systemd only on days that match both, so the same line
+  would mean two different schedules.
+- **Secrets go into a file that only root can read.** The unit file is
+  readable by every account on the node.
+- **Both `systemd_scheduled_job` and `cron_job` are core modules, and the
+  documentation recommends `systemd_scheduled_job`.** The module names
+  identify the scheduling tools: `systemd_scheduled_job` uses systemd, and
+  `cron_job` uses cron. Teams with existing cron entries keep the cron
+  entries.
+- **The account is required, including on removal.** Every task writes
+  `run_as_user_account`; `root` is an ordinary value, so root execution is
+  visible in review. See
+  [required settings](../../docs/changing-mmx/design/modules.md#a-setting-with-no-safe-guess-is-required).

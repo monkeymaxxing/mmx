@@ -1,0 +1,91 @@
+summary: >-
+  Manages one Incus profile on the node: its description, its configuration,
+  and its devices.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The profile's name in Incus, such as web.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: >-
+      present (the default): the profile exists with what the task gives.
+      absent: the profile is deleted; this state accepts only name and
+      incus_project, and Incus refuses while an instance uses the profile.
+  description:
+    type: string
+    required: false
+    description: >-
+      The text that Incus shows beside the profile. Omitted: a new profile
+      has none, and an existing profile keeps its text.
+  config:
+    type: mapping_of_strings
+    required: false
+    description: >-
+      Incus configuration keys of the profile with their values as text, such
+      as limits.cpu with the value "2". Needs config_keys_not_listed. A value
+      reaches Incus through standard input only.
+  config_keys_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: >-
+      Required with config. remove: config is the whole configuration of the
+      profile, and every other key is removed. keep: the keys in config are
+      set, and every other key stays.
+  devices:
+    type: any
+    required: false
+    description: >-
+      The profile's devices by name. Each device is a mapping of Incus device
+      options with their values as text, such as type with the value nic.
+      Needs devices_not_listed. Replaces each listed device's whole
+      definition, also with devices_not_listed: keep.
+  devices_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: >-
+      Required with devices. remove: devices holds all of the profile's
+      devices, and every other device is removed. keep: the listed devices
+      are set, and every other device stays.
+  incus_project:
+    type: string
+    required: false
+    description: >-
+      The Incus project that holds the profile. The default is Incus's
+      project default. The project must exist and must have profiles of its
+      own; this is not the MMX project.
+outputs:
+  created:
+    type: boolean
+    description: True when this task created the profile; in a dryrun, true when a run would create it.
+examples:
+  - description: A profile that limits each of its instances to two CPUs and connects them to the bridge incusbr0.
+    config: |
+      incus_profile:
+        name: web
+        description: Limits and the bridge for web containers
+        config:
+          limits.cpu: "2"
+        config_keys_not_listed: remove
+        devices:
+          eth0:
+            type: nic
+            network: incusbr0
+        devices_not_listed: remove
+  - description: Set one key of the profile default and leave its other keys and its devices alone.
+    config: |
+      incus_profile:
+        name: default
+        config:
+          boot.autostart: "true"
+        config_keys_not_listed: keep
+  - description: Delete the profile web of the Incus project staging.
+    config: |
+      incus_profile:
+        name: web
+        state: absent
+        incus_project: staging

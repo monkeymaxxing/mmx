@@ -1,0 +1,222 @@
+# The production fleet of the subscription web service: two load balancers,
+# one data server, two application servers, and one worker server.
+#
+#   mmx run site --inventory production
+#
+# The addresses are documentation addresses (192.0.2.0/24) and the Git
+# repositories are placeholders. A real project writes its own, and adds the
+# credentials that its Git host requires to the git task of the role
+# application_release.
+vars:
+  # The Rails environment of the applications, and the name of the Solr core.
+  server_environment: production
+  # One time zone on every server, wherever the server stands.
+  time_zone: Europe/Berlin
+  # The networks of the company's own servers and offices. The firewall
+  # admits every port from them; Redis, memcached, and the ClickHouse account
+  # reporting rely on that.
+  trusted_networks: [192.0.2.0/24]
+  # The administrators, with the same user and group IDs on every server.
+  # Each one's public keys are in
+  # roles/base_server_setup/files/public_keys/administrators/<name>.pub.
+  administrator_accounts:
+    - {name: alice, full_name: Alice Example, uid: 2001}
+    - {name: bob, full_name: Bob Example, uid: 2002}
+  # The same ID on every server, so files copied between servers keep their
+  # owner.
+  deploy_account_uid: 1001
+  # When apt's daily upgrade timer starts its two-hour window. The servers
+  # that are alone in their role, or the first of a pair, start later
+  # (node vars below), so a bad update shows on lb2 and app2 first.
+  unattended_upgrade_start_time: "08:00"
+
+  # Which node runs each shared service. The playbooks read each node's
+  # address from the inventory.
+  load_balancer_node: lb1
+  mysql_server_node: db1
+  redis_and_memcached_node: db1
+  solr_node: db1
+
+  # Host names, separated by spaces, that every server resolves to the load
+  # balancer in /etc/hosts, so requests from inside stay inside.
+  names_resolved_to_load_balancer: "api.example.com www.example.com"
+  main_application_host_name: www.example.com
+  api_host_name: api.example.com
+  # The certificate that serves both of the names above: example.com and
+  # *.example.com.
+  main_application_certificate_name: example.com
+
+  # Two small websites, served by one shared Rails application, each from its
+  # own repository. The application learns which site it is from
+  # BRAND_SITE_NAME.
+  brand_sites:
+    - name: gardening
+      domain: gardening.example.net
+      application_port: 8092
+      repository: https://github.com/example/gardening-site.git
+    - name: cooking
+      domain: cooking.example.net
+      application_port: 8093
+      repository: https://github.com/example/cooking-site.git
+
+  # Let's Encrypt certificates, checked through DNS at Cloudflare.
+  certificates_from_lets_encrypt: true
+  lets_encrypt_account_email: operations@example.com
+  tls_certificate_dir: /etc/letsencrypt/live
+  # Each certificate covers one name and its wildcard name.
+  tls_certificate_names: [example.com, gardening.example.net, cooking.example.net]
+
+  applications_dir: /home/deploy/apps
+  main_application_dir: /home/deploy/apps/main_application
+  main_application_repository: https://github.com/example/main-application.git
+  passenger_min_instances: 2
+  # Passenger's process limit is three quarters of the memory divided by
+  # this.
+  memory_per_passenger_process_mib: 250
+  nodejs_major_version: 22
+
+  main_application_database_name: main_application_production
+  main_application_database_account: main_application
+  # MySQL's pattern for the machines the accounts may connect from.
+  main_application_database_account_connects_from: "192.0.2.%"
+  # The account that ClickHouse reads MySQL's tables with.
+  clickhouse_copy_account: clickhouse_copy
+
+  mysql_max_connections: 1000
+  mysql_innodb_buffer_pool_percent_of_memory: 40
+  mysql_innodb_redo_log_capacity: 2G
+  # Three days of binary logs for a recovery to a point in time.
+  mysql_binary_log_retention_seconds: 259200
+  mysql_backup_retention_days: 7
+
+  swap_file_size: 4GiB
+
+  redis_instances:
+    # Its data must not vanish: Redis refuses writes when it is full.
+    - name: application-persistent
+      port: 6379
+      persisted: true
+      maxmemory: "0"
+      maxmemory_policy: noeviction
+    # A full cache drops its least recently used keys instead of refusing
+    # writes.
+    - name: application-cache
+      port: 6380
+      persisted: false
+      maxmemory: 1gb
+      maxmemory_policy: allkeys-lru
+  memcached_memory_mib: 1024
+
+  # Apache's Solr archive, checked by its SHA-256.
+  solr_version: 9.11.0
+  solr_archive_url: https://archive.apache.org/dist/solr/solr/9.11.0/solr-9.11.0-slim.tgz
+  solr_archive_sha256: 6d112abc61acc6a016c5d5355d35792d1fe05be1ffa1c95191583666c7a2da78
+  solr_heap: 2g
+
+  # apt keeps every ClickHouse package inside this pattern.
+  clickhouse_version: "26.8.*"
+  clickhouse_max_server_memory_bytes: 8589934592      # 8 GiB
+  clickhouse_max_query_memory_bytes: 4294967296       # 4 GiB
+  clickhouse_mark_cache_bytes: 1073741824             # 1 GiB
+  clickhouse_uncompressed_cache_bytes: 1073741824     # 1 GiB
+
+  # The worker queue groups of the main application. A group with {} works
+  # the queues of its own name (QUEUE_GROUP); a group with queues works
+  # exactly those (QUEUES).
+  worker_queue_groups:
+    default: {}
+    long_running: {}
+    notifications:
+      queues: [Notifications::EmailDelivery, Notifications::PushDelivery]
+
+  # The main application's rake tasks that cron runs. A rake argument, such
+  # as [weekly], passes through unchanged.
+  cron_jobs:
+    - name: billing-renew-subscriptions
+      cron_schedule: "10 0 * * *"
+      rake_task: billing:renew_subscriptions
+      log_file: billing_renew_subscriptions.log
+    - name: sessions-delete-expired
+      cron_schedule: "0 2 * * *"
+      rake_task: sessions:delete_expired
+      log_file: sessions_delete_expired.log
+    - name: reports-send-weekly-summary
+      cron_schedule: "30 6 * * 1"
+      rake_task: "reports:send_summary[weekly]"
+      log_file: reports_send_weekly_summary.log
+
+nodes:
+  lb1:
+    address: 192.0.2.11
+    ssh_user: admin
+    vars:
+      unattended_upgrade_start_time: "10:00"
+      keepalived_priority: 101
+      keepalived_peer_nodes: [lb2]
+  lb2:
+    address: 192.0.2.12
+    ssh_user: admin
+    vars:
+      keepalived_priority: 100
+      keepalived_peer_nodes: [lb1]
+  db1:
+    address: 192.0.2.21
+    ssh_user: admin
+    vars:
+      unattended_upgrade_start_time: "10:00"
+      mysql_server_id: 1
+      # Operations per second that the SSD sustains.
+      mysql_innodb_io_capacity: 2000
+      mysql_backup_schedule_enabled: true
+      solr_backup_schedule_enabled: true
+      clickhouse_copy_schedule_enabled: true
+  app1:
+    address: 192.0.2.31
+    ssh_user: admin
+    vars:
+      unattended_upgrade_start_time: "10:00"
+      load_balancer_weight_for_main_application: 1
+      load_balancer_weight_for_brand_sites: 1
+  app2:
+    address: 192.0.2.32
+    ssh_user: admin
+    vars:
+      load_balancer_weight_for_main_application: 1
+      load_balancer_weight_for_brand_sites: 1
+  worker1:
+    address: 192.0.2.41
+    ssh_user: admin
+    vars:
+      unattended_upgrade_start_time: "10:00"
+
+groups:
+  nginx_load_balancers:
+    nodes: [lb1, lb2]
+    vars:
+      keepalived_network_interface: eth0
+      keepalived_virtual_router_id: 51
+      # The address the public names point to; it moves to the other load
+      # balancer when nginx stops answering.
+      keepalived_virtual_address: 192.0.2.10/32
+  mysql_servers:
+    nodes: [db1]
+  redis_and_memcached_servers:
+    nodes: [db1]
+  solr_servers:
+    nodes: [db1]
+  clickhouse_servers:
+    nodes: [db1]
+  main_application_servers:
+    nodes: [app1, app2]
+  brand_site_servers:
+    nodes: [app1, app2]
+  main_application_worker_servers:
+    nodes: [worker1]
+    vars:
+      worker_processes_per_queue_group:
+        default: 2
+        long_running: 1
+        notifications: 1
+  # Exactly one node: each job must run on one server only.
+  main_application_cron_job_servers:
+    nodes: [worker1]

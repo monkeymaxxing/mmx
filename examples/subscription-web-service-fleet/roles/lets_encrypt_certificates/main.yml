@@ -1,0 +1,60 @@
+# Let's Encrypt certificates for the public names, checked through DNS at
+# Cloudflare, so that wildcard names work. certbot's own timer renews them
+# and reloads nginx.
+#
+# The test inventory switches this role off (certificates_from_lets_encrypt:
+# false) and uses the role test_self_signed_certificates: no test may ask a
+# public certificate authority.
+inputs:
+  # Each certificate covers one name and its wildcard name, such as
+  # example.com and *.example.com, and is named after the name.
+  certificate_names: {type: list, required: true}
+  account_email_when_registered: {type: string, required: true}
+  cloudflare_api_token: {type: string, required: true, secret: true}
+
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: certbot, version: newest_when_first_installed}
+        - {name: python3-certbot-dns-cloudflare, version: newest_when_first_installed}
+
+  # What certbot runs after each new certificate, also between MMX runs.
+  - file:
+      path: /usr/local/bin/reload-nginx-after-certificate-renewal
+      content: |
+        #!/bin/sh
+        systemctl reload nginx
+      owner: root
+      group: root
+      permissions_mode: "0755"
+
+  - systemd_service:
+      name: certbot.timer
+      state: running
+      start_at_boot: true
+
+  - directory: {path: /root/.secrets, owner: root, group: root, permissions_mode: "0700"}
+  - directory: {path: /root/.secrets/certbot, owner: root, group: root, permissions_mode: "0700"}
+
+  # Last: tasks that read a secret hide their results and those after them.
+  - file:
+      path: /root/.secrets/certbot/cloudflare.ini
+      content: |
+        # The Cloudflare API token that certbot's DNS check uses.
+        dns_cloudflare_api_token = {{ .inputs.cloudflare_api_token }}
+      owner: root
+      group: root
+      permissions_mode: "0600"
+
+  - loop: "{{ .inputs.certificate_names }}"
+    as: certificate_name
+    certbot_certificate:
+      certificate_name: "{{ .certificate_name }}"
+      certificate_authority_url: https://acme-v02.api.letsencrypt.org/directory
+      domains: ["{{ .certificate_name }}", "*.{{ .certificate_name }}"]
+      account_email_when_registered: "{{ .inputs.account_email_when_registered }}"
+      challenge: dns
+      dns_plugin: cloudflare
+      dns_credentials_file: /root/.secrets/certbot/cloudflare.ini
+      wait_after_creating_dns_record: 30s
+      run_after_issue_and_renewal: /usr/local/bin/reload-nginx-after-certificate-renewal

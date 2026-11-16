@@ -1,0 +1,88 @@
+# One release of a Ruby application from Git, in its own directory:
+#
+#   <application_dir>/releases/<release>   the checkout and its gems
+#   <application_dir>/current              link to the running release
+#   <application_dir>/shared               files every release links
+#
+# The new release is complete, with its gems, before the link switches. Then
+# Passenger restarts the application, or systemd restarts its services, once
+# for each new release, also when a run stopped between the switch and the
+# restart. Older releases are deleted afterwards.
+inputs:
+  application_dir: {type: string, required: true}
+  # A repository on the Git host, or a path on the server itself, as in
+  # the test. A real project adds to the git task below the credentials its
+  # Git host requires: username and password (an access token) for an
+  # https:// repository, or ssh_private_key and ssh_known_hosts_lines for one over SSH.
+  repository: {type: string, required: true}
+  release: {type: string, required: true}
+  # Directories inside the release that have their own Gemfile and
+  # Gemfile.lock: "" for the release itself, "/api" for its api directory.
+  gemfile_directories: {type: list, required: true}
+  # Files of <application_dir>/shared that each release links at the
+  # same place, such as config/database.yml.
+  shared_files: {type: list, required: true}
+  # Directories inside the release that Passenger runs, written like
+  # gemfile_directories; [] on a server without Passenger.
+  passenger_application_directories: {type: list, required: true}
+  # systemd units that run the release and restart for a new one, such as a
+  # target of worker services; [] for none.
+  systemd_units_to_restart: {type: list, required: true}
+
+node_tasks:
+  - directory: {path: /home/deploy/apps, owner: deploy, group: deploy, permissions_mode: "0755"}
+  - directory: {path: "{{ .inputs.application_dir }}", owner: deploy, group: deploy, permissions_mode: "0755"}
+  - directory: {path: "{{ .inputs.application_dir }}/releases", owner: deploy, group: deploy, permissions_mode: "0755"}
+
+  - task_block:
+      id: application_release
+      changes:
+        - git:
+            repo: "{{ .inputs.repository }}"
+            check_out_tag: "{{ .inputs.release }}"
+            path: "{{ .inputs.application_dir }}/releases/{{ .inputs.release }}"
+            run_as_user_account: deploy
+        - loop: "{{ .inputs.gemfile_directories }}"
+          as: gemfile_dir
+          bundler_project_dependencies:
+            lock_file_dir: "{{ .inputs.application_dir }}/releases/{{ .inputs.release }}{{ .gemfile_dir }}"
+            run_as_user_account: deploy
+            without_gemfile_groups: [development, test]
+        - loop: "{{ .inputs.shared_files }}"
+          as: shared_file
+          symlink:
+            path: "{{ .inputs.application_dir }}/releases/{{ .inputs.release }}/{{ .shared_file }}"
+            target: "{{ .inputs.application_dir }}/shared/{{ .shared_file }}"
+        - loop: "{{ .inputs.passenger_application_directories }}"
+          as: passenger_dir
+          directory:
+            path: "{{ .inputs.application_dir }}/releases/{{ .inputs.release }}{{ .passenger_dir }}/tmp"
+            owner: deploy
+            group: deploy
+        # The switch.
+        - symlink:
+            path: "{{ .inputs.application_dir }}/current"
+            target: "releases/{{ .inputs.release }}"
+      activate:
+        # Passenger restarts an application when its tmp/restart.txt is new.
+        - id: tell_passenger_to_restart
+          loop: "{{ .inputs.passenger_application_directories }}"
+          as: passenger_dir
+          key: "release{{ .passenger_dir }}"
+          shell:
+            script: touch "$APPLICATION_DIR/tmp/restart.txt"
+            env: {APPLICATION_DIR: "{{ .inputs.application_dir }}/current{{ .passenger_dir }}"}
+            run_as_user_account: deploy
+            only_when_tracked_inputs_changed: true
+        - loop: "{{ .inputs.systemd_units_to_restart }}"
+          as: unit
+          systemd_service:
+            name: "{{ .unit }}"
+            state: running
+            refresh: restart
+
+  # Keep the running release and delete older ones. Going back is another
+  # run with the older release.
+  - directory:
+      path: "{{ .inputs.application_dir }}/releases"
+      delete_everything_inside_except: ["{{ .inputs.release }}"]

@@ -1,0 +1,25 @@
+summary: Manages one pgBackRest stanza in its repositories, which it creates when it is missing and upgrades after a major upgrade of PostgreSQL.
+inputs:
+  stanza:
+    type: string
+    required: true
+    description: The stanza's name, as in the configuration file, such as main.
+  config_file:
+    type: string
+    required: true
+    description: The configuration file that pgBackRest reads, such as /etc/pgbackrest/pgbackrest.conf. It gives the stanza its pg1-path and names the repositories.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the stanza, or in a dryrun would create it.
+examples:
+  - description: The stanza main of the configuration file that an earlier file task writes.
+    config: |
+      pgbackrest_stanza:
+        stanza: main
+        config_file: /etc/pgbackrest/pgbackrest.conf
+  - description: A second stanza of the same configuration file, for another PostgreSQL cluster of the server.
+    config: |
+      pgbackrest_stanza:
+        stanza: reports
+        config_file: /etc/pgbackrest/pgbackrest.conf

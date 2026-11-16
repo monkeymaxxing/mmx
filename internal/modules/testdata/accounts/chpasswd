@@ -1,0 +1,10 @@
+#!/bin/sh
+# A stand-in for chpasswd -e: records its arguments and its standard input,
+# and fails while $MMX_FAKE_ACCOUNTS/fail-chpasswd exists.
+accounts=$MMX_FAKE_ACCOUNTS
+echo "chpasswd $*" >> "$accounts/calls"
+if [ -e "$accounts/fail-chpasswd" ]; then echo "chpasswd: cannot lock /etc/shadow" >&2; exit 1; fi
+IFS= read -r line
+printf '%s\n' "$line" >> "$accounts/chpasswd-input"
+name=${line%%:*} field=${line#*:}
+awk -F: -v OFS=: -v name="$name" -v text="$field" '$1 == name { $2 = text } { print }' "$accounts/shadow" > "$accounts/shadow.new" && mv "$accounts/shadow.new" "$accounts/shadow"

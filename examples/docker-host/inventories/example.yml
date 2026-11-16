@@ -1,0 +1,4 @@
+nodes:
+  docker01:
+    address: docker01.example.com
+    ssh_user: admin

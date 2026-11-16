@@ -1,0 +1,27 @@
+#!/bin/sh
+# A stand-in for useradd that writes the account files in $MMX_FAKE_ACCOUNTS.
+echo "useradd $*" >> "$MMX_FAKE_ACCOUNTS/calls"
+uid= gid= home= shell= comment= create=no usergroup=no
+while [ $# -gt 0 ]; do
+  case $1 in
+    --uid) uid=$2; shift ;;
+    --gid) gid=$2; shift ;;
+    --home-dir) home=$2; shift ;;
+    --shell) shell=$2; shift ;;
+    --comment) comment=$2; shift ;;
+    --groups) shift ;;
+    --create-home) create=yes ;;
+    --user-group) usergroup=yes ;;
+    --) name=$2; shift ;;
+  esac
+  shift
+done
+accounts=$MMX_FAKE_ACCOUNTS
+[ -n "$uid" ] || uid=$((1000 + $(wc -l < "$accounts/passwd")))
+if [ "$usergroup" = yes ]; then
+  gid=$uid
+  echo "$name:x:$gid:" >> "$accounts/group"
+fi
+echo "$name:x:$uid:$gid:$comment:$home:$shell" >> "$accounts/passwd"
+echo "$name:!:20000:0:99999:7:::" >> "$accounts/shadow"
+if [ "$create" = yes ]; then mkdir "$home"; fi

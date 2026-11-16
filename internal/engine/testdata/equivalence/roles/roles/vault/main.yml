@@ -1,0 +1,10 @@
+inputs:
+  password: {type: string, secret: true, required: true}
+  label: {type: string, default: vault}
+
+node_tasks:
+  - show: "{{ .inputs.password }}"
+
+  - set_vars: {label: "{{ .inputs.label }}"}
+
+  - show: "{{ .vars.label }}"

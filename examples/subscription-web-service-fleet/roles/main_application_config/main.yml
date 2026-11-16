@@ -1,0 +1,37 @@
+# The main application's configuration that is not in its repository: its
+# database login and where its services are. Each release links these files
+# from the shared directory (role application_release).
+inputs:
+  application_dir: {type: string, required: true}
+  server_environment: {type: string, required: true}
+  mysql_server_address: {type: string, required: true}
+  database_name: {type: string, required: true}
+  database_account: {type: string, required: true}
+  database_password: {type: string, required: true, secret: true}
+  redis_and_memcached_server_address: {type: string, required: true}
+  # Each entry: {name, port, ...}; the application finds each instance by
+  # its name.
+  redis_instances: {type: list, required: true}
+  solr_server_address: {type: string, required: true}
+
+node_tasks:
+  - directory: {path: /home/deploy/apps, owner: deploy, group: deploy, permissions_mode: "0755"}
+  - directory: {path: "{{ .inputs.application_dir }}", owner: deploy, group: deploy, permissions_mode: "0755"}
+  - directory: {path: "{{ .inputs.application_dir }}/shared", owner: deploy, group: deploy, permissions_mode: "0755"}
+  - directory: {path: "{{ .inputs.application_dir }}/shared/config", owner: deploy, group: deploy, permissions_mode: "0750"}
+
+  - file:
+      path: "{{ .inputs.application_dir }}/shared/config/services.yml"
+      template: files/services.yml.tmpl
+      owner: deploy
+      group: deploy
+      permissions_mode: "0640"
+
+  # Last: a task that reads a secret hides its own result and the results
+  # after it in this role.
+  - file:
+      path: "{{ .inputs.application_dir }}/shared/config/database.yml"
+      template: files/database.yml.tmpl
+      owner: deploy
+      group: deploy
+      permissions_mode: "0600"

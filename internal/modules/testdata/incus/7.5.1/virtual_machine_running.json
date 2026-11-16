@@ -1,0 +1,73 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"architecture": "x86_64",
+		"config": {
+			"image.description": "MMX test image of a virtual machine",
+			"image.os": "mmxtest",
+			"image.release": "1",
+			"limits.memory": "256MiB",
+			"volatile.apply_template": "create",
+			"volatile.base_image": "c7a63ffcf4c17b7cc579bb7f4f3d12b5adad54212e921a9110fb295822c33cf8",
+			"volatile.cloud-init.instance-id": "18544326-2cc9-4767-a605-c6fbefaa3743",
+			"volatile.eth0.host_name": "tapc7af95ed",
+			"volatile.eth0.hwaddr": "10:66:6a:0b:e3:41",
+			"volatile.last_state.power": "RUNNING",
+			"volatile.uuid": "77f3d619-2d0e-4c38-9295-90539d1ed395",
+			"volatile.uuid.generation": "77f3d619-2d0e-4c38-9295-90539d1ed395",
+			"volatile.vm.rtc_adjustment": "0",
+			"volatile.vm.rtc_offset": "0",
+			"volatile.vsock_id": "3074464494"
+		},
+		"devices": {},
+		"ephemeral": false,
+		"profiles": [
+			"default"
+		],
+		"stateful": false,
+		"description": "",
+		"created_at": "2026-10-10T06:46:44.674359051Z",
+		"expanded_config": {
+			"image.description": "MMX test image of a virtual machine",
+			"image.os": "mmxtest",
+			"image.release": "1",
+			"limits.memory": "256MiB",
+			"volatile.apply_template": "create",
+			"volatile.base_image": "c7a63ffcf4c17b7cc579bb7f4f3d12b5adad54212e921a9110fb295822c33cf8",
+			"volatile.cloud-init.instance-id": "18544326-2cc9-4767-a605-c6fbefaa3743",
+			"volatile.eth0.host_name": "tapc7af95ed",
+			"volatile.eth0.hwaddr": "10:66:6a:0b:e3:41",
+			"volatile.last_state.power": "RUNNING",
+			"volatile.uuid": "77f3d619-2d0e-4c38-9295-90539d1ed395",
+			"volatile.uuid.generation": "77f3d619-2d0e-4c38-9295-90539d1ed395",
+			"volatile.vm.rtc_adjustment": "0",
+			"volatile.vm.rtc_offset": "0",
+			"volatile.vsock_id": "3074464494"
+		},
+		"expanded_devices": {
+			"eth0": {
+				"name": "eth0",
+				"network": "incusbr0",
+				"type": "nic"
+			},
+			"root": {
+				"path": "/",
+				"pool": "default",
+				"type": "disk"
+			}
+		},
+		"name": "shop-vm",
+		"status": "Running",
+		"status_code": 103,
+		"last_used_at": "2026-10-10T06:46:49.1701013Z",
+		"location": "none",
+		"type": "virtual-machine",
+		"project": "default"
+	}
+}
+

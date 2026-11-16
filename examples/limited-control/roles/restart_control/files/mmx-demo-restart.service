@@ -1,0 +1,12 @@
+[Unit]
+Description=Restart only the MMX demo application
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/local/libexec/mmx-demo-result running
+ExecStartPre=/usr/bin/find /run/mmx-demo-request -mindepth 1 -delete
+ExecStart=/usr/bin/systemctl restart mmx-demo.service
+ExecStopPost=/usr/local/libexec/mmx-demo-result
+TimeoutStartSec=30s

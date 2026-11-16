@@ -1,0 +1,2 @@
+project_name: libvirt_host
+default_inventory: example

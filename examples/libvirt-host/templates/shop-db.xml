@@ -1,0 +1,20 @@
+<domain type='kvm'>
+  <name>shop-db</name>
+  <memory unit='GiB'>{{ .vars.shop_db_memory_gib }}</memory>
+  <vcpu>{{ .vars.shop_db_cpu_count }}</vcpu>
+  <os>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+  </features>
+  <devices>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/var/lib/libvirt/images/shop-db.qcow2'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <console type='pty'/>
+  </devices>
+</domain>

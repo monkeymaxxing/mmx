@@ -1,0 +1,18 @@
+# mmx run remove_and_keep_data
+#
+# Stop and remove the container. Its named volume shop-web-data stays, with
+# the data in it, and so do the image and /etc/shop-web.
+fleet_stages:
+  - id: remove
+    nodes: all
+
+    node_tasks:
+      - id: container
+        podman_quadlet:
+          name: shop-web.container
+          state: file_and_service_removed_named_volumes_kept
+
+      - id: volume
+        podman_quadlet:
+          name: shop-web-data.volume
+          state: file_and_service_removed_named_volumes_kept

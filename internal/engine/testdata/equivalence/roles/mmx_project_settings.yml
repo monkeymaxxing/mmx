@@ -1,0 +1,45 @@
+project_name: roles
+default_inventory: example
+secrets_from_env:
+  token: MMX_EQUIVALENCE_TOKEN
+vars:
+  app_port: 9000
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,44 @@
+inputs:
+  port: {type: integer, required: true}
+  message: {type: string, required: true}
+
+node_tasks:
+  - task_block:
+      id: nginx
+      changes:
+        # One task for each package manager; each node runs the one for its own.
+        - when:
+            equals: ["{{ .node.package_manager }}", apt]
+          apt_package:
+            packages:
+              - {name: nginx, version: newest_when_first_installed}
+        - when:
+            equals: ["{{ .node.package_manager }}", dnf]
+          dnf_package:
+            packages:
+              - {name: nginx, version: newest_when_first_installed}
+        - file:
+            path: /etc/nginx/nginx.conf
+            template: files/nginx.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: nginx -t -c "$NEW_FILE"
+                dryrun: nginx -t -c "$NEW_FILE"
+                env:
+                  NEW_FILE: "{{ .new_file.path }}"
+      activate:
+        - id: web_service
+          systemd_service:
+            name: nginx
+            start_at_boot: true
+            refresh: reload
+            state: running
+      verify:
+        - wait_for:
+            url_responds: "http://127.0.0.1:{{ .inputs.port }}/"
+            expected_http_status_codes: [200]
+            response_body_contains: "{{ .inputs.message }}\n"
+            wait_at_most: 10s

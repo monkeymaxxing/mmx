@@ -1,0 +1,70 @@
+summary: Manages one LVM logical volume, which a later run can grow together with its filesystem and never shrinks, with the programs of the package lvm2.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The logical volume's name, such as postgresql.
+  volume_group:
+    type: string
+    required: true
+    description: The name of the volume group that holds the logical volume, such as data.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, deleted_with_all_its_data]
+    description: present (the default) creates the logical volume, or grows a smaller one to size. deleted_with_all_its_data deletes the logical volume and everything on it, and accepts only name and volume_group; a volume in use, or one that other volumes depend on, fails the task.
+  size:
+    type: string
+    required: false
+    description: A whole number and MiB, GiB, or TiB, such as 50GiB, or all_free_space_when_created, which gives a new logical volume all free space of the volume group. Required for state present.
+  grow_filesystem_with_volume:
+    type: boolean
+    required: false
+    description: Required for state present. true grows the ext2, ext3, ext4, or xfs filesystem on the logical volume together with it; a volume that holds nothing yet grows alone, and a volume that holds anything else then fails the task and is not grown. false grows only the logical volume, for one that holds something else, such as swap.
+  lvcreate_options:
+    type: list_of_strings
+    required: false
+    description: More options for lvcreate when the logical volume is created, such as ["--type", "raid1", "--mirrors", "1"]. Not used for a logical volume that exists.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the logical volume, and in a dryrun when a run would create it.
+  device:
+    type: string
+    description: The logical volume's path, /dev/<volume_group>/<name>, such as /dev/data/postgresql. Not given for state deleted_with_all_its_data.
+examples:
+  - description: A logical volume of 50 GiB for PostgreSQL; a later run with a larger size grows it together with its filesystem.
+    config: |
+      lvm_logical_volume:
+        name: postgresql
+        volume_group: data
+        size: 50GiB
+        grow_filesystem_with_volume: true
+  - description: A logical volume for swap, which holds no filesystem that LVM can grow.
+    config: |
+      lvm_logical_volume:
+        name: swap
+        volume_group: data
+        size: 8GiB
+        grow_filesystem_with_volume: false
+  - description: A logical volume that takes all free space of the volume group.
+    config: |
+      lvm_logical_volume:
+        name: archive
+        volume_group: data
+        size: all_free_space_when_created
+        grow_filesystem_with_volume: true
+  - description: A logical volume that LVM keeps as two copies on two devices of the volume group.
+    config: |
+      lvm_logical_volume:
+        name: accounts
+        volume_group: data
+        size: 20GiB
+        lvcreate_options: ["--type", "raid1", "--mirrors", "1"]
+        grow_filesystem_with_volume: true
+  - description: Remove a logical volume and destroy its data.
+    config: |
+      lvm_logical_volume:
+        name: postgresql
+        volume_group: data
+        state: deleted_with_all_its_data

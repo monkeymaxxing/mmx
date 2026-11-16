@@ -1,0 +1,58 @@
+summary: Keeps packages installed or removed on an Arch Linux node through pacman, or upgrades the whole system.
+inputs:
+  packages:
+    type: list_of_strings
+    required: false
+    description: >-
+      The names of the packages, as pacman -Q shows them, such as nginx. Name
+      each package itself, not a group or a name that another package
+      provides. Required unless upgrade_all_packages is true.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: >-
+      present (the default) installs each package that is missing, together
+      with a full system upgrade, because pacman supports no partial
+      upgrade; an installed package stays as it is. absent removes each
+      package that is installed.
+  also_remove_packages_that_depend_on_these:
+    type: boolean
+    required: false
+    description: >-
+      With state absent, true also removes the installed packages that depend
+      on the named ones. Without it, a removal that would take other
+      packages with it fails before anything changes.
+  upgrade_all_packages:
+    type: boolean
+    required: false
+    description: >-
+      true refreshes pacman's package databases and upgrades every package
+      that has a newer version, as pacman -Syu does. pacman skips the
+      packages that IgnorePkg and IgnoreGroup in /etc/pacman.conf name. Takes
+      no other input.
+outputs:
+  changed_packages:
+    type: any
+    description: >-
+      Every package that the task changed, sorted by name, including the
+      dependencies and the upgrades that pacman's transaction brought: name,
+      from (the version before; missing for a package that was not
+      installed), and to (the version after; missing for a removed package).
+      In a dryrun, what pacman would change judged against the package
+      databases the node has now.
+examples:
+  - description: Install nginx and certbot; an installed package stays at its version.
+    config: |
+      pacman_package:
+        packages: [nginx, certbot]
+  - description: Remove Apache and the modules that depend on it.
+    config: |
+      pacman_package:
+        packages: [apache]
+        state: absent
+        also_remove_packages_that_depend_on_these: true
+  - description: Upgrade the whole system.
+    config: |
+      pacman_package:
+        upgrade_all_packages: true

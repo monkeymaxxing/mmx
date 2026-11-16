@@ -1,0 +1,6 @@
+#!/bin/sh
+# A stand-in for mkhomedir_helper NAME UMASK SKELETON HOME_MODE.
+echo "mkhomedir_helper $*" >> "$MMX_FAKE_ACCOUNTS/calls"
+home=$(awk -F: -v name="$1" '$1 == name { print $6 }' "$MMX_FAKE_ACCOUNTS/passwd")
+# Like Rocky Linux 9's mkhomedir_helper, it ignores the home mode.
+mkdir "$home"

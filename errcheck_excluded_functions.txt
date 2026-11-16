@@ -1,0 +1,42 @@
+// Display output does not change the recorded execution result.
+fmt.Fprint
+// Display output does not change the recorded execution result.
+fmt.Fprintf
+// Display output does not change the recorded execution result.
+fmt.Fprintln
+// Flushing a display table does not change the recorded execution result.
+(*text/tabwriter.Writer).Flush
+// Ignored file closes release read or lock handles, repeat checked closes, or close auxiliary logs whose outcomes are saved separately.
+(*os.File).Close
+// Closing a directory handle does not commit mutations; required synchronization is checked separately.
+(*os.Root).Close
+// Input streams and response bodies have no writes to commit when closed.
+(io.Closer).Close
+// File contents only hold input streams, so closing them cannot lose managed writes.
+(*mmx/internal/modules.FileContents).Close
+// Connection closure only releases resources; operation failures are detected before closure.
+(net.Conn).Close
+// Listener closure only stops accepting connections and commits no managed data.
+(net.Listener).Close
+// TLS connection closure only releases resources; request failures are detected separately.
+(*crypto/tls.Conn).Close
+// Ignored removals clean temporary files, cache entries, or incomplete output after an already reported failure.
+os.Remove
+// Ignored recursive removals clean temporary directories; failure only leaves unused files.
+os.RemoveAll
+// Ignored directory removals clean private temporary candidates; failure only leaves unused files.
+(*os.Root).RemoveAll
+// Closing an input descriptor has no pending managed writes to commit.
+syscall.Close
+// Closing the terminal descriptor has no pending managed writes to commit.
+golang.org/x/sys/unix.Close
+// Closing a Unix socket releases resources after its checked notification or agent operation.
+(*net.conn).Close
+// Closing a read pipe releases input resources without committing writes.
+(*io.PipeReader).Close
+// Read-only streams have no pending writes to commit when closed.
+(io.ReadCloser).Close
+// Flushing buffered terminal output does not change the recorded execution result.
+(*bufio.Writer).Flush
+// syscall.Sync returns an error only on macOS; on Linux, where the node runs, it returns nothing, so a bare call is the only form that builds on both.
+syscall.Sync

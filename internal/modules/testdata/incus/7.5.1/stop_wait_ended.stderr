@@ -1,0 +1,2 @@
+Error: Failed shutting down instance, status is "Running": context deadline exceeded
+Try `incus info --show-log shop-test` for more info

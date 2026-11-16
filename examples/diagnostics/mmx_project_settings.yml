@@ -1,0 +1,9 @@
+project_name: diagnostics
+default_inventory: example
+
+vars:
+  port: 8080
+  greeting: Hello from the project
+node_task_defaults:
+  time_limit: 30s
+  retry: {max_tries: 2, pause_between_tries: 0s}

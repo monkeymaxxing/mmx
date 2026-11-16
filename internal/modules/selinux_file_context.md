@@ -1,0 +1,136 @@
+# `selinux_file_context`
+
+SELinux is the access control layer that the Red Hat family turns on by
+default. It refuses what its policy does not allow, even to a process that
+runs as root: a web server may not read files outside its content
+directories until the policy says so. SELinux decides by the label of each
+file, and the policy gives each path a label. `selinux_file_context` owns the
+node's local label rule for one path, or for a path and everything below
+it, and then gives the existing files there the label of the rule.
+
+MMX's own file writers
+[give every file the label the policy has for its path](../../docs/changing-mmx/design/modules.md#files-get-the-selinux-label-of-their-path),
+so no file module has a field for the label. A path that needs another label
+gets a rule from this module.
+
+Four modules change SELinux, each in one way:
+
+- [`selinux_boolean`](selinux_boolean.md) switches a permission of the
+  policy on or off;
+- `selinux_file_context` gives the files of a path another label;
+- [`selinux_port`](selinux_port.md) gives a network port another type;
+- [`selinux_mode`](selinux_mode.md) sets whether SELinux enforces its policy
+  or only reports.
+
+## Set up
+
+`selinux_file_context` runs `semanage` and `restorecon` on the node.
+`restorecon` is in `policycoreutils`, which every Red Hat family server has.
+`semanage` is in `policycoreutils-python-utils`, which many server images
+leave out, so install it before the first SELinux node task:
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: policycoreutils-python-utils, version: newest_when_first_installed}
+```
+
+## Examples
+
+### Serve a website from its own directory
+
+A web server serves files from `/srv/www`, connects to the network, and
+listens on port 8443:
+
+```yaml
+- task_block:
+    id: web_content
+    changes:
+      - selinux_boolean:
+          name: httpd_can_network_connect
+          enabled: true
+      - selinux_file_context:
+          path: /srv/www
+          also_apply_to_everything_inside: true
+          selinux_type: httpd_sys_content_t
+      - selinux_port:
+          port: 8443
+          protocol: tcp
+          selinux_type: http_port_t
+      - file:
+          permissions_mode: "0644"
+          path: /etc/httpd/conf.d/site.conf
+          source: files/site.conf
+    activate:
+      - systemd_service: {name: httpd, start_at_boot: true, refresh: reload, state: running}
+```
+
+On the node, the first node task lets the web server connect to the
+network. The second adds the label rule `httpd_sys_content_t` for
+`/srv/www` and everything below it, and relabels the files there. The third
+gives port 8443 the type `http_port_t`, so the web server may listen on it.
+Then MMX writes the web server's configuration file, and `activate` reloads
+the web server.
+
+Put `selinux_port` and `selinux_file_context` before the node tasks that
+write the files, and before `activate`.
+
+### Remove the rule
+
+```yaml
+- selinux_file_context:
+    path: /srv/www
+    also_apply_to_everything_inside: true
+    state: absent
+```
+
+`state: absent` takes `path` and `also_apply_to_everything_inside`, and
+removes the rule.
+
+## How it works
+
+- `path` is absolute. `also_apply_to_everything_inside: true` makes the rule
+  cover `path` and everything below it; `false` covers `path` alone.
+- The module inspects before it acts, and changes the running node and the
+  stored policy together.
+- Relabeling never depends on whether the rule changed. On every run,
+  `selinux_file_context` asks the node which existing paths carry another
+  label than the policy gives them (`restorecon -n`), and relabels when
+  there are any. That repairs an interrupted run, files moved in with an
+  old label, and a label changed by hand.
+- A missing `path` is not an error.
+- The result value says `rule: added`, `updated`, or `removed` when the rule
+  changed, and `paths_relabeled` with the number of paths the node task
+  relabeled. A run that fails lists only what it did before the failure, so a
+  node task in `on_failure` can read what happened.
+- A dryrun reports the number of paths to relabel once the rule is in the
+  policy. While the rule still has to be added, the paths are not checked
+  yet.
+- On a node where SELinux is disabled or not installed, the node task
+  reports `skipped` with the reason "SELinux is not enabled on this node".
+  The fact `.node.selinux.mode` says `enforcing`, `permissive`, or
+  `disabled`
+  ([facts](../../docs/changing-mmx/design/configuration.md#facts-and-results-are-observations-not-defaults)).
+
+## Errors and what they mean
+
+| The reason holds | What it means, and what to do |
+|---|---|
+| `semanage is not installed; install the package policycoreutils-python-utils first` | The node lacks `semanage`; the same reason names `restorecon` and `policycoreutils` when that program is missing. Install the package in an earlier node task; see [Set up](#set-up). A dryrun reports the node task not checked, because an earlier node task may install the package. |
+
+## Tested on
+
+**Distributions:** Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The suite `tests/integration/firewalld_and_selinux.py` runs on seven distributions: Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, AlmaLinux 10, and Fedora 45. On the three distributions that use SELinux, Rocky Linux 9, AlmaLinux 10, and Fedora 45, it runs in a virtual machine with SELinux enforcing, as installed. On the other four it runs in a container without SELinux and
+checks that the module reports `skipped`. The [validation
+record](../../docs/changing-mmx/validation.md) has the latest results.
+
+## Why it works this way
+
+- **Four SELinux modules, and no field for a label on `file`.** MMX's
+  writers give each file the label of its path, and a path that needs
+  another label gets a rule that survives a relabel.
+- **Every run relabels what differs from the policy,** not only a run that
+  changed the rule. That way an interrupted run, files moved in with an old
+  label, and a label changed by hand are all repaired.

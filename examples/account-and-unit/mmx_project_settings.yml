@@ -1,0 +1,8 @@
+project_name: account_and_unit
+default_inventory: example
+
+vars:
+  uid: 42020
+  gid: 42020
+  memory_max: 64M
+  profile: demo

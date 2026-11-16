@@ -1,0 +1,15 @@
+nodes:
+  database01:
+    address: database01.example.com
+    ssh_user: admin
+
+groups:
+  mongodb_servers:
+    nodes: [database01]
+    vars:
+      # The MongoDB series that the servers of this group run, and the key
+      # that signs the packages of that series. The three values belong
+      # together: README.md lists them for each series.
+      mongodb_series: "9.0"
+      mongodb_signing_key_url: https://pgp.mongodb.com/server-9.asc
+      mongodb_signing_key_sha256: a8ec953b159e65ee2e327dde5506008d7693c3c6c3841beed421ec429bd10162

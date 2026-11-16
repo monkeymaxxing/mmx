@@ -1,0 +1,17 @@
+// Managed by MMX (role base_server_setup).
+
+// Only security updates install by themselves; every other update waits for
+// a person.
+Unattended-Upgrade::Allowed-Origins {
+	"${distro_id}:${distro_codename}-security";
+};
+
+// An upgrade that dpkg left unfinished, such as one cut off by a reboot, is
+// finished before the next one starts.
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+
+// Libraries that an update replaced do not pile up on the disk.
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Never reboot by itself: a person chooses when a server restarts.
+Unattended-Upgrade::Automatic-Reboot "false";

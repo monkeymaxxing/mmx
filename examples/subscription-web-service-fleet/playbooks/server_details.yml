@@ -1,0 +1,20 @@
+# Each server's network addresses and disks, saved in the project as
+# server_details/<node>.txt on the controller machine, for the team's notes.
+#
+#   mmx run server_details --inventory production
+fleet_stages:
+  - id: server_details
+    nodes: all
+
+    node_tasks:
+      - id: details
+        shell:
+          script: ip -brief address && printf '\n' && lsblk --nodeps
+          dryrun: ip -brief address && printf '\n' && lsblk --nodeps
+          changed_when: false
+    outputs:
+      details: "{{ .node_tasks.details.stdout }}"
+    save_on_controller_machine:
+      - output: details
+        path: "server_details/{{ .node.name }}.txt"
+        permissions_mode: "0644"

@@ -1,0 +1,34 @@
+summary: Writes a GPT partition table with named partitions on a disk that holds nothing yet, with sfdisk; a disk that holds anything else fails the task, and nothing ever forces it.
+inputs:
+  device:
+    type: string
+    required: true
+    description: The absolute path of the whole disk, such as /dev/sdb. The module writes only when the disk holds no partition table and no signature of any kind.
+  partitions:
+    type: any
+    required: true
+    description: >-
+      The partitions in their order on the disk, as a list. Each partition has
+      a name (1 to 36 letters, digits, -, _, and ., and not . or ..; later
+      node tasks use the partition as /dev/disk/by-partlabel/<name>), a size (a whole number and
+      MiB, GiB, or TiB, such as 200GiB, or rest_of_disk for the last
+      partition), and optionally a type (linux_filesystem, the default,
+      linux_lvm, linux_swap, linux_raid, or efi_system).
+outputs:
+  created:
+    type: boolean
+    description: true when the task wrote the partition table, and in a dryrun when a run would write it.
+examples:
+  - description: Give a new disk a partition of 200 GiB for a database and a second partition with the rest of the disk for backups.
+    config: |
+      create_partitions_on_empty_disk:
+        device: /dev/sdb
+        partitions:
+          - {name: database, size: 200GiB}
+          - {name: backups, size: rest_of_disk}
+  - description: Give a new disk one partition for LVM that takes the whole disk.
+    config: |
+      create_partitions_on_empty_disk:
+        device: /dev/sdb
+        partitions:
+          - {name: lvm, size: rest_of_disk, type: linux_lvm}

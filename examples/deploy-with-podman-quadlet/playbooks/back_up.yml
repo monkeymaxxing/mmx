@@ -1,0 +1,27 @@
+# mmx run back_up
+#
+# Stop the container, copy its data, and start it again. When the copy fails,
+# the run stops and the container stays stopped; running this playbook again,
+# or the deploy playbook, starts it.
+fleet_stages:
+  - id: back_up
+    nodes: all
+
+    node_tasks:
+      - directory:
+          path: /var/lib/shop-web-backups
+          permissions_mode: "0700"
+
+      - id: stop
+        systemd_service:
+          name: shop-web.service
+          state: stopped
+
+      - id: copy
+        shell:
+          script: podman volume export shop-web-data --output /var/lib/shop-web-backups/shop-web-data.tar
+
+      - id: start
+        systemd_service:
+          name: shop-web.service
+          state: running

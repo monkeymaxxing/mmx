@@ -1,0 +1,9 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - file:
+          path: /var/tmp/mmx-history-example
+          content: "Managed by MMX.\n"
+          permissions_mode: "0644"

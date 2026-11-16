@@ -1,0 +1,9 @@
+nodes:
+  app:
+    address: app.example.com
+    ssh_user: deploy
+
+vars:
+  # The application's repository. A private repository also needs
+  # username and password, or ssh_private_key and ssh_known_hosts_lines, on the git task.
+  greeter_repository: https://github.com/example/greeter.git

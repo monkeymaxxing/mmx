@@ -1,0 +1,68 @@
+summary: Keeps packages installed at a version rule or removed on an openSUSE node through zypper, or updates the whole system.
+inputs:
+  packages:
+    type: any
+    required: false
+    description: >-
+      A list of entries, each a mapping with name, the package's name as rpm
+      -q shows it, such as nginx, and, with state present, version. version is
+      newest_when_first_installed (install the newest version when the
+      package is missing, and leave an installed package as it is),
+      newest_on_every_run (install the newest version, and update an
+      installed package when a newer version exists), or a version such as
+      1.28.1 or 1.28.1-160100.2.1 that the package must have. An exact version
+      is installed or updated to, never downgraded to, and is not held:
+      upgrade_all_packages updates it. Name each package itself, not a name
+      that another package provides. With state absent an entry holds only
+      name. Required unless upgrade_all_packages is true.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: >-
+      present (the default) installs each package that is missing, or at the
+      wrong version or older than newest_on_every_run wants. absent removes
+      each package that is installed and accepts entries with only name.
+  also_remove_packages_that_depend_on_these:
+    type: boolean
+    required: false
+    description: >-
+      With state absent, true also removes the installed packages that depend
+      on the named ones, which zypper removes with them. Without it, a removal
+      that would take other packages with it fails before anything changes.
+  upgrade_all_packages:
+    type: boolean
+    required: false
+    description: >-
+      true refreshes the repositories and updates every package that has a
+      newer version, as zypper update does. zypper keeps each package's vendor
+      and architecture and the packages that zypper addlock locked. Takes no
+      other input.
+outputs:
+  changed_packages:
+    type: any
+    description: >-
+      Every package that the task changed, sorted by name, including the
+      dependencies and the recommended packages that zypper's transaction
+      brought: name, from (the version before; missing for a package that
+      was not installed), and to (the version after; missing for a removed
+      package). In a dryrun, what zypper would change judged against the
+      repositories' metadata the node has now.
+examples:
+  - description: Install nginx and certbot; an installed package stays at its version.
+    config: |
+      zypper_package:
+        packages:
+          - {name: nginx, version: newest_when_first_installed}
+          - {name: certbot, version: newest_when_first_installed}
+  - description: Remove Apache and the packages that depend on it.
+    config: |
+      zypper_package:
+        packages:
+          - {name: apache2}
+        state: absent
+        also_remove_packages_that_depend_on_these: true
+  - description: Update the whole system.
+    config: |
+      zypper_package:
+        upgrade_all_packages: true

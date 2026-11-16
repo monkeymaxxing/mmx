@@ -1,0 +1,32 @@
+#!/bin/bash
+# Managed by MMX (role base_server_setup). A coloured shell prompt: the host
+# name is red on production servers and green elsewhere, so a person sees at
+# once where a command runs. root is red, deploy yellow, everyone else green.
+
+GREEN='\[\033[32m\]'
+YELLOW='\[\033[33m\]'
+RED='\[\033[31m\]'
+BLUE='\[\033[34m\]'
+NO_COLOR='\[\e[0m\]'
+
+ROOT_UID=0
+DEPLOY_UID={{ .inputs.deploy_account_uid }}
+
+USER_SYMBOL='$'
+
+{{- if eq .inputs.server_environment "production" }}
+HOST_COLOR=$RED
+{{- else }}
+HOST_COLOR=$GREEN
+{{- end }}
+
+if [ "$(id -u)" -eq $ROOT_UID ]; then
+  USER_COLOR=$RED
+  USER_SYMBOL='#'
+elif [ "$(id -u)" -eq $DEPLOY_UID ]; then
+  USER_COLOR=$YELLOW
+else
+  USER_COLOR=$GREEN
+fi
+
+PS1="${USER_COLOR}\u@${HOST_COLOR}\h:${BLUE}\w${NO_COLOR}${USER_SYMBOL} "

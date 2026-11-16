@@ -1,0 +1,20 @@
+project_name: subscription_web_service
+
+# A command that names no inventory uses the test machines. A run on the real
+# servers must name it (--inventory production), so a forgotten option reaches
+# test machines only.
+default_inventory: test
+
+# Keep the order of the roles visible in the playbooks: roles do not call
+# other roles.
+allow_role_calls_within_roles: false
+
+# Secrets come from the controller machine's environment, which the test sets
+# to test values. A production project keeps its secrets in the encrypted
+# vault instead (mmx secrets edit) and removes these bindings.
+secrets_from_env:
+  recovery_account_password_hash: SUBSCRIPTION_WEB_SERVICE_RECOVERY_ACCOUNT_PASSWORD_HASH
+  main_application_database_password: SUBSCRIPTION_WEB_SERVICE_MAIN_APPLICATION_DATABASE_PASSWORD
+  clickhouse_copy_database_password: SUBSCRIPTION_WEB_SERVICE_CLICKHOUSE_COPY_DATABASE_PASSWORD
+  clickhouse_reporting_password: SUBSCRIPTION_WEB_SERVICE_CLICKHOUSE_REPORTING_PASSWORD
+  cloudflare_api_token: SUBSCRIPTION_WEB_SERVICE_CLOUDFLARE_API_TOKEN

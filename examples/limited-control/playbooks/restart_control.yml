@@ -1,0 +1,6 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - role: restart_control

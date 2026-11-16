@@ -1,0 +1,2 @@
+project_name: deploy_with_podman_quadlet
+default_inventory: example

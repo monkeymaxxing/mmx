@@ -1,0 +1,11 @@
+[Unit]
+Description=MMX capacity-based configuration example
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/mmx-facts-demo-load start
+ExecReload=/usr/local/bin/mmx-facts-demo-load reload
+
+[Install]
+WantedBy=multi-user.target

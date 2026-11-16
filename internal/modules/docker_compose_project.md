@@ -1,0 +1,853 @@
+# `docker_compose_project`
+
+`docker_compose_project` brings the containers of one Docker Compose
+project on the node to a state: running, stopped, or removed. A **Compose
+project** is a file `compose.yaml` that declares several containers
+("services") with their images, ports, mounts, and networks. The
+`docker compose` command creates and updates the containers from it. The
+module runs on the node and drives the `docker` command that is installed
+there; MMX links no Docker library.
+
+```yaml
+- docker_compose_project:
+    compose_project_name: shop
+    compose_project_dir: /opt/shop
+    state: running
+    pull_images: when_missing
+    containers_of_removed_services: remove
+```
+
+The Compose file and its environment files are ordinary `file` tasks, so
+templates, secrets, differences in a dryrun, and `check_new_file` work as for
+any file. MMX adds no container settings of its own: every setting is in the
+Compose file, in Docker's own format. A value that differs for each node goes
+into the file through `template` or `content`.
+
+There is no module with one task for each container. One container is a
+Compose project with one service; its file can be inline `content`, so it is
+still one visible node task block. The other way to run a Docker container,
+a systemd unit that runs `docker run`, gets its image from
+[`docker_image`](docker_image.md).
+[Run containers](../../docs/how-to/run-containers.md)
+shows both ways and defines the words image, registry, tag, and
+digest.
+
+## Set up
+
+The [Set up](#set-up) section also provides the setup instructions for
+[`docker_image`](docker_image.md).
+
+Install Docker and its Compose plugin first, with package tasks. MMX has no
+module that installs Docker. A complete node task list for a Debian or
+Ubuntu server that runs Docker:
+
+```yaml
+- apt_repository:
+    name: docker
+    uris: ["https://download.docker.com/linux/{{ .node.distribution.id }}"]
+    suites: ["{{ .node.distribution.codename }}"]
+    components: [stable]
+    signing_key_url: https://download.docker.com/linux/debian/gpg
+    signing_key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+
+- apt_package:
+    packages:
+      - {name: docker-ce, version: "5:29.*"}
+
+- apt_package:
+    packages:
+      - {name: docker-ce-cli, version: newest_when_first_installed}
+      - {name: containerd.io, version: newest_when_first_installed}
+      - {name: docker-compose-plugin, version: newest_when_first_installed}
+
+- task_block:
+    id: docker_daemon
+    changes:
+      - file:
+          path: /etc/docker/daemon.json
+          permissions_mode: "0644"
+          content: |
+            {
+              "log-driver": "json-file",
+              "log-opts": {"max-size": "50m", "max-file": "3"},
+              "live-restore": true
+            }
+    activate:
+      - systemd_service:
+          name: docker
+          state: running
+          start_at_boot: true
+          refresh: restart
+
+- user:
+    create_home_directory: true
+    name: deploy
+    supplementary_groups: [docker]
+    supplementary_groups_not_listed: keep
+```
+
+In order: the node gets Docker's package source, the Docker packages (the
+daemon inside the version pattern `5:29.*`), and the daemon's settings file.
+Docker signs its Debian and its Ubuntu repository with the same key, so one
+`signing_key_url` serves both; MMX fetches the key on the controller machine,
+before it knows the node's distribution. The package does not start the daemon while
+it installs; the `systemd_service` task starts it, and restarts it when
+`daemon.json` changes. With `"live-restore": true`, Docker keeps containers
+running during that restart. The account `deploy` joins the group `docker`,
+which lets it use the `docker` command; anyone in that group has root on the
+server, so add only administrators. To change how the packaged unit starts
+the daemon, use a `systemd_unit` task with `drop_in`, never an edit of the
+packaged unit.
+
+The [docker-host example](../../examples/docker-host/README.md) is this list
+as a project, with the
+[cleanup timer for unused images](docker_image.md#clean-up-unused-images-on-a-timer).
+A Compose project, such as the one in
+[Run a Compose project](#run-a-compose-project), follows the Docker setup
+node tasks.
+
+**What each module needs.** `docker_image` needs the `docker` command and a
+Docker daemon that answers; `docker_compose_project` also needs the Compose
+plugin. When the Docker command, an answering Docker daemon, or the required
+Compose plugin is missing, the task fails as a
+[missing prerequisite](../../docs/reference/playbook-file.md#node-task-retries-and-time-limits),
+which is not tried again. The message names the missing Docker command,
+answering Docker daemon, or Compose plugin. A dryrun then reports the task
+not checked. An earlier node task may install the Docker command or Compose
+plugin, or start the Docker daemon.
+
+**Docker Compose 2.26.1 or newer.** `docker_compose_project` requires Docker
+Compose 2.26.1 or newer. With an older Compose the task fails with a message
+that names the installed version and required version. With an older Docker
+Compose version, a dryrun reports `not_checked`.
+A version can carry a package's suffix (`2.26.1-4`,
+`2.40.3+ds1-0ubuntu1`); MMX compares its leading numbers.
+
+**The Red Hat family.** Docker publishes its repository for the Red Hat
+family too (`dnf_repository` with
+`https://download.docker.com/linux/centos/$releasever/$basearch/stable`; the
+directories for Rocky Linux and AlmaLinux hold no engine). There the package
+does not enable the daemon either, so the `systemd_service` task is needed
+there too.
+
+**The Red Hat family 10 and the running kernel.** Docker's firewall rules
+need kernel modules, such as `xt_addrtype`, that the Red Hat family 10 ships
+in the package `kernel-modules-extra`. Docker's packages bring that package,
+but dnf installs it for the newest kernel in the repositories, together with
+that kernel. A node that still runs an older kernel has no such modules
+until it boots the new one, and Docker's daemon ends at every start with
+`iptables ... RULE_APPEND failed (No such file or directory)`. The
+`systemd_service` task then fails and shows these journal lines. Put a
+`reboot` node task between the package task and the `systemd_service` task,
+or install the package for the running kernel first, with a `dnf_package`
+task that names `kernel-modules-extra-{{ .node.kernel.release }}`.
+
+**Distribution packages of Compose.** Debian 13's `docker-compose` (2.26.1,
+with `docker.io` and `docker-cli`) and Ubuntu's `docker-compose-v2` are
+Compose version 2 or newer and work.
+Debian 12 has no such package: its `docker-compose` is the old Python
+program, which gives no `docker compose` command. Use Docker's repository
+on Debian 12.
+
+## Examples
+
+### Run a Compose project
+
+```yaml
+- task_block:
+    id: shop
+    changes:
+      - directory:
+          path: /opt/shop
+          permissions_mode: "0755"
+      - file:
+          path: /opt/shop/web.env
+          permissions_mode: "0600"
+          content: |
+            DATABASE_PASSWORD={{ .secrets.shop_database_password }}
+      - file:
+          path: /opt/shop/database.env
+          permissions_mode: "0600"
+          content: |
+            POSTGRES_PASSWORD={{ .secrets.shop_database_password }}
+      - file:
+          path: /opt/shop/compose.yaml
+          permissions_mode: "0644"
+          content: |
+            services:
+              web:
+                image: registry.example.com/shop/web:2.4
+                restart: unless-stopped
+                ports: ["127.0.0.1:8080:8080"]
+                env_file: [web.env]
+                healthcheck:
+                  test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080/health"]
+                depends_on:
+                  database:
+                    condition: service_healthy
+              database:
+                image: postgres:17.2
+                restart: unless-stopped
+                volumes: ["database_data:/var/lib/postgresql/data"]
+                env_file: [database.env]
+                healthcheck:
+                  test: ["CMD", "pg_isready", "--username", "postgres"]
+            volumes:
+              database_data: {}
+          check_new_file:
+            shell:
+              script: >-
+                docker compose --project-directory /opt/shop
+                --file "$NEW_FILE" config --quiet
+              dryrun: >-
+                docker compose --project-directory /opt/shop
+                --file "$NEW_FILE" config --quiet
+              env:
+                NEW_FILE: "{{ .new_file.path }}"
+    activate:
+      - docker_compose_project:
+          compose_project_name: shop
+          compose_project_dir: /opt/shop
+          state: running
+          pull_images: when_missing
+          containers_of_removed_services: remove
+    verify:
+      - wait_for:
+          docker_compose_project_is_ready: /opt/shop
+          wait_at_most: 2m
+```
+
+On the node, in order: MMX creates the directory and writes the two
+environment files. MMX writes the Compose file after `docker compose config`
+accepted the new file; the environment files come first, because that check
+reads them. Then `docker_compose_project` creates the two containers. Last,
+`wait_for` waits until the `web` and `database` containers report healthy.
+
+Two Compose features replace work that people otherwise script:
+
+- **Start order, also at boot.** Use Compose's `restart:` policy and
+  `depends_on` with `condition: service_healthy`, as in the example. Docker
+  then starts the containers in the right order after a reboot without MMX.
+- **A network or volume shared by two projects.** Declare the shared network
+  or volume with a fixed `name:` in the creating project's Compose file.
+  Declare the shared resource as `external: true` in the using project's
+  Compose file. Put the task for the project that creates the shared network or
+  volume earlier in the node task list.
+
+### A changed file that is mounted into a container
+
+A container has three kinds of input. At `state: running`, Compose notices
+a changed container definition and a changed image. The third input is the
+content of a file of the node that is mounted into a container, such as a
+configuration file. Compose does not check the mounted file's content.
+So the playbook says which service must reload or restart when the mounted
+file's content changes:
+
+```yaml
+- task_block:
+    id: shop_proxy_config
+    changes:
+      - file:
+          path: /opt/shop/proxy/nginx.conf
+          template: files/shop/nginx.conf.tmpl
+          permissions_mode: "0644"
+    activate:
+      - id: reload_shop_proxy
+        shell:
+          script: >-
+            docker compose --project-directory /opt/shop
+            exec --no-TTY proxy nginx -s reload
+          only_when_tracked_inputs_changed: true
+```
+
+`/opt/shop/proxy/nginx.conf` is a
+[tracked input](shell.md#commands-that-follow-tracked-inputs) of the node
+task block `shop_proxy_config`: MMX remembers its hash. The `shell`
+task `reload_shop_proxy` runs only when the hash of
+`/opt/shop/proxy/nginx.conf` differs from the hash
+recorded after the command last succeeded. If a run writes the file and
+stops before the command, the next run finds the file unchanged and still
+runs the command once
+([execution design](../../docs/changing-mmx/design/execution.md#service-reloads-follow-configuration-hashes)).
+To restart the container instead, the script is
+`docker compose --project-directory /opt/shop restart proxy`.
+
+The author names the service and the action. MMX does not read the Compose
+file to work out which containers mount which files. Put the
+`shop_proxy_config` node task block after the block that runs
+`docker_compose_project`, so that the container
+exists when the command runs. On a run that writes the file for the first
+time, the command runs once; a reload in a container that was just created
+is harmless. On a node where the file was already in place, MMX stores the
+record and does not run the command.
+
+**Mount the directory, not the single file.** The Compose file of this
+example mounts `./proxy:/etc/nginx/conf.d:ro`. MMX replaces a file with a new
+file of the same name. A container that mounts one file keeps the old file,
+and a reload would read the old content. A container that mounts the
+directory sees the new file.
+
+The [deploy-with-docker-compose example](../../examples/deploy-with-docker-compose/README.md)
+is a complete project with a mounted configuration file and a reload command.
+
+### Follow newer images and pull from a private registry
+
+```yaml
+- docker_compose_project:
+    compose_project_name: shop
+    compose_project_dir: /opt/shop
+    state: running
+    pull_images: always
+    containers_of_removed_services: remove
+    registry_logins:
+      - registry: registry.example.com
+        registry_username: deploy
+        registry_password: "{{ .secrets.registry_password }}"
+```
+
+An **image reference** is the complete value of a service's `image` setting,
+such as `registry.example.com/shop/web:2.4`. With `pull_images: always`, each
+run asks the registry which image each reference in the Compose file names
+now. The run pulls an image that differs from the node's and recreates the
+containers of the pulled image. `registry` is the
+registry's host as the image references name it, with its port if they have
+one; `docker.io` is Docker Hub.
+[Newer images under the same tag](docker_image.md#newer-images-under-the-same-tag)
+and [logins for private registries](../../docs/how-to/run-containers.md#pull-from-a-private-registry)
+say what `docker_compose_project` and `docker_image` share: what a dryrun
+asks the registry (on the `docker_image` page), and how a login reaches
+Docker without a password on a command line or on a disk (in
+[Run containers](../../docs/how-to/run-containers.md)).
+
+### Wait until a container is healthy
+
+"Started" does not mean "working": a container with a restart policy shows as
+running while its application ends again and again. A container's **health
+check** is a command, declared with the container, that Docker runs again and
+again to learn whether the application inside works. `wait_for` has two forms
+that read what Docker learned:
+
+```yaml
+verify:
+  - wait_for:
+      docker_compose_project_is_ready: /opt/shop
+      wait_at_most: 2m
+```
+
+```yaml
+verify:
+  - wait_for:
+      docker_container_is_healthy: audio-converter
+      wait_at_most: 2m
+```
+
+- `docker_container_is_healthy: <container name>` waits until Docker reports
+  that container healthy by the container's own health check. The
+  `docker_container_is_healthy` form also serves
+  a container that a systemd unit starts with `docker run`, such as the one
+  in [`docker_image`'s example](docker_image.md#one-image-for-a-container-that-systemd-runs).
+  A container that declares no health check fails the task at once with a
+  message that says so, because MMX would otherwise wait for an answer that
+  never comes.
+- `docker_compose_project_is_ready: <project directory>` waits until every
+  container of that Compose project that declares a health check is healthy,
+  and every other container of the project runs or has completed. A
+  container has completed when it ended with exit code 0 and its restart
+  policy does not start it again, as a service that runs once does, for
+  example a database migration. A container that ended with another exit
+  code, or that was stopped although its restart policy keeps it running,
+  fails the wait. The wait finds the project's containers by the directory
+  that Compose records as a label on each of them.
+
+The `docker_container_is_healthy` and `docker_compose_project_is_ready`
+forms use `wait_at_most` and the other rules of [`wait_for`](wait_for.md).
+The two container wait forms change nothing, check once in a dryrun, and
+belong in `verify`. When the wait ends without health, the task fails and
+names each container that is not ready.
+The failure reports each container's status. For a container with a health
+check, the failure also reports the
+last health check's exit code and output.
+
+### Stop a project for other work
+
+Stop the containers for work that needs them stopped, such as a backup of
+their data directory, and start them again:
+
+```yaml
+- docker_compose_project:
+    compose_project_name: shop
+    compose_project_dir: /opt/shop
+    state: stopped
+
+- shell:
+    script: /usr/local/bin/back-up-shop-data
+
+- docker_compose_project:
+    compose_project_name: shop
+    compose_project_dir: /opt/shop
+    state: running
+    pull_images: when_missing
+    containers_of_removed_services: remove
+```
+
+The playbook names the project, so there is no list of "the containers that
+were running" to remember. When the backup fails, the run stops and the
+project stays stopped; running the playbook again starts it, because the last
+task declares the wanted state. To start the project again in the same
+attempt, put the last task in the `cleanup` of a node task block.
+
+### Remove a project and keep its data
+
+```yaml
+- docker_compose_project:
+    compose_project_name: shop
+    compose_project_dir: /opt/shop
+    state: containers_removed_named_volumes_kept
+```
+
+Deleting a `docker_compose_project` task from the playbook removes nothing on
+the node, like every MMX task.
+
+### Remove a project and delete its data
+
+```yaml
+- docker_compose_project:
+    compose_project_dir: /opt/shop
+    compose_project_name: shop
+    state: containers_and_named_volumes_removed
+```
+
+The task removes the containers and networks of the project `shop` in
+`/opt/shop` and deletes its named volumes with the data in them. The
+`docker_compose_project` task must name the project with
+`compose_project_name`, because Docker records only the project's name on
+a named volume, never the project's directory. MMX refuses a task without
+`compose_project_name` when MMX loads the MMX project.
+Give the Compose project name used by the project's other tasks.
+For a project created outside MMX without an explicit name, Docker Compose
+named the project after the last part of the directory's path, `shop` for
+`/opt/shop`.
+
+## How it works
+
+### What each state does
+
+The four states say what happens to the containers and to the data:
+
+| `state` | What MMX does | What stays |
+|---|---|---|
+| `running` | Creates missing containers, recreates a container whose definition or image differs, starts stopped ones (`docker compose up --detach`). | Everything. |
+| `stopped` | Stops the project's containers (`docker compose stop`). | The containers, their named volumes, the project's networks, the images. |
+| `containers_removed_named_volumes_kept` | Stops and removes the project's containers and networks (`docker compose down`). | The named volumes with their data, and the images. |
+| `containers_and_named_volumes_removed` | Stops and removes the project's containers and networks, and deletes the project's named volumes with the data in them (`docker compose down --volumes`). | The images. |
+
+A **named volume** is a data directory that Docker creates and keeps for
+containers, such as `database_data` above. A **bind mount** makes a file or
+directory of the node visible inside a container. No state deletes a
+directory of the node that is mounted into a container, the Compose file, or
+an image. Remove a directory with a `directory` task and unused images with
+[the cleanup timer](docker_image.md#clean-up-unused-images-on-a-timer). The
+three states other than `running` accept only `compose_project_dir`,
+`compose_files`, and `compose_project_name`, and
+every state requires `compose_project_name`
+([why](#two-project-directories-with-the-same-last-name)).
+
+`docker_compose_project` normally stands in the `activate` phase of the node
+task block whose `changes` write the project's files, as in
+[Run a Compose project](#run-a-compose-project). The `docker_compose_project`
+module is also allowed as an ordinary node task. Health is not part of the
+`docker_compose_project` task: a container that starts and
+then fails its health check is a failed
+[`wait_for`](#wait-until-a-container-is-healthy) in `verify`, never a
+repeated start.
+
+### Which files Compose reads
+
+MMX always names the files to `docker compose`: `compose.yaml` in
+`compose_project_dir`, or the files of `compose_files`, which Compose
+merges in their order, as `docker compose --file` does. Compose then neither
+looks for a Compose file in the directories above nor adds a
+`compose.override.yaml` that the task does not list. A file `.env` in the
+project's directory still fills the `${...}` references of the Compose file,
+as Compose does by itself.
+
+### What a run does
+
+A run with `state: running` always runs `docker compose up`, and Compose
+decides what differs. Compose recreates a container when the service
+definition's hash, including environment file values, differs from the hash
+on the container. A different image also causes recreation. Depending on
+the Docker Compose version, Compose also recreates or restarts dependent
+services and restarts containers to replace a changed network.
+MMX does not compute Compose's rules for recreating and restarting containers.
+MMX reads the project's containers with `docker
+container inspect` before and after the command and reports each service's
+action from the two states. MMX never reads the text that `docker compose`
+prints while it works.
+
+The task is tried again after a failure, so a registry that fails once does
+not fail the run.
+
+MMX finds a project's containers by the directory that Compose records as a
+label on each one. Before `up`, `stop`, or `down`, MMX lists the containers
+that carry the project name the command will use; see
+[Two project directories with the same last name](#two-project-directories-with-the-same-last-name).
+
+### What a dryrun asks
+
+A dryrun asks Docker Compose for that decision: MMX runs Compose's own dry
+run, `docker compose --dry-run --progress plain up --no-start --pull never`,
+with `--remove-orphans` when the task removes the containers of removed
+services. Compose then lists what it would do to each container, one line of
+text for each step, such as `Container shop-web-1  Recreate`, and changes
+nothing. So a dryrun says what the Compose version on the node would do. MMX
+maps the steps to the services' actions:
+
+| Compose lists for a container | The service's action |
+|---|---|
+| `Recreate` | `would_recreate` |
+| `Creating`, for a container that does not exist yet | `would_create` |
+| `Removing` | `would_remove` |
+| `Stopping` without `Removing`: Compose stops the container and starts it again | `would_start` |
+| `Running` | `unchanged` |
+| nothing, or `Created`, for a container that does not run | `would_start` |
+
+MMX reads the lines with a closed list of words. A line that MMX does not
+know, a container that the lines do not account for, or a dry run that fails
+makes the task `not_checked` with the reason. MMX never guesses, so a later
+Compose that prints something else is not read as a wrong prediction.
+
+- `--no-start` asks for the creation step alone, which decides what happens
+  to each container. What the start step adds, MMX sees itself: `up` starts
+  each container that does not run.
+- Compose 2 prepares its build tool, buildx, also in a dry run, and creates
+  that tool's state files in Docker's configuration directory, which is in
+  the home directory of the account executing the node task. MMX sets
+  `BUILDX_CONFIG` to the node
+  task's private directory in `/run/mmx/private_task_directories/` for the
+  command and removes the directory after it. The dry run then leaves nothing
+  on the node. Compose 5 writes no file.
+- `--pull never` keeps Compose's dry run away from the registries. Which
+  images a run would pull, MMX works out itself: an image that the node does
+  not have and, with `pull_images: always`, one for which the registry names
+  another image now. A service whose image the registry has replaced reports
+  `would_recreate` with the reason `the image differs`.
+
+### When a dryrun cannot tell
+
+The task reports `not_checked` with the reason, and never a guess, in these
+cases:
+
+- Compose's dry run fails. The reason holds Compose's message.
+- Compose's dry run prints a line that MMX does not know. A service that
+  Compose builds on the node (`build:`) while its image is missing is such a
+  case.
+- The node no longer has the image of a container, and the Compose file
+  still names that image. Compose's dry run would recreate the container. A
+  run pulls the image first, and Compose keeps the container only if the
+  image is the one it was created from.
+- With `pull_images: always`, the registry serves another list of images for
+  several platforms than the node's image came from; the `docker_image` page's
+  [newer images under the same tag](docker_image.md#newer-images-under-the-same-tag)
+  says why.
+
+A run is not affected: it runs `docker compose up` and reports what changed.
+
+### What the result holds
+
+`value.services` holds one entry for each service with `name` and `action`.
+In a run, the action is `created`, `recreated`, `started`, `stopped`,
+`removed`, or `unchanged`. In a dryrun, the service's `action` says what a run
+would do:
+`would_create`, `would_recreate`, `would_start`, `would_stop`,
+`would_remove`, `unchanged`, `would_change` when the service changes and MMX
+cannot say how, or `not_checked` when MMX cannot tell whether it changes.
+The task reports changed when an action is not `unchanged` or an image was
+pulled. `value.images` lists each image that was pulled, with `image`,
+`previous_image_id` (null when the node did not have the image), and
+`image_id`.
+
+In a dryrun, each service that would change has a `reason` beside its action:
+`the container is missing`, `the definition differs`, `the image differs`,
+`the container is stopped`, `the service is no longer in the Compose file`,
+or that Compose stops and starts it for a service it depends on. When an
+earlier node task of the same dryrun would change a file in
+`compose_project_dir`, or any file in the same node task block (it may
+be an environment file that a service reads), MMX shows that task's
+difference, and every service reports the action `would_change` with the
+reason `an earlier node task of this dryrun would change a file of this
+Compose project or of this node task block`: the services can be compared
+with the containers only once the files are installed.
+
+An unchanged rerun: `docker compose up` finds nothing to do, every service is
+`unchanged`, and the task reports unchanged.
+
+### After an interrupted run
+
+The state lives in Docker, not in an MMX record. A run that wrote the
+Compose file and stopped before the containers were updated is finished by
+the next run: the running containers still carry the old hash, so Compose
+recreates them then.
+
+### A project that already runs
+
+A project that someone created and started with `docker compose up` needs no
+preparation. MMX keeps no record of its own about a project and reads
+Compose's labels only to find a project's containers and their services. The
+state is the containers, and Compose compares them with the Compose file. The
+first dryrun shows what the first run would do. When the files on the node
+are the ones the containers were created from, that is nothing, and the run
+keeps the same containers.
+
+### Two project directories with the same last name
+
+Supply `compose_project_name` in every `docker_compose_project` task, in
+every state. Give each project
+its own name, even when `/opt/shop/app` and `/opt/blog/app` have the same
+last directory name. MMX checks before each command whether another directory
+has containers with the current task's `compose_project_name`. A shared
+name fails as a configuration error
+and changes nothing.
+
+Docker records only a project's name on its named volumes. MMX cannot infer
+which directory owns a volume when no container remains. MMX can discover
+named volumes for removal only while it can load the project's Compose files
+or find its containers; the project name alone does not find volumes after
+both are gone. Two directories given the same Compose project name remain
+one project to
+Compose.
+
+### Services that change together with others
+
+- **A service that depends on a changed one.** When Compose recreates a
+  service, it also acts on a service that depends on it with
+  `restart: true`. Compose 2.26 recreates the dependent service too. Later
+  versions stop and start the dependent service, and the task reports the
+  dependent service `started`. A dryrun
+  predicts what the node's version does.
+- **A changed network or volume definition.** Current Compose versions (2.35
+  and later in MMX's tests) replace a network whose definition in the
+  Compose file changed: they stop the project's containers, replace the
+  network, and start the containers again. The task reports the services
+  whose containers restarted `started`. A dryrun predicts the container
+  restarts needed to replace the network. Compose 2.26 keeps the network as it
+  is. No Compose version replaces a named volume that exists, because its
+  data would be lost: newer versions ask first, and MMX never answers. To
+  apply a changed volume definition, back up the data, remove the project
+  with `containers_and_named_volumes_removed`, and run the playbook again.
+- **After an upgrade of Compose.** Two Compose versions can give the same
+  definition different hashes; 2.40 and 5.6 do. After such an upgrade,
+  `docker compose up` recreates every container once, and so does the task.
+  A dryrun says why: the service's `reason` names the Compose version that
+  made the container and the one the node has now.
+- **An image for several platforms.** In Docker's containerd image store, the
+  ID of such an image changes when the image of any platform changes. Docker
+  Compose 5 keeps a container whose image for its own platform stayed the
+  same, and MMX then reports the service unchanged too.
+- **A service that ends by itself.** A service that runs once and ends, such
+  as a database migration, is not running at the next run. Compose starts
+  the service that runs once again with every `docker compose up`.
+  So the task reports the service that runs once
+  `started` and changed on every run.
+- **Services with several containers.** A service with `deploy.replicas` or
+  `scale` is unchanged when it has that many containers and Compose keeps
+  each one. When Compose increases a service's container count, the task
+  reports the service `created`. When Compose decreases the container count,
+  the task reports the service `removed`.
+- **Containers that `docker compose run` started.** Containers started by
+  `docker compose run` belong to no service's set. The `running` state
+  leaves containers started by `docker compose run` alone.
+  The `stopped`, `containers_removed_named_volumes_kept`, and
+  `containers_and_named_volumes_removed` states stop or remove containers
+  started by `docker compose run` with the project.
+
+### Removal
+
+A removal that is run again reports unchanged: the three states other than
+`running` are satisfied when the project has no containers. Because MMX finds
+the project's containers by the directory that Compose records on each of
+them, this also holds after the Compose file, the directory, or Docker
+itself is gone, and containers that are left when the directory is gone, or
+whose service has left the Compose file, are still stopped or removed with
+the others.
+
+**Which named volumes go.** `containers_and_named_volumes_removed` deletes
+the named volumes that the Compose file declares. A dryrun lists the
+declared named volumes to delete in the task's `reason`. A run lists the
+declared named volumes deleted. The task also removes and lists declared
+named volumes after containers were removed earlier, as long as Compose can
+load the Compose file. A volume that the Compose file marks `external: true` is
+never deleted.
+
+**A Compose file that is gone or that Compose cannot load.** A removal does
+not need the project's files. When the Compose file is gone, or Compose
+cannot load it, for example because an environment file that it names was
+deleted first or a run stopped halfway, MMX removes the project by the name
+that its containers carry, and the `reason` says that the files could not be
+loaded. The volumes that go are then those that Compose labelled with the
+project's name when it created them, and the dryrun and the run name them
+too. Without loadable files and without containers, MMX cannot know the
+project's volumes and reports unchanged.
+
+## Errors and what they mean
+
+Every reason starts with `docker_compose_project`.
+
+| The reason holds | What the reason means, and what to do |
+|---|---|
+| `the program docker is not installed; install Docker in an earlier node task` | Docker is not on the node. Install Docker in an earlier node task. See [Set up](#set-up). The failed `docker_compose_project` task is not tried again. A dryrun reports the `docker_compose_project` task `not_checked`. |
+| `the Docker Compose plugin is not installed (the docker command has no compose command)` | The node has the `docker` command but no Compose plugin. Install the Docker Compose plugin in an earlier node task, for example the package `docker-compose-plugin`. |
+| `the Docker daemon does not answer (...)` | The daemon is not installed, not started, or does not answer. Start it in an earlier node task, for example with `systemd_service` and `name: docker`. On the Red Hat family 10, read [the running kernel](#set-up) in Set up. |
+| `Docker Compose 2.24.0 is installed, and MMX needs Docker Compose 2.26.1 or newer` | Install a newer Compose plugin in an earlier node task. |
+| `the Compose file /opt/shop/compose.yaml does not exist; an earlier node task, such as a file task, may create it` | Write the Compose file with a `file` task before the `docker_compose_project` task. |
+| `the project of /opt/shop/app and the project of /opt/blog/app have the same project name, app` | Two project directories have one project name. MMX changed nothing, and the task is not tried again. Give each project its own `compose_project_name`. |
+| `state: stopped accepts only compose_project_dir, compose_files, and compose_project_name; remove pull_images` | A state other than `running` has a field that only `running` uses. MMX rejects the MMX project during loading. Remove the field named in the error. |
+| `compose_project_name is required in every state` | Add the unique Compose project name used by every task managing the Compose project of the failing task. MMX never infers the Compose project name from a directory. |
+| `state: running needs pull_images: when_missing or always` and `state: running needs containers_of_removed_services: remove or keep` | The `pull_images` and `containers_of_removed_services` fields have no defaults. Supply the required field named in the error message. |
+| In a dryrun: `MMX cannot tell what a run would do, because Docker Compose's own dry run failed: ...` or `... printed a line that MMX does not know: ...` | The task is `not_checked`. A run is not affected. See [When a dryrun cannot tell](#when-a-dryrun-cannot-tell). |
+| In a dryrun: `MMX cannot tell whether a run recreates the containers of service web: the node no longer has their image ...` | The node no longer has the image of a container; only the run's pull can tell. |
+| From `wait_for`: `the container ... declares no health check, so Docker never reports it healthy` | Declare a health check in the image, the `docker run` command, or the Compose file, or wait for a port or a url instead. |
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, AlmaLinux 10.
+
+The suite `tests/integration/docker_containers.py` runs in a virtual machine
+on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10. The suite covers `docker_compose_project`,
+`docker_image`, and the `wait_for` forms `docker_container_is_healthy` and
+`docker_compose_project_is_ready`:
+
+| Distribution | Docker | Docker Compose | Source of Docker and Docker Compose packages | Image store |
+|---|---|---|---|---|
+| Debian 12 | 29.9 | 5.6.0 | Docker's repository | containerd |
+| Debian 13 | 26.1.5 | 2.26.1 | Debian's own packages | classic |
+| Ubuntu 24.04 | 29.9 | 5.6.0 | Docker's repository | containerd |
+| Ubuntu 26.04 | 29.1.3 | 2.40.3 | Ubuntu's own packages | not recorded |
+| Rocky Linux 9 | 29.9 | 5.6 and 5.7 | Docker's repository | containerd |
+| AlmaLinux 10 | 29.9 | 5.6 and 5.7 | Docker's repository | containerd |
+
+The suite also passed on Hetzner Cloud servers with Debian 13.
+
+Not verified in a suite: Docker Compose between 2.26.1 and 2.40.3 and from
+5.0 to 5.5; the form of their dry run's lines was measured by hand on ten
+versions. Pulling an image from a public registry with a separate
+authentication service, such as Docker Hub or GitHub's registry, is also
+not verified in a suite. The suite pulls from a test image registry on the
+guest.
+
+## Why it works this way
+
+- **The Compose file is the declared thing.** The Compose file already has
+  every container setting, and Compose already compares a container with its
+  definition correctly. A module with container settings of MMX's own would
+  duplicate Compose's settings and container comparison, and miss settings.
+- **Docker and Podman have separate modules.** They work differently on the
+  server: Docker has a daemon and Compose, Podman has systemd units. A shared
+  name would hide whether Docker or Podman runs. Podman's containers are
+  written with
+  [`podman_quadlet`](podman_quadlet.md).
+- **`pull_images` has no default.** The choice decides whether a rerun
+  deploys new software, so it must be on the page. A moved tag is a change
+  outside the project, like a moved Git branch; `always` on the task is where
+  a reader sees that the task follows it.
+- **`containers_of_removed_services` has no default.** `remove` deletes a
+  container, `keep` leaves one running that the Compose file no longer
+  describes. The `remove` and `keep` choices are unsafe to assume as defaults.
+- **The removal states say whether data stays.** A reader must see from the
+  one line `state: containers_and_named_volumes_removed` that data is
+  deleted.
+- **Every state requires `compose_project_name`.** Directory names can collide,
+  and Docker records no directory on a named volume. An explicit project
+  name prevents a hidden guess about container and volume ownership, following
+  [required settings](../../docs/changing-mmx/design/modules.md#a-setting-with-no-safe-guess-is-required).
+- **`compose_files` accepts relative paths inside the project directory.**
+  Splitting Compose definitions into subdirectories is ordinary use. A `..`
+  path that leaves the directory is refused because the task names one project directory.
+- **The entries of `registry_logins` are `registry`, `registry_username`, and
+  `registry_password`.** The line `password: "{{ ... }}"` alone does not say
+  whose password it is, and the image modules already say
+  `registry_username` and `registry_password`.
+- **A changed mounted file is followed by a command the author writes.** MMX
+  does not read the Compose file to work out which container mounts which
+  file. The reader sees which container reloads and why, and one mechanism,
+  the command record, remembers what follows a change.
+- **Health is a `wait_for` in `verify`.** A failed health check must not
+  repeat or hide a start that succeeded. The task that starts the containers
+  reports what it did to them; the wait reports whether the application
+  works.
+- **`docker_compose_project_is_ready` counts a container without a health
+  check as ready when it runs, or when it ended with exit code 0 and its
+  restart policy does not start it again.** A service that runs once and
+  ends, such as a database migration, is normal in a Compose project;
+  without this rule such a project could never pass the wait. The limit: a
+  long-running service without a health check and without a restart policy
+  that ends with exit code 0 counts as completed too, so such a service needs
+  a health check or a restart policy.
+- **The task fails when a container that carries its project name belongs to
+  another directory.** Two directories with the same last part would
+  otherwise remove each other's containers and volumes, and the result would
+  name only the services of the task's intended Compose project.
+- **A removal does not depend on Compose files that load.** A removal
+  playbook that deleted an environment file first, or a run that stopped
+  halfway, must not block the removal; and no volume may be deleted without
+  being named.
+- **After a `docker ... inspect` that fails, MMX asks the daemon for its
+  version before it takes "not found" for the answer.** The failed
+  `docker ... inspect` command returns failure for a missing resource and
+  for a daemon that does not answer. Only the inspect command's error text
+  distinguishes a missing resource from an unavailable daemon. A daemon that
+  stopped
+  between two commands must not turn a removal into "unchanged".
+- **A dryrun asks Compose's own dry run.** Only Compose knows its rule for
+  recreating a container: a hash of the service's definition with the values
+  of its environment files, the image, the services it depends on, and its
+  networks, and the rule differs between versions. MMX's own comparison was
+  wrong where it matters most. For a service with `env_file`,
+  `docker compose config --hash` prints a different hash from the hash
+  `up` stores on the container. The hash difference was measured on
+  Compose 2.23.3 to 2.40.3 and on 5.0.0 and 5.1.0.
+
+  MMX's own comparison therefore predicted recreation for an existing
+  project newly managed by MMX, although a run changed nothing.
+  MMX's own comparison also missed Compose 2.26 recreating dependent
+  services together with changed dependencies.
+  The comparison also missed later Compose versions replacing changed networks.
+  For adopted projects, dependent services, and changed networks, Compose's
+  dry run matched the run on 2.26.1, 2.29.7, 2.35.1, 2.40.3, and 5.6.0.
+- **Reading the dry run's text is safe.** Reading Compose's dryrun text is
+  an exception to "never read a tool's progress text", for three reasons.
+  The dry run is Compose's documented mode that changes nothing. In about
+  200 measured dry runs, no container, image, network, or volume changed.
+  The only files written were buildx state files on Compose 2.
+  MMX directs the buildx files to a private directory under `/run`, then
+  removes the directory.
+
+  Text is the only Compose dryrun output
+  format available across all supported versions. The `--progress json`
+  option exists from 2.29.0, not on 2.26.1, and the JSON fields changed with
+  5.0.0. And a line that MMX does not know, or a
+  container that the lines do not account for, makes the task `not_checked`,
+  never a prediction.
+- **`--no-start` and `--pull never`.** The start step of a dry run waits for
+  the real containers that a service depends on: on Compose 2 it never
+  returns when a service must complete first
+  (`condition: service_completed_successfully`) and its container is new,
+  and it fails while such a container is unhealthy. And the dry run treats
+  each image that it pulls as another image and would recreate each
+  container.
+- **A dryrun's actions are `would_create`, `would_recreate`, and so on.**
+  `action: recreated` in a dryrun reads as done.
+- **Docker Compose 2.26.1 or newer.** Docker Compose 2.26.1 is the lowest
+  version that a supported distribution packages (Debian 13's
+  `docker-compose`). Docker Compose 2.26.1 is also the lowest version MMX
+  is tested with. Older versions have faults that break the module's
+  promises.
+
+  Compose 2.8.0 to 2.12.2 leave the image label off a container when `up`
+  itself pulled the image. Then the next `up` recreates the container, so a
+  rerun is not unchanged. Before Compose 2.8.0, `up` has no
+  `--pull` option to apply the task's `pull_images` choice.
+- **No module installs Docker.** A module that installed Docker would hide
+  five existing node tasks behind a name. The list in [Set up](#set-up)
+  shows the five Docker setup node tasks, and each stays visible:
+  the package source, the version pattern, the daemon's settings.

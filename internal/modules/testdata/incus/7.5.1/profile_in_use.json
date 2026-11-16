@@ -1,0 +1,21 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"config": {
+			"limits.cpu": "1"
+		},
+		"description": "Limits for web",
+		"devices": {},
+		"name": "web",
+		"used_by": [
+			"/1.0/instances/shop-test"
+		],
+		"project": "default"
+	}
+}
+

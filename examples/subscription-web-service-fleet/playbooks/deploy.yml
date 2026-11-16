@@ -1,0 +1,121 @@
+# Deploy a release of the main application (API, web pages, and workers) and
+# of the brand sites. The release is a Git tag or branch of each repository.
+#
+#   mmx run deploy --inventory production --var release=v2
+#   mmx run deploy --inventory production --var release=v2 --only-fleet-stages brand_sites
+#
+# Going back is another run with the older release.
+command_line_vars:
+  release:
+    type: string
+
+fleet_stages:
+  # The API and the web pages, half of the servers at a time, so the other
+  # half answers while the first restarts.
+  - id: main_application
+    nodes: main_application_servers
+    max_nodes_at_once: "50%"
+    on_node_failure: stop_run
+
+    node_tasks:
+      - role: application_release
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+          repository: "{{ .vars.main_application_repository }}"
+          release: "{{ .vars.release }}"
+          gemfile_directories: ["", "/api"]
+          shared_files: [config/database.yml, config/services.yml]
+          passenger_application_directories: ["", "/api"]
+          systemd_units_to_restart: []
+
+      # Passenger notices tmp/restart.txt on the next request.
+      - wait_for:
+          url_responds: http://127.0.0.1:8080/v1/ping
+          response_body_contains: "api {{ .vars.release }} pong"
+          wait_at_most: 90s
+      - wait_for:
+          url_responds: http://127.0.0.1:8081/
+          response_body_contains: "main_application {{ .vars.release }} /"
+          wait_at_most: 90s
+
+  # The workers run the same release; their target restarts them.
+  - id: main_application_workers
+    nodes: main_application_worker_servers
+    on_node_failure: stop_run
+
+    node_tasks:
+      - role: application_release
+        inputs:
+          application_dir: "{{ .vars.main_application_dir }}"
+          repository: "{{ .vars.main_application_repository }}"
+          release: "{{ .vars.release }}"
+          gemfile_directories: [""]
+          shared_files: [config/database.yml, config/services.yml]
+          passenger_application_directories: []
+          systemd_units_to_restart: [main-application-workers.target]
+
+      - wait_for:
+          command_succeeds: systemctl is-active --quiet main-application-workers-default.service
+          wait_at_most: 30s
+
+  # Each brand site from its own repository, half of the servers at a time.
+  - id: brand_sites
+    nodes: brand_site_servers
+    max_nodes_at_once: "50%"
+    on_node_failure: stop_run
+
+    node_tasks:
+      - loop: "{{ .vars.brand_sites }}"
+        as: site
+        key: "{{ .site.name }}"
+        role: application_release
+        inputs:
+          application_dir: "{{ .vars.applications_dir }}/{{ .site.name }}"
+          repository: "{{ .site.repository }}"
+          release: "{{ .vars.release }}"
+          gemfile_directories: [""]
+          shared_files: []
+          passenger_application_directories: [""]
+          systemd_units_to_restart: []
+
+      - loop: "{{ .vars.brand_sites }}"
+        as: site
+        wait_for:
+          url_responds: "http://127.0.0.1:{{ .site.application_port }}/"
+          response_body_contains: "{{ .site.name }} {{ .vars.release }} /"
+          wait_at_most: 90s
+
+  # The public names answer with the new release through the load balancer,
+  # over HTTPS with the certificate that the load balancer serves.
+  # /etc/hosts (role base_server_setup) resolves the API's and the web
+  # pages' names to the load balancer; curl's --resolve does it for the
+  # brand sites. These commands check anchored response prefixes with grep;
+  # curl verifies the certificate with --cacert.
+  - id: check_through_load_balancer
+    nodes: nginx_load_balancers
+
+    node_tasks:
+      - wait_for:
+          command_succeeds: curl --silent --fail --cacert "$CERTIFICATE" "https://$HOST_NAME/v1/ping" | grep -q "^api $RELEASE pong"
+          env:
+            CERTIFICATE: "{{ .vars.tls_certificate_dir }}/{{ .vars.main_application_certificate_name }}/fullchain.pem"
+            HOST_NAME: "{{ .vars.api_host_name }}"
+            RELEASE: "{{ .vars.release }}"
+          wait_at_most: 60s
+      - wait_for:
+          command_succeeds: curl --silent --fail --cacert "$CERTIFICATE" "https://$HOST_NAME/" | grep -q "^main_application $RELEASE /"
+          env:
+            CERTIFICATE: "{{ .vars.tls_certificate_dir }}/{{ .vars.main_application_certificate_name }}/fullchain.pem"
+            HOST_NAME: "{{ .vars.main_application_host_name }}"
+            RELEASE: "{{ .vars.release }}"
+          wait_at_most: 60s
+      - loop: "{{ .vars.brand_sites }}"
+        as: site
+        wait_for:
+          command_succeeds: curl --silent --fail --cacert "$CERTIFICATE" --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/" | grep -q "^$SITE_NAME $RELEASE /"
+          env:
+            CERTIFICATE: "{{ .vars.tls_certificate_dir }}/{{ .site.domain }}/fullchain.pem"
+            DOMAIN: "{{ .site.domain }}"
+            SITE_NAME: "{{ .site.name }}"
+            RELEASE: "{{ .vars.release }}"
+          wait_at_most: 60s

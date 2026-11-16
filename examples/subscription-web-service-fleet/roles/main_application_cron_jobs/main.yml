@@ -1,0 +1,37 @@
+# The main application's scheduled rake tasks, run by cron as the account
+# deploy in the deployed release. Each job is its own file in /etc/cron.d,
+# named main-application-<job name>.
+inputs:
+  application_dir: {type: string, required: true}
+  server_environment: {type: string, required: true}
+  # Each entry: {name, cron_schedule, rake_task, log_file}.
+  jobs: {type: list, required: true}
+
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: cron, version: newest_when_first_installed}
+
+  - directory:
+      path: /home/deploy/logs
+      owner: deploy
+      group: deploy
+      permissions_mode: "0775"
+
+  # The values reach the command through env, so a rake argument such as
+  # [weekly] passes through unchanged.
+  - loop: "{{ .inputs.jobs }}"
+    as: job
+    cron_job:
+      name: "main-application-{{ .job.name }}"
+      cron_schedule: "{{ .job.cron_schedule }}"
+      run_as_user_account: deploy
+      env:
+        RAILS_ENV: "{{ .inputs.server_environment }}"
+        BUNDLE_DEPLOYMENT: "true"
+        BUNDLE_PATH: vendor/bundle
+        BUNDLE_WITHOUT: "development:test"
+        APPLICATION_DIR: "{{ .inputs.application_dir }}"
+        RAKE_TASK: "{{ .job.rake_task }}"
+        LOG_FILE: "/home/deploy/logs/{{ .job.log_file }}"
+      command: cd "$APPLICATION_DIR/current" && bundle exec rake "$RAKE_TASK" >> "$LOG_FILE" 2>&1

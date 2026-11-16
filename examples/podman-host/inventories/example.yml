@@ -1,0 +1,12 @@
+nodes:
+  app:
+    address: app.example.com
+    ssh_user: deploy
+
+vars:
+  # The registry that the node pulls its images from. For a registry inside
+  # your own network that serves plain HTTP, without TLS, write true.
+  image_registry_location: registry.example.com
+  image_registry_serves_plain_http: false
+  # The ordinary account that runs containers without root.
+  container_account: shop

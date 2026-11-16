@@ -1,0 +1,53 @@
+summary: Restores a PostgreSQL cluster with pgBackRest into an empty or missing data directory, to the end of the archive or to a chosen time, starts it, and waits until its recovery ends.
+inputs:
+  stanza:
+    type: string
+    required: true
+    description: The stanza to restore, as in the configuration file, such as main.
+  config_file:
+    type: string
+    required: true
+    description: The configuration file that pgBackRest reads, such as /etc/pgbackrest/pgbackrest.conf.
+  data_directory:
+    type: string
+    required: true
+    description: Where the restored cluster goes, an empty or missing directory. Use the same path as on the server that was backed up, because pg_autoctl writes absolute paths, such as its TLS files, into the configuration that the restore brings back. The data directory of a cluster of Debian's own tools, which pg_lsclusters lists, such as /var/lib/postgresql/18/main, works too; its service then starts the restored cluster. Any other restored cluster starts on its local socket only, whatever address its restored configuration names. MMX records the target of the module's restore in /var/lib/mmx/pgbackrest_restore_targets/, and a later run with the same stanza, recover_to, and read_repository_as_of is unchanged, while one with another target fails.
+  postgresql_major_version:
+    type: integer
+    required: true
+    description: The major version of PostgreSQL whose programs restore and start the cluster, such as 18; it must be the stanza's version.
+  recover_to:
+    type: string
+    required: true
+    description: latest, to replay the whole archive, or a time with its time zone, such as 2026-11-03 13:01:00+00, to stop there.
+  read_repository_as_of:
+    type: string
+    required: false
+    description: A time with its time zone, such as 2026-11-03 12:00:00+00. pgBackRest then reads the repository as it stood at that time, so files that were deleted or overwritten later do not matter in a bucket that keeps versions. Needs pgBackRest 2.54 or newer and repository.
+  repository:
+    type: integer
+    required: false
+    description: The number of the repository in the configuration file to restore from, such as 1. Required with read_repository_as_of.
+outputs:
+  restored:
+    type: boolean
+    description: true when the task restored the cluster, or in a dryrun would restore it.
+examples:
+  - description: Restore the stanza main to 13:01 UTC on 3 November 2026, as before a mistake.
+    config: |
+      pgbackrest_restore:
+        stanza: main
+        config_file: /etc/pgbackrest/pgbackrest.conf
+        data_directory: /var/lib/postgresql/18/main
+        postgresql_major_version: 18
+        recover_to: "2026-11-03 13:01:00+00"
+  - description: Restore the whole archive of the repository 1 as it stood at noon, before an attacker deleted files from it.
+    config: |
+      pgbackrest_restore:
+        stanza: main
+        config_file: /etc/pgbackrest/pgbackrest.conf
+        data_directory: /var/lib/postgresql/18/main
+        postgresql_major_version: 18
+        recover_to: latest
+        read_repository_as_of: "2026-11-03 12:00:00+00"
+        repository: 1

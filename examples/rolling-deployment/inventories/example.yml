@@ -1,0 +1,8 @@
+nodes:
+  app01: {address: app01.example.com, ssh_user: root}
+  app02: {address: app02.example.com, ssh_user: root}
+  loadbalancer: {address: lb.example.com, ssh_user: root}
+
+groups:
+  app_servers:
+    nodes: [app01, app02]

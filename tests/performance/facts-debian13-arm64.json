@@ -1,0 +1,315 @@
+{
+ "collected_at": "2026-09-26T15:47:48.851641411Z",
+ "values": {
+  "arch": "arm64",
+  "boot_id": "a9b46494-4fa5-4257-9856-ba2fd364f959",
+  "cpu": {
+   "count": 2
+  },
+  "hostname": "lima-mmx-dev",
+  "kernel": {
+   "release": "6.12.95+deb13-cloud-arm64"
+  },
+  "memory": {
+   "swap_total_bytes": 0,
+   "total_bytes": 2071977984,
+   "total_mib": 1975
+  },
+  "name": "test",
+  "network": {
+   "default_routes": [
+    {
+     "family": "ipv4",
+     "gateway": "192.168.5.2",
+     "interface": "eth0",
+     "metric": 200
+    }
+   ],
+   "interfaces": {
+    "eth0": {
+     "addresses": [
+      {
+       "address": "192.168.5.15",
+       "family": "ipv4",
+       "prefix_length": 24
+      },
+      {
+       "address": "fe80::5055:55ff:fe9f:b8e1",
+       "family": "ipv6",
+       "prefix_length": 64
+      }
+     ],
+     "index": 2,
+     "mac": "52:55:55:9f:b8:e1",
+     "mtu": 1500
+    },
+    "lo": {
+     "addresses": [
+      {
+       "address": "127.0.0.1",
+       "family": "ipv4",
+       "prefix_length": 8
+      },
+      {
+       "address": "::1",
+       "family": "ipv6",
+       "prefix_length": 128
+      }
+     ],
+     "index": 1,
+     "mac": "",
+     "mtu": 65536
+    }
+   }
+  },
+  "os": {
+   "bug_report_url": "https://bugs.debian.org/",
+   "debian_version_full": "13.6",
+   "home_url": "https://www.debian.org/",
+   "id": "debian",
+   "name": "Debian GNU/Linux",
+   "pretty_name": "Debian GNU/Linux 13 (trixie)",
+   "support_url": "https://www.debian.org/support",
+   "version": "13 (trixie)",
+   "version_codename": "trixie",
+   "version_id": "13"
+  },
+  "storage": {
+   "mounts": [
+    {
+     "available_bytes": 2746744832,
+     "filesystem": "ext4",
+     "id": 31,
+     "path": "/",
+     "read_only": false,
+     "source": "/dev/vda1",
+     "total_bytes": 4016263168
+    },
+    {
+     "available_bytes": 123086848,
+     "filesystem": "vfat",
+     "id": 50,
+     "path": "/boot/efi",
+     "read_only": false,
+     "source": "/dev/vda15",
+     "total_bytes": 132872192
+    },
+    {
+     "filesystem": "devtmpfs",
+     "id": 28,
+     "path": "/dev",
+     "read_only": false,
+     "source": "udev"
+    },
+    {
+     "filesystem": "hugetlbfs",
+     "id": 39,
+     "path": "/dev/hugepages",
+     "read_only": false,
+     "source": "hugetlbfs"
+    },
+    {
+     "filesystem": "mqueue",
+     "id": 40,
+     "path": "/dev/mqueue",
+     "read_only": false,
+     "source": "mqueue"
+    },
+    {
+     "filesystem": "devpts",
+     "id": 29,
+     "path": "/dev/pts",
+     "read_only": false,
+     "source": "devpts"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 33,
+     "path": "/dev/shm",
+     "read_only": false,
+     "source": "tmpfs"
+    },
+    {
+     "available_bytes": 0,
+     "filesystem": "iso9660",
+     "id": 67,
+     "path": "/mnt/lima-cidata",
+     "read_only": true,
+     "source": "/dev/vdb",
+     "total_bytes": 19912704
+    },
+    {
+     "filesystem": "proc",
+     "id": 27,
+     "path": "/proc",
+     "read_only": false,
+     "source": "proc"
+    },
+    {
+     "filesystem": "autofs",
+     "id": 38,
+     "path": "/proc/sys/fs/binfmt_misc",
+     "read_only": false,
+     "source": "systemd-1"
+    },
+    {
+     "filesystem": "binfmt_misc",
+     "id": 54,
+     "path": "/proc/sys/fs/binfmt_misc",
+     "read_only": false,
+     "source": "binfmt_misc"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 30,
+     "path": "/run",
+     "read_only": false,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 140,
+     "path": "/run/credentials/getty@tty1.service",
+     "read_only": true,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 319,
+     "path": "/run/credentials/serial-getty@hvc0.service",
+     "read_only": true,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 66,
+     "path": "/run/credentials/systemd-journald.service",
+     "read_only": true,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 142,
+     "path": "/run/credentials/systemd-networkd.service",
+     "read_only": true,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 74,
+     "path": "/run/credentials/systemd-resolved.service",
+     "read_only": true,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 42,
+     "path": "/run/lock",
+     "read_only": false,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 72,
+     "path": "/run/user/1006",
+     "read_only": false,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 182,
+     "path": "/run/user/1007",
+     "read_only": false,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 61,
+     "path": "/run/user/501",
+     "read_only": false,
+     "source": "tmpfs"
+    },
+    {
+     "filesystem": "sysfs",
+     "id": 26,
+     "path": "/sys",
+     "read_only": false,
+     "source": "sysfs"
+    },
+    {
+     "filesystem": "efivarfs",
+     "id": 36,
+     "path": "/sys/firmware/efi/efivars",
+     "read_only": false,
+     "source": "efivarfs"
+    },
+    {
+     "filesystem": "bpf",
+     "id": 37,
+     "path": "/sys/fs/bpf",
+     "read_only": false,
+     "source": "bpf"
+    },
+    {
+     "filesystem": "cgroup2",
+     "id": 34,
+     "path": "/sys/fs/cgroup",
+     "read_only": false,
+     "source": "cgroup2"
+    },
+    {
+     "filesystem": "fusectl",
+     "id": 45,
+     "path": "/sys/fs/fuse/connections",
+     "read_only": false,
+     "source": "fusectl"
+    },
+    {
+     "filesystem": "pstore",
+     "id": 35,
+     "path": "/sys/fs/pstore",
+     "read_only": false,
+     "source": "pstore"
+    },
+    {
+     "filesystem": "configfs",
+     "id": 46,
+     "path": "/sys/kernel/config",
+     "read_only": false,
+     "source": "configfs"
+    },
+    {
+     "filesystem": "debugfs",
+     "id": 41,
+     "path": "/sys/kernel/debug",
+     "read_only": false,
+     "source": "debugfs"
+    },
+    {
+     "filesystem": "securityfs",
+     "id": 32,
+     "path": "/sys/kernel/security",
+     "read_only": false,
+     "source": "securityfs"
+    },
+    {
+     "filesystem": "tracefs",
+     "id": 43,
+     "path": "/sys/kernel/tracing",
+     "read_only": false,
+     "source": "tracefs"
+    },
+    {
+     "filesystem": "tmpfs",
+     "id": 44,
+     "path": "/tmp",
+     "read_only": false,
+     "source": "tmpfs"
+    }
+   ]
+  },
+  "systemd": {
+   "available": true
+  }
+ }
+}

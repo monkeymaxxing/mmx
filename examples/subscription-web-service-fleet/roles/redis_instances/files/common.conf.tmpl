@@ -1,0 +1,20 @@
+# Managed by MMX (role redis_instances): settings every instance includes.
+# Every other setting is Redis's default.
+
+# The application servers connect over the internal network.
+bind {{ .node.network.default_ipv4_address }} 127.0.0.1
+# The application servers connect without a password; the firewall admits
+# only the company's own networks. Redis 7 admits only the loopback in
+# protected mode whenever the default user has no password, also with a bind
+# line.
+protected-mode no
+
+# systemd starts Redis in the foreground and watches the process itself.
+daemonize no
+supervised no
+
+# Where the dumps and the append-only logs live; the default is the working
+# directory.
+dir /var/lib/redis
+# Starts, saves, and errors, without a line for every client.
+loglevel notice

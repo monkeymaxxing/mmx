@@ -1,0 +1,38 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"auto_update": false,
+		"properties": {
+			"description": "MMX test image",
+			"os": "mmxtest",
+			"release": "1"
+		},
+		"public": false,
+		"expires_at": "0001-01-01T00:00:00Z",
+		"profiles": [
+			"default"
+		],
+		"aliases": [
+			{
+				"name": "mmx-test",
+				"description": ""
+			}
+		],
+		"architecture": "x86_64",
+		"cached": false,
+		"filename": "image.tar.gz",
+		"fingerprint": "5faf5ada9c40bb7005d91a6d1af5232e6a406227a618bf4da1909ec8d0cca30b",
+		"size": 2736200,
+		"type": "container",
+		"created_at": "2025-10-09T08:53:20Z",
+		"last_used_at": "0001-01-01T00:00:00Z",
+		"uploaded_at": "2026-10-10T09:51:06.126035066Z",
+		"project": "default"
+	}
+}
+

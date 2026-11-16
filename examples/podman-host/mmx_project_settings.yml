@@ -1,0 +1,2 @@
+project_name: podman_host
+default_inventory: example

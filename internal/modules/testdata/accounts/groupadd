@@ -1,0 +1,12 @@
+#!/bin/sh
+# A stand-in for groupadd [--gid N] -- NAME.
+echo "groupadd $*" >> "$MMX_FAKE_ACCOUNTS/calls"
+gid=$((2000 + $(wc -l < "$MMX_FAKE_ACCOUNTS/group")))
+while [ $# -gt 0 ]; do
+  case $1 in
+    --gid) gid=$2; shift ;;
+    --) name=$2; shift ;;
+  esac
+  shift
+done
+echo "$name:x:$gid:" >> "$MMX_FAKE_ACCOUNTS/group"

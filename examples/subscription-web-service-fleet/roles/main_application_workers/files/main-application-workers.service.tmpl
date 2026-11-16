@@ -1,0 +1,36 @@
+# Managed by MMX (role main_application_workers): the workers of the queue
+# group {{ .worker.key }}.
+{{- $group := .worker.key }}
+{{- $queue_group := index .inputs.worker_queue_groups $group }}
+[Unit]
+Description=Workers of the main application, queue group {{ $group }}
+# The workers connect to MySQL and Redis on other servers.
+Wants=network-online.target
+After=network-online.target
+PartOf=main-application-workers.target
+
+[Service]
+User=deploy
+WorkingDirectory={{ .inputs.application_dir }}/current
+Environment=RAILS_ENV={{ .inputs.server_environment }}
+# The number of worker processes of this queue group.
+Environment=WORKERS={{ .worker.value }}
+{{- if hasKey $queue_group "queues" }}
+Environment=QUEUES={{ join "," $queue_group.queues }}
+{{- else }}
+Environment=QUEUE_GROUP={{ $group }}
+{{- end }}
+# The settings that Bundler installed the release's gems with.
+Environment=BUNDLE_DEPLOYMENT=true
+Environment=BUNDLE_PATH=vendor/bundle
+Environment=BUNDLE_WITHOUT=development:test
+
+ExecStart=/usr/bin/bundle exec rake jobs:work
+StandardOutput=append:/home/deploy/logs/main-application-workers-{{ $group }}.log
+StandardError=inherit
+# A worker that fails starts again after five seconds.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=main-application-workers.target

@@ -1,0 +1,82 @@
+summary: Manages one user of a MongoDB server, with its password and its roles, through MongoDB's shell mongosh on the server's node.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The user's name, such as shop.
+  database:
+    type: string
+    required: true
+    description: The database that holds the user, which is the database the user logs in to. A server's first user must be in the database admin.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: present (the default) creates the user or changes it; absent removes the user and keeps every database and its data. absent accepts no password, roles, or roles_not_listed.
+  password:
+    type: string
+    required: false
+    private_value: true
+    description: The user's password. The module logs in once as the user to compare it, and sets it only when the server refuses that login. Omitted, the password of an existing user is not touched, and the task creates no user. For a user that does not exist, a run then fails and a dryrun reports the task not checked.
+  roles:
+    type: any
+    required: false
+    description: "The user's roles as a list; each entry names a role and the database it applies to, such as {role: readWrite, database: shop}. Needs roles_not_listed. Omitted, the roles of an existing user are not touched, and a new user gets no role."
+  roles_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: What happens to a role that the user has and roles does not list; remove takes it away from the user, keep leaves it. Required with roles.
+  login_user:
+    type: string
+    required: false
+    private_value: true
+    description: The user that the module logs in as, where the server needs a login; it must be allowed to manage users, as a user with the role root is. A server without access control needs none.
+  login_password:
+    type: string
+    required: false
+    private_value: true
+    description: The password of login_user. Required with login_user.
+  login_database:
+    type: string
+    required: false
+    description: The database that holds login_user. The default is admin.
+  mongodb_connection_string:
+    type: string
+    required: false
+    description: "How mongosh reaches the server, as a MongoDB connection string. The default is mongodb://127.0.0.1:27017/?directConnection=true. It must hold no user name and no password."
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the user, or in a dryrun would create it.
+examples:
+  - description: The user shop of an application, with its password from a secret and the right to read and write the database shop and nothing else.
+    config: |
+      mongodb_user:
+        name: shop
+        database: shop
+        password: "{{ .secrets.shop_mongodb_password }}"
+        roles:
+          - {role: readWrite, database: shop}
+        roles_not_listed: remove
+        login_user: admin
+        login_password: "{{ .secrets.mongodb_admin_password }}"
+  - description: The first user of a new server with access control, the administrator. The task names itself as its login, so that its later runs can log in.
+    config: |
+      mongodb_user:
+        name: admin
+        database: admin
+        password: "{{ .secrets.mongodb_admin_password }}"
+        roles:
+          - {role: root, database: admin}
+        roles_not_listed: remove
+        login_user: admin
+        login_password: "{{ .secrets.mongodb_admin_password }}"
+  - description: Remove the user reports from the database shop. A removal takes no password and no roles.
+    config: |
+      mongodb_user:
+        name: reports
+        database: shop
+        state: absent
+        login_user: admin
+        login_password: "{{ .secrets.mongodb_admin_password }}"

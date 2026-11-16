@@ -1,0 +1,85 @@
+# Test scaffolding only: stand-ins for what lives outside the servers in
+# production. Run it once on test machines, after the site playbook:
+#
+#   mmx run test_stand_in_applications
+#
+# - In production the applications' repositories are on the Git host. Here
+#   each application is a tiny Rack application in a bare Git repository on
+#   the application server, with the tags v1 and v2, so that the deploy
+#   playbook clones, installs gems, and switches releases for real.
+# - In production the main application's migrations create its tables. Here
+#   one table with a few rows stands in, so that ClickHouse's hourly copy has
+#   something to copy.
+fleet_stages:
+  - id: test_stand_in_git_repositories
+    nodes: [main_application_servers, brand_site_servers, main_application_worker_servers]
+
+    node_tasks:
+      - directory:
+          path: /home/deploy/test_stand_in_application_sources
+          owner: deploy
+          group: deploy
+      - loop: [main_application, brand_site]
+        as: application
+        directory:
+          path: "/home/deploy/test_stand_in_application_sources/{{ .application }}"
+          source: "files/test_stand_in_applications/{{ .application }}"
+          owner: deploy
+          group: deploy
+      - directory:
+          path: /home/deploy/test_stand_in_git_repositories
+          owner: deploy
+          group: deploy
+
+      # One commit for each release, each tagged; then a bare clone, which is
+      # what the deploy playbook's git tasks fetch from. Both brand sites
+      # come from the one stand-in application, as in production.
+      - loop:
+          - {repository: main_application, source: main_application}
+          - {repository: gardening, source: brand_site}
+          - {repository: cooking, source: brand_site}
+        as: stand_in
+        shell:
+          run_as_user_account: deploy
+          script: |
+            set -euo pipefail
+            work=$(mktemp -d)
+            trap 'rm -rf "$work"' EXIT
+            cp -a "$SOURCE_DIR/." "$work/"
+            cd "$work"
+            git init --quiet --initial-branch=main
+            git config user.name "Stand-in developer"
+            git config user.email "developer@example.com"
+            for release in v1 v2; do
+              echo "$release" > RELEASE
+              git add --all
+              git commit --quiet --message "Release $release"
+              git tag "$release"
+            done
+            git clone --quiet --bare "$work" "$REPOSITORY.partial"
+            mv "$REPOSITORY.partial" "$REPOSITORY"
+          env:
+            SOURCE_DIR: "/home/deploy/test_stand_in_application_sources/{{ .stand_in.source }}"
+            REPOSITORY: "/home/deploy/test_stand_in_git_repositories/{{ .stand_in.repository }}.git"
+          skip_if_this_path_exists: "/home/deploy/test_stand_in_git_repositories/{{ .stand_in.repository }}.git"
+
+  - id: test_stand_in_database_table
+    nodes: mysql_servers
+
+    node_tasks:
+      - shell:
+          script: |
+            mysql "$DATABASE" <<'SQL'
+            CREATE TABLE IF NOT EXISTS page_views (
+              id BIGINT UNSIGNED PRIMARY KEY,
+              account_id BIGINT UNSIGNED NOT NULL,
+              viewed_at DATETIME NOT NULL
+            );
+            INSERT IGNORE INTO page_views VALUES
+              (1, 101, '2026-10-01 10:00:00'),
+              (2, 102, '2026-10-01 11:00:00'),
+              (3, 101, '2026-10-02 09:30:00');
+            SQL
+          env: {DATABASE: "{{ .vars.main_application_database_name }}"}
+          # The guard sees the task's env too.
+          skip_if_this_command_succeeds: mysql --skip-column-names "$DATABASE" -e 'SELECT COUNT(*) FROM page_views' 2> /dev/null | grep -qx 3

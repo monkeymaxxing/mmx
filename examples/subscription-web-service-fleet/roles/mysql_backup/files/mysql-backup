@@ -1,0 +1,20 @@
+#!/bin/bash
+# Managed by MMX (role mysql_backup). A consistent dump of every MySQL
+# database, compressed, kept for MYSQL_BACKUP_RETENTION_DAYS days.
+set -euo pipefail
+
+backup_dir=/var/backups/mysql
+retention_days="${MYSQL_BACKUP_RETENTION_DAYS:-7}"
+backup_file="$backup_dir/all-databases-$(date +%Y-%m-%d-%H%M%S).sql.gz"
+
+# Be gentle with the disks and the processor while the server works.
+ionice -c2 -n7 -p $$ > /dev/null
+renice -n 1 -p $$ > /dev/null
+
+mysqldump --single-transaction --routines --events --triggers \
+  --set-gtid-purged=OFF --all-databases \
+  | gzip > "$backup_file.partial"
+mv "$backup_file.partial" "$backup_file"
+
+find "$backup_dir" -name 'all-databases-*.sql.gz' -mtime +"$retention_days" -delete
+echo "MySQL backup written to $backup_file"

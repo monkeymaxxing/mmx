@@ -1,0 +1,4 @@
+nodes:
+  web:
+    address: replace-with-your-node
+    ssh_user: root

@@ -1,0 +1,9 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - role: worker
+        inputs:
+          message: Hello from MMX
+          label: first

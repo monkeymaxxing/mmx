@@ -1,0 +1,47 @@
+# The fleet benchmark workload; mmx/mmx.yml does the same work.
+- hosts: fleet
+  gather_facts: "{{ gather | default(true) }}"
+  vars:
+    version: "1"
+  tasks:
+    - ansible.builtin.group:
+        name: benchsvc
+        gid: 2001
+    - ansible.builtin.user:
+        name: benchsvc
+        uid: 2001
+        group: benchsvc
+        system: true
+        create_home: false
+    - ansible.builtin.file:
+        path: /var/lib/bench
+        state: directory
+        owner: benchsvc
+        group: benchsvc
+        mode: "0750"
+    - ansible.builtin.file:
+        path: /etc/bench
+        state: directory
+        mode: "0755"
+    - ansible.builtin.template:
+        src: templates/motd.j2
+        dest: /etc/bench-motd
+        mode: "0644"
+    - ansible.builtin.copy:
+        content: "version={{ version }}\n"
+        dest: /etc/bench/app.conf
+        mode: "0644"
+      notify: restart guest
+    - ansible.builtin.meta: flush_handlers
+    - ansible.builtin.uri:
+        url: http://127.0.0.1:8080/
+        status_code: 200
+      register: health
+      until: health.status == 200
+      retries: 20
+      delay: 1
+  handlers:
+    - name: restart guest
+      ansible.builtin.systemd_service:
+        name: benchmark-guest
+        state: restarted

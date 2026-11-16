@@ -1,0 +1,84 @@
+fleet_stages:
+  - id: docker_host
+    nodes: all
+
+    node_tasks:
+      # Docker's own package source. Docker signs its Debian and its Ubuntu
+      # repository with the same key.
+      - apt_repository:
+          name: docker
+          uris: ["https://download.docker.com/linux/{{ .node.distribution.id }}"]
+          suites: ["{{ .node.distribution.codename }}"]
+          components: [stable]
+          signing_key_url: https://download.docker.com/linux/debian/gpg
+          signing_key_sha256: 1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+
+      # The daemon and CLI stay inside one major version. Both rules are
+      # written before apt installs them together.
+      - apt_package:
+          packages:
+            - {name: docker-ce, version: "5:29.*"}
+            - {name: docker-ce-cli, version: "5:29.*"}
+            - {name: containerd.io, version: newest_when_first_installed}
+            - {name: docker-compose-plugin, version: newest_when_first_installed}
+
+      # The package does not start the daemon while it installs. The
+      # systemd_service task starts it with these settings and restarts it
+      # when the file changes; with live-restore the containers keep running
+      # during that restart.
+      - task_block:
+          id: docker_daemon
+          changes:
+            - file:
+                path: /etc/docker/daemon.json
+                permissions_mode: "0644"
+                content: |
+                  {
+                    "log-driver": "json-file",
+                    "log-opts": {"max-size": "50m", "max-file": "3"},
+                    "live-restore": true
+                  }
+          activate:
+            - systemd_service:
+                name: docker
+                state: running
+                start_at_boot: true
+                refresh: restart
+
+      # Anyone in the group docker has root on the server.
+      - user:
+          create_home_directory: false
+          name: deploy
+          supplementary_groups: [docker]
+          supplementary_groups_not_listed: keep
+
+      # Every Sunday at 04:00: delete the images that no container uses and
+      # that are older than seven days. No MMX task deletes an image.
+      - task_block:
+          id: docker_image_cleanup
+          changes:
+            - systemd_unit:
+                name: docker-image-cleanup.service
+                content: |
+                  [Unit]
+                  Description=Delete Docker images that no container uses
+                  Requires=docker.service
+                  After=docker.service
+
+                  [Service]
+                  Type=oneshot
+                  ExecStart=/usr/bin/docker image prune --all --force --filter until=168h
+            - systemd_unit:
+                name: docker-image-cleanup.timer
+                content: |
+                  [Timer]
+                  OnCalendar=Sun 04:00
+                  Persistent=true
+
+                  [Install]
+                  WantedBy=timers.target
+          activate:
+            - systemd_service:
+                name: docker-image-cleanup.timer
+                state: running
+                start_at_boot: true

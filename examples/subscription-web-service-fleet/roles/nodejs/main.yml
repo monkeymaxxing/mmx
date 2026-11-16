@@ -1,0 +1,22 @@
+# Node.js and npm for compiling the applications' assets, from NodeSource's
+# apt repository: one package holds Node.js and npm. Ubuntu's own npm package
+# pulls in about 700 packages.
+inputs:
+  # Such as 22: NodeSource's repository for that major version.
+  nodejs_major_version: {type: integer, required: true}
+
+node_tasks:
+  - apt_repository:
+      name: nodesource
+      uris: ["https://deb.nodesource.com/node_{{ .inputs.nodejs_major_version }}.x"]
+      suites: [nodistro]
+      components: [main]
+      signing_key_url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+      signing_key_sha256: b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d
+
+  - apt_package:
+      packages:
+        - {name: build-essential, version: newest_when_first_installed}
+        - {name: libssl-dev, version: newest_when_first_installed}
+        - {name: git, version: newest_when_first_installed}
+        - {name: nodejs, version: newest_when_first_installed}

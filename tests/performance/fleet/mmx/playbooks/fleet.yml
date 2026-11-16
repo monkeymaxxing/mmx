@@ -1,0 +1,51 @@
+# The fleet benchmark workload; ansible/fleet.yml does the same work.
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - group:
+          name: benchsvc
+          gid: 2001
+
+      - user:
+          create_home_directory: false
+          name: benchsvc
+          uid: 2001
+          primary_group: benchsvc
+          system: true
+
+      - directory:
+          path: /var/lib/bench
+          owner: benchsvc
+          group: benchsvc
+          permissions_mode: "0750"
+
+      - directory:
+          path: /etc/bench
+          permissions_mode: "0755"
+
+      - file:
+          path: /etc/bench-motd
+          template: files/motd.tmpl
+          permissions_mode: "0644"
+
+      - task_block:
+          id: guest
+          changes:
+            - file:
+                path: /etc/bench/app.conf
+                content: "version={{ .vars.version }}\n"
+                permissions_mode: "0644"
+          activate:
+            - systemd_service:
+                name: benchmark-guest
+                refresh: restart
+
+                state: running
+      - http:
+          url: http://127.0.0.1:8080/
+          expected_http_status_codes: [200]
+        retry:
+          max_tries: 20
+          pause_between_tries: 250ms

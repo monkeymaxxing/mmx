@@ -1,0 +1,96 @@
+# `edit_file`
+
+`edit_file` changes the text of an existing file on a node through a filter
+you write with the node's own tools. Some files have no drop-in directory,
+cannot be owned whole, and need more than one line changed: comment out the
+swap line in `/etc/fstab`, change a value inside a section of an INI file.
+
+Choose a file-editing approach in order of preference:
+
+- A drop-in file, when the program reads additional configuration files
+  from a directory.
+- The [`file`](file.md) module to replace the target file's entire content,
+  when the project can manage all content in the target file.
+- [`line`](line.md) for an edit to one line.
+- `edit_file` for text edits to an existing file that `line` cannot make,
+  through a filter you write.
+
+MMX has no module that manages a marked block of lines inside a file.
+
+## Examples
+
+### Comment out the swap lines of /etc/fstab
+
+```yaml
+# Comment out every active swap line.
+- edit_file:
+    path: /etc/fstab
+    content_filter:
+      shell:
+        script: sed -E 's/^([^#].*[[:space:]]swap[[:space:]].*)$/#\1/'
+```
+
+On the node, MMX runs the filter's script as root. The script reads the
+file's current content on standard input and writes the wanted content to
+standard output; it must not change anything itself. A filter that prints
+nothing for a file that is not empty fails, because an in-place edit such as
+`sed -i` prints nothing and installing that would empty the file; to empty a
+file, use a `file` node task with `content: ""`. MMX compares the output
+with the file and installs a changed result like a `file` node task: a
+temporary new file, the optional `check_new_file`, and an atomic replacement
+that keeps the file's owner, group, and mode. Pass values to the script
+through `env`, as for a `shell` node task.
+
+## How it works
+
+`content_filter` is a `shell` mapping with `script` and optional `env`. The
+other fields are `path` and `check_new_file`.
+
+Before MMX writes, it runs the filter a second time, on the filter's own
+output. If that changes the content again, the node task fails and nothing is
+written. A filter that exits with a nonzero code fails the node task. A
+missing file fails, as for `line`, and dryrun reports it as not checked. The
+file may be at most 1 MiB because its content travels inside the node job
+and is saved with the playbook run.
+
+Dryrun runs the filter and shows the text difference. In a node task block,
+the path is a tracked input, so the block's service is refreshed after a
+change, also after an interrupted run. `line` and `edit_file` node tasks may
+edit the same file in one node task block, where the file counts once in the
+service hash; a `file` node task for the same path is rejected.
+
+The check of a new file is shared with `file`, `download`, and `line`, and
+[Check a new file before replacing the live one](../../docs/reference/shared-module-behavior.md#check_new_file)
+and the [design](../../docs/changing-mmx/design/modules.md#check-new-files-before-installing-them)
+describe the new-file check.
+
+## Errors and what they mean
+
+- **`edit_file.content_filter would change the file on every run`**: the filter changed
+  its own output again, so nothing was written. Such a filter would report a
+  change, and restart a service, on every run. Make the filter leave text
+  that it already changed alone, such as by matching only lines that are not
+  commented out yet.
+- **The filter exits with a nonzero code:** the node task fails and nothing
+  is written.
+- **A missing file** fails the node task in a run. Create the file first.
+
+## Tested on
+
+**Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Arch Linux, openSUSE Leap 16.1, Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The base suite covers this module (`file_resources.py`) and runs on every tested distribution.
+
+## Why it works this way
+
+- **MMX runs the filter twice before it writes.** A filter that changes its
+  own output again would report a change, and restart a service, on every
+  run.
+- **No module for a marked block of lines.** Whole files and drop-ins have
+  obvious ownership; a marked block leaves two owners in one file. The
+  [rule on resource ownership](../../docs/changing-mmx/design/modules.md#resource-ownership-must-be-obvious)
+  says why MMX manages parts of a system through native boundaries.
+
+- **The content is limited to 1 MiB.** The file content travels inside the
+  node job and is saved with the playbook run. Use a whole `file` task for
+  larger content.

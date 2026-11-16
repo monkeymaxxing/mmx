@@ -1,0 +1,6 @@
+/bin/
+/.mmx/
+*.test
+__pycache__/
+/.test.lock
+/greeting

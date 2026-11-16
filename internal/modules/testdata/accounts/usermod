@@ -1,0 +1,16 @@
+#!/bin/sh
+# A stand-in for usermod: --comment, --shell, --lock, and --unlock.
+echo "usermod $*" >> "$MMX_FAKE_ACCOUNTS/calls"
+accounts=$MMX_FAKE_ACCOUNTS
+for last; do :; done
+edit() { awk -F: -v OFS=: -v name="$last" -v field="$2" -v text="$3" '$1 == name { $field = text } { print }' "$accounts/$1" > "$accounts/$1.new" && mv "$accounts/$1.new" "$accounts/$1"; }
+stored() { awk -F: -v name="$last" '$1 == name { print $2 }' "$accounts/shadow"; }
+while [ $# -gt 1 ]; do
+  case $1 in
+    --comment) edit passwd 5 "$2"; shift ;;
+    --shell) edit passwd 7 "$2"; shift ;;
+    --lock) edit shadow 2 "!$(stored)" ;;
+    --unlock) edit shadow 2 "$(stored | sed 's/^!//')" ;;
+  esac
+  shift
+done

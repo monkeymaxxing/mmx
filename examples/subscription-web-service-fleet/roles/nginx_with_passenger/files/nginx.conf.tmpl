@@ -1,0 +1,55 @@
+# Managed by MMX (role nginx_with_passenger): nginx with Passenger on an
+# application server. The applications' servers are in sites-enabled/. Every
+# setting not written here is nginx's or Passenger's default.
+# The package's account; nginx's default is nobody.
+user www-data;
+# One worker for each processor; the default is one in all.
+worker_processes auto;
+# The path that the package's systemd unit reads.
+pid /run/nginx.pid;
+# The package's path, written out: without an error_log line, Passenger's
+# watchdog hangs when nginx starts, and systemd stops nginx after 90 seconds
+# (Passenger 6.2.0 on Ubuntu 24.04).
+error_log /var/log/nginx/error.log;
+
+# The Passenger module (libnginx-mod-http-passenger) loads from here.
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+}
+
+http {
+    # Content types by file extension for the applications' public files.
+    include /etc/nginx/mime.types;
+    # The kernel sends the public files without copying them.
+    sendfile on;
+
+    # The same limit as the load balancer's; nginx's default of 1 MB would
+    # refuse uploads that the load balancer lets through.
+    client_max_body_size 10M;
+
+    # passenger_root and passenger_ruby come from the package's
+    # /etc/nginx/conf.d/mod-http-passenger.conf.
+
+    # Three quarters of the memory, divided by the memory of one application
+    # process: more processes would push the server into swap.
+    passenger_max_pool_size {{ max 1 (div (percent .node.memory.total_mib 75) .inputs.memory_per_passenger_process_mib) }};
+    # Processes that stay ready, so the first request after a quiet hour
+    # does not wait for an application to start.
+    passenger_min_instances {{ .inputs.passenger_min_instances }};
+    # A full queue answers 503 at once, and the load balancer moves the
+    # request to the next application server.
+    passenger_max_request_queue_size 512;
+    passenger_request_queue_overflow_status_code 503;
+    # A process restarts after this many requests, which limits the memory
+    # growth of long-running processes.
+    passenger_max_requests 25000;
+    # Responses do not tell everyone which Passenger version runs here.
+    passenger_show_version_in_header off;
+    # Passenger's own log beside nginx's, where the package's log rotation
+    # finds it.
+    passenger_log_file /var/log/nginx/passenger.log;
+
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}

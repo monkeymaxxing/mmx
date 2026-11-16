@@ -1,0 +1,11 @@
+nodes:
+  virtualization-host:
+    address: virtualization-host.example.com
+    ssh_user: deploy
+
+vars:
+  # The size of the virtual machine shop-db: its memory, its number of
+  # virtual CPUs, and the size of its disk image file.
+  shop_db_memory_gib: 4
+  shop_db_cpu_count: 2
+  shop_db_disk_size_gib: 40

@@ -1,0 +1,55 @@
+# The firewall: SSH, MMX, mosh, and the company's own networks on every
+# server; the public ports by the node's inventory groups.
+#
+# The rules are one nftables file written from a template that reads the
+# inventory groups, as the ufw module page recommends for a firewall that
+# follows the inventory ("One nftables file instead"). A oneshot service loads
+# the file at boot, and its reload loads a changed file in one step.
+inputs:
+  # .inventory.groups from the playbook: group name to its node names.
+  inventory_groups: {type: mapping, required: true}
+  trusted_networks: {type: list, required: true}
+
+node_tasks:
+  - task_block:
+      id: nftables_firewall
+      changes:
+        - apt_package:
+            packages:
+              - {name: nftables, version: newest_when_first_installed}
+        - file:
+            path: /etc/fleet-firewall.nft
+            template: files/fleet-firewall.nft.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0600"
+            check_new_file:
+              shell:
+                script: nft --check --file "$NEW_FILE"
+                dryrun: nft --check --file "$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+        - systemd_unit:
+            name: fleet-firewall.service
+            content: |
+              [Unit]
+              Description=Firewall rules of the nftables table fleet_firewall
+              DefaultDependencies=no
+              Before=network-pre.target shutdown.target
+              Wants=network-pre.target
+              Conflicts=shutdown.target
+
+              [Service]
+              Type=oneshot
+              RemainAfterExit=yes
+              ExecStart=/usr/sbin/nft --file /etc/fleet-firewall.nft
+              ExecReload=/usr/sbin/nft --file /etc/fleet-firewall.nft
+              ExecStop=/usr/sbin/nft delete table inet fleet_firewall
+
+              [Install]
+              WantedBy=multi-user.target
+      activate:
+        - systemd_service:
+            name: fleet-firewall
+            state: running
+            start_at_boot: true
+            refresh: reload

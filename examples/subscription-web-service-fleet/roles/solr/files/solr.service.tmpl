@@ -1,0 +1,20 @@
+# Managed by MMX (role solr).
+[Unit]
+Description=Apache Solr
+After=network.target
+
+[Service]
+User=solr
+Group=solr
+Environment=SOLR_INCLUDE=/etc/default/solr.in.sh
+# Solr's start script asks for at least 65000 open files and 65000
+# processes.
+LimitNOFILE=65000
+LimitNPROC=65000
+ExecStart=/opt/solr/bin/solr start --foreground
+Restart=on-failure
+# Solr finishes its commits before it exits.
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target

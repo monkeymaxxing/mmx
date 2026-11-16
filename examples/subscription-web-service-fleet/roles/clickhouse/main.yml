@@ -1,0 +1,109 @@
+# ClickHouse from ClickHouse's own apt repository, its accounts, the reporting
+# database, and an hourly copy of the main application's table page_views from
+# MySQL. ClickHouse rotates its own logs by size and count.
+inputs:
+  # A pattern such as 26.8.*: apt keeps every ClickHouse package inside it.
+  clickhouse_version: {type: string, required: true}
+  max_server_memory_bytes: {type: integer, required: true}
+  max_query_memory_bytes: {type: integer, required: true}
+  mark_cache_bytes: {type: integer, required: true}
+  uncompressed_cache_bytes: {type: integer, required: true}
+  trusted_networks: {type: list, required: true}
+  # The MySQL server, database, and account that the hourly job copies from.
+  mysql_server_address: {type: string, required: true}
+  mysql_database_name: {type: string, required: true}
+  mysql_copy_account: {type: string, required: true}
+  mysql_copy_account_password: {type: string, required: true, secret: true}
+  # Only one server copies every hour.
+  copy_schedule_enabled: {type: boolean, required: true}
+  reporting_password: {type: string, required: true, secret: true}
+
+node_tasks:
+  - apt_repository:
+      name: clickhouse
+      uris: [https://packages.clickhouse.com/deb]
+      suites: [lts]
+      components: [main]
+      signing_key_url: https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key
+      signing_key_sha256: 74c1dfd89393b27c5739ee579a5af661ebe628cef9c33222c6fb29d0b8d42ad0
+
+  # MySQL's client, to look at the source tables by hand.
+  - apt_package:
+      packages:
+        - {name: mysql-client, version: newest_when_first_installed}
+
+  - task_block:
+      id: clickhouse_server
+      changes:
+        # All three version rules are written before apt installs the packages together.
+        - apt_package:
+            packages:
+              - {name: clickhouse-common-static, version: "{{ .inputs.clickhouse_version }}"}
+              - {name: clickhouse-server, version: "{{ .inputs.clickhouse_version }}"}
+              - {name: clickhouse-client, version: "{{ .inputs.clickhouse_version }}"}
+        - file:
+            path: /etc/clickhouse-server/config.d/server-settings.xml
+            template: files/server-settings.xml.tmpl
+            owner: clickhouse
+            group: clickhouse
+            permissions_mode: "0640"
+      activate:
+        - systemd_service:
+            name: clickhouse-server
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - wait_for:
+            url_responds: http://127.0.0.1:8123/ping
+            response_body_contains: Ok.
+            wait_at_most: 120s
+
+  # No MMX module manages ClickHouse's databases and tables; its own client
+  # creates what is missing.
+  - shell:
+      script: clickhouse-client --query "CREATE DATABASE IF NOT EXISTS reporting"
+      skip_if_this_command_succeeds:
+        script: test "$(clickhouse-client --query 'EXISTS DATABASE reporting')" = 1
+  - shell:
+      script: |
+        clickhouse-client --query "
+          CREATE TABLE IF NOT EXISTS reporting.page_views
+          (id UInt64, account_id UInt64, viewed_at DateTime)
+          ENGINE = MergeTree ORDER BY id"
+      skip_if_this_command_succeeds:
+        script: test "$(clickhouse-client --query 'EXISTS TABLE reporting.page_views')" = 1
+
+  - file:
+      path: /usr/local/bin/clickhouse-copy-page-views
+      source: files/clickhouse-copy-page-views
+      owner: root
+      group: root
+      permissions_mode: "0750"
+
+  # Last: tasks that read a secret hide their results and those after them.
+  # ClickHouse reads a changed accounts file by itself, without a restart.
+  - file:
+      path: /etc/clickhouse-server/users.d/accounts.xml
+      template: files/accounts.xml.tmpl
+      owner: clickhouse
+      group: clickhouse
+      permissions_mode: "0600"
+
+  - when: "{{ .inputs.copy_schedule_enabled }}"
+    systemd_scheduled_job:
+      name: clickhouse-copy-page-views
+      script: /usr/local/bin/clickhouse-copy-page-views
+      env:
+        MYSQL_SERVER_ADDRESS: "{{ .inputs.mysql_server_address }}"
+        MYSQL_DATABASE_NAME: "{{ .inputs.mysql_database_name }}"
+        MYSQL_COPY_ACCOUNT: "{{ .inputs.mysql_copy_account }}"
+        MYSQL_COPY_ACCOUNT_PASSWORD: "{{ .inputs.mysql_copy_account_password }}"
+      systemd_calendar_schedule: hourly
+      stop_a_run_after: 50m
+      run_as_user_account: root
+  - when: {not: "{{ .inputs.copy_schedule_enabled }}"}
+    systemd_scheduled_job:
+      name: clickhouse-copy-page-views
+      state: absent
+      run_as_user_account: root

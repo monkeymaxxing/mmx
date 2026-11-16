@@ -1,0 +1,68 @@
+name: Tests and release builds
+
+on:
+  push:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  tests:
+    name: Go tests on ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        env:
+          GOTOOLCHAIN: auto # Read the toolchain directive, even if the runner sets local.
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Confirm the pinned Go toolchain
+        shell: bash
+        run: test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" {print $2}' go.mod)"
+      - run: go test ./...
+      - if: runner.os == 'Linux'
+        run: go vet ./...
+      - if: runner.os == 'Linux'
+        name: Check formatting of MMX Go code
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l cmd internal docs examples tests)
+          if [ -n "$unformatted" ]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+      - if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s tests/integration -p 'test_*.py' -v
+
+  release-matrix:
+    name: Build every controller platform
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        env:
+          GOTOOLCHAIN: auto # Read the toolchain directive, even if the runner sets local.
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Confirm the pinned Go toolchain
+        shell: bash
+        run: test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" {print $2}' go.mod)"
+      - name: Build and check development archives
+        shell: bash
+        run: |
+          version=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); from release_archive import development_version; print(development_version())')
+          python3 scripts/build-release-archives.py --version "$version" --output-dir "$RUNNER_TEMP/mmx-release-archives"

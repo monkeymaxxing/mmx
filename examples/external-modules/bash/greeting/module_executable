@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Make one file say hello. See ../../README.md.
+set -euo pipefail
+
+: "${MMX_MODULE_HELPER:?MMX_MODULE_HELPER must name the MMX executable}"
+request=$("$MMX_MODULE_HELPER" module-json request --inputs path,person) || exit 1
+mode=$("$MMX_MODULE_HELPER" module-json get --type string /mode <<< "$request") || exit 1
+path=$("$MMX_MODULE_HELPER" module-json get --type string /inputs/path <<< "$request") || exit 1
+person=$("$MMX_MODULE_HELPER" module-json get --type string /inputs/person <<< "$request") || exit 1
+change=unchanged
+temporary=
+trap 'if [[ -n "$temporary" ]]; then rm -f -- "$temporary"; fi' EXIT
+
+fail() {
+    "$MMX_MODULE_HELPER" module-json result --mode "$mode" --status failed \
+        --change "$change" --reason "$1"
+    exit 1
+}
+
+# Names and paths are ordinary single-line values. Count lines in the helper's
+# raw output: command substitution above drops a trailing newline, so checking
+# $path and $person would miss one.
+for input in path person; do
+    lines=$("$MMX_MODULE_HELPER" module-json get --type string "/inputs/$input" <<< "$request" | wc -l) || exit 1
+    [[ "$lines" -eq 0 ]] || fail 'path and person must not contain newlines'
+done
+[[ "$path" == /* ]] || fail 'path must be absolute'
+[[ ! -L "$path" && ( ! -e "$path" || -f "$path" ) ]] || fail 'path must be a regular file, not a symlink'
+parent=${path%/*}
+[[ -n "$parent" ]] || parent=/
+[[ -d "$parent" ]] || fail 'parent directory must already exist'
+greeting="Hello, $person!"
+
+if [[ -f "$path" ]]; then
+    if cmp -s -- "$path" <(printf '%s\n' "$greeting"); then
+        change=unchanged
+    else
+        comparison=$?
+        [[ "$comparison" == 1 ]] || fail 'could not read greeting file'
+        change=would_change
+    fi
+else
+    change=would_change
+fi
+
+if [[ "$mode" == apply && "$change" == would_change ]]; then
+    change=unchanged
+    temporary=$(mktemp "$parent/.mmx-greeting.XXXXXXXX") || fail 'could not create the new greeting file'
+    printf '%s\n' "$greeting" > "$temporary" || fail 'could not write the new greeting file'
+    chmod 0644 "$temporary" || fail 'could not set greeting file permissions'
+    mv -f -- "$temporary" "$path" || fail 'could not install greeting file'
+    temporary=
+    change=changed
+fi
+printf '%s\n' "$greeting" | "$MMX_MODULE_HELPER" module-json result \
+    --mode "$mode" --change "$change" --output-stdin greeting

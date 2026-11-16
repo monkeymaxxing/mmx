@@ -1,0 +1,48 @@
+summary: Manages one LVM volume group and its physical volumes, with the programs of the package lvm2; it never wipes a device.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The volume group's name, such as data.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: present (the default) creates the volume group and gives it the listed devices. absent removes a volume group that has no logical volume, and LVM's label from its devices; it accepts only name.
+  physical_volumes:
+    type: list_of_strings
+    required: false
+    description: The devices of the volume group, each as an absolute path, such as /dev/disk/by-partlabel/lvm. Required for state present. A device that holds anything but an unused LVM physical volume fails the task.
+  physical_volumes_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: What happens to a device of the volume group that the task does not list. remove takes it out of the volume group and removes LVM's label from it; keep leaves it there. Required with physical_volumes.
+  grow_physical_volumes_with_their_devices:
+    type: boolean
+    required: false
+    description: Required for state present. true grows each listed physical volume already in this volume group when its device has room for at least one more extent. false leaves a smaller physical volume alone. Never shrinks a physical volume.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the volume group, and in a dryrun when a run would create it.
+examples:
+  - description: Create the volume group data on the partition named lvm, and leave every other device that the volume group has.
+    config: |
+      lvm_volume_group:
+        name: data
+        physical_volumes: [/dev/disk/by-partlabel/lvm]
+        physical_volumes_not_listed: keep
+        grow_physical_volumes_with_their_devices: true
+  - description: Make two disks the whole list of the volume group's devices; a device that the task does not list leaves the volume group.
+    config: |
+      lvm_volume_group:
+        name: data
+        physical_volumes: [/dev/sdb, /dev/sdc]
+        physical_volumes_not_listed: remove
+        grow_physical_volumes_with_their_devices: true
+  - description: Remove a volume group that has no logical volume.
+    config: |
+      lvm_volume_group:
+        name: data
+        state: absent

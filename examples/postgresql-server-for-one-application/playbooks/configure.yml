@@ -1,0 +1,53 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # The server, the psql client, and the common extensions, from the
+      # distribution's own packages.
+      #
+      # Debian and Ubuntu: one package brings all three, and its installation
+      # makes the database cluster (the server's data directory).
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: postgresql, version: newest_when_first_installed}]}
+
+      # The Red Hat family: the common extensions are a package of their own.
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: postgresql-server, version: newest_when_first_installed}, {name: postgresql-contrib, version: newest_when_first_installed}]}
+
+      # The Red Hat family: make the database cluster, once. The package
+      # makes none, and the server does not start without one. The command
+      # runs once: afterwards the file that creates names exists.
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        shell:
+          script: postgresql-setup --initdb
+          skip_if_this_path_exists: /var/lib/pgsql/data/PG_VERSION
+
+      # No package starts the server under MMX; this task does, and it keeps
+      # the server starting at boot.
+      - systemd_service:
+          name: postgresql
+          state: running
+          start_at_boot: true
+
+      # The server answers on its port. On Debian and Ubuntu this is what
+      # proves it: postgresql.service there only groups the clusters and is
+      # active also while a server is down.
+      - wait_for:
+          tcp_port_accepts_connections: 5432
+          wait_at_most: 60s
+
+      # The application's account inside the server. MMX runs psql as the
+      # operating system account postgres, which the server accepts as its
+      # administrator through the local socket, without a password.
+      - postgresql_role:
+          name: shop
+          password: "{{ .secrets.shop_database_password }}"
+          can_log_in: true
+
+      # The application's database, owned by its account.
+      - postgresql_database:
+          name: shop
+          owner: shop
+          encoding: UTF8

@@ -1,0 +1,18 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"config": {
+			"security.protection.delete": "true"
+		},
+		"description": "Limits for web",
+		"devices": {},
+		"name": "web",
+		"used_by": []
+	}
+}
+

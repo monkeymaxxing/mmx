@@ -1,0 +1,29 @@
+fleet_stages:
+  - id: back_up_data
+    nodes: all
+
+    node_tasks:
+      # The containers stop, so that the files in the volume do not change
+      # while tar reads them.
+      - docker_compose_project:
+          compose_project_dir: /opt/shop
+          compose_project_name: shop
+          state: stopped
+
+      - directory:
+          path: /srv/shop-backups
+          permissions_mode: "0700"
+
+      - shell:
+          script: >-
+            tar --create --file /srv/shop-backups/web_data.tar
+            --directory /var/lib/docker/volumes/shop_web_data/_data .
+
+      # When the backup fails, the run stops here and the project stays
+      # stopped; running the playbook again starts it.
+      - docker_compose_project:
+          compose_project_dir: /opt/shop
+          compose_project_name: shop
+          state: running
+          pull_images: when_missing
+          containers_of_removed_services: remove

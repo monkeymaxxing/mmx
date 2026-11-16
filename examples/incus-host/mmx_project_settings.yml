@@ -1,0 +1,2 @@
+project_name: incus_host
+default_inventory: example

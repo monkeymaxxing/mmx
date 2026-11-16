@@ -1,0 +1,10 @@
+// Managed by MMX (role base_server_setup).
+
+// Fetch the package lists and install the updates that
+// 50unattended-upgrades allows, every day.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+
+// Delete downloaded packages that can no longer be fetched once a week, so
+// the cache does not fill the disk.
+APT::Periodic::AutocleanInterval "7";

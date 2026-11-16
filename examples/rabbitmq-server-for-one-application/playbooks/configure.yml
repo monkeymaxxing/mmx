@@ -1,0 +1,79 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # Debian and Ubuntu: RabbitMQ from the distribution's own packages.
+      # logrotate rotates the server's log files; on Debian the package only
+      # recommends it, and a server may install no recommended packages.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: rabbitmq-server, version: newest_when_first_installed}, {name: logrotate, version: newest_when_first_installed}]}
+
+      # Rocky Linux and AlmaLinux package no RabbitMQ. The RabbitMQ project
+      # serves two package repositories for them: one with Erlang, the
+      # language that RabbitMQ is written in, and one with the server. Each
+      # repository signs its packages with its own key, which MMX fetches and
+      # checks against the SHA-256 here. The repositories hold Erlang for
+      # x86_64 nodes only.
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_repository:
+          name: rabbitmq-erlang
+          description: Erlang for RabbitMQ, from the RabbitMQ project
+          baseurl:
+            - https://yum1.rabbitmq.com/erlang/el/9/$basearch
+            - https://yum2.rabbitmq.com/erlang/el/9/$basearch
+          signing_key_url: https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key
+          signing_key_sha256: 84df2e5fd80d464c3eb9acd2f751b2f6a723438200915dd50fbf12f08698e4ec
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_repository:
+          name: rabbitmq-server
+          description: RabbitMQ server, from the RabbitMQ project
+          baseurl:
+            - https://yum2.rabbitmq.com/rabbitmq/el/9/noarch
+            - https://yum1.rabbitmq.com/rabbitmq/el/9/noarch
+          signing_key_url: https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key
+          signing_key_sha256: 17b3eeb98b7aabe659b0e2579715d1ae4e328b58a401434599495779c59ac73a
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: erlang, version: newest_when_first_installed}, {name: rabbitmq-server, version: newest_when_first_installed}, {name: logrotate, version: newest_when_first_installed}]}
+
+      # No package starts the server under MMX; this task does, and it keeps
+      # the server starting at boot.
+      - systemd_service:
+          name: rabbitmq-server
+          state: running
+          start_at_boot: true
+
+      # RabbitMQ's web interface and HTTP API, on port 15672. RabbitMQ also
+      # turns on the two plugins that this one needs.
+      - rabbitmq_plugin:
+          name: rabbitmq_management
+          state: enabled
+
+      - rabbitmq_virtual_host:
+          name: "{{ .vars.application_virtual_host }}"
+
+      # The application's user may do everything inside its own virtual
+      # host and nothing in any other. The three expressions say on which
+      # queues and exchanges the user may change settings, publish, and
+      # consume; ".*" matches every name.
+      - rabbitmq_user:
+          name: "{{ .vars.application_user }}"
+          password: "{{ .secrets.shop_rabbitmq_password }}"
+          permissions:
+            - virtual_host: "{{ .vars.application_virtual_host }}"
+              configure: ".*"
+              write: ".*"
+              read: ".*"
+          permissions_not_listed: remove
+
+      # No queue of the virtual host grows without end: RabbitMQ drops the
+      # oldest messages of a queue that holds 100000.
+      - rabbitmq_policy:
+          name: limit-queue-length
+          virtual_host: "{{ .vars.application_virtual_host }}"
+          pattern: ".*"
+          apply_to: queues
+          definition:
+            max-length: 100000
+          priority: 0

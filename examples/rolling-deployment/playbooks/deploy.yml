@@ -1,0 +1,96 @@
+fleet_stages:
+  - id: migrate
+    nodes: app01
+    on_node_failure: stop_run
+
+    node_tasks:
+      - shell:
+          script: python3 /var/tmp/mmx-demo/demo.py migrate "$SCHEMA"
+          env: {SCHEMA: "{{ .vars.schema }}"}
+          success_exit_codes: [0, 2]
+          changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+
+  - id: rollout
+    for_each_node: app_servers
+    as: app
+    on_node_failure: stop_run
+    fleet_stages:
+      - id: inspect_app
+        nodes: "{{ .app }}"
+
+        node_tasks:
+          - id: app_state
+            role: inspect_app
+            inputs:
+              release: "{{ .vars.release }}"
+              site: "{{ .vars.site }}"
+        outputs:
+          update_needed: "{{ .node_tasks.app_state.outputs.update_needed }}"
+
+      - id: inspect_membership
+        nodes: loadbalancer
+
+        node_tasks:
+          - id: member
+            shell:
+              script: python3 /var/tmp/mmx-demo/demo.py membership "$APP"
+              dryrun: python3 /var/tmp/mmx-demo/demo.py membership "$APP"
+              env: {APP: "{{ .app }}"}
+              success_exit_codes: [0, 2]
+              changed_when: false
+        outputs:
+          joined: {equals: ["{{ .node_tasks.member.exit_code }}", 0]}
+
+      - id: drain
+        nodes: loadbalancer
+        when: "{{ .outputs.inspect_app[.app].update_needed }}"
+
+        node_tasks:
+          - shell:
+              script: python3 /var/tmp/mmx-demo/demo.py drain "$APP"
+              env: {APP: "{{ .app }}"}
+              success_exit_codes: [0, 2]
+              changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+
+      - id: update
+        nodes: "{{ .app }}"
+        when: "{{ .outputs.inspect_app[.app].update_needed }}"
+
+        node_tasks:
+          - role: update_app
+            inputs:
+              release: "{{ .vars.release }}"
+              site: "{{ .vars.site }}"
+
+      - id: verify
+        nodes: "{{ .app }}"
+
+        node_tasks:
+          - shell:
+              script: python3 /var/tmp/mmx-demo/demo.py inspect "$RELEASE" "$SITE"
+              env: {RELEASE: "{{ .vars.release }}", SITE: "{{ .vars.site }}"}
+              changed_when: false
+        outputs:
+          release: "{{ .vars.release }}"
+
+      - id: rejoin
+        nodes: loadbalancer
+        when:
+          any:
+            - "{{ .outputs.inspect_app[.app].update_needed }}"
+            - not: "{{ .outputs.inspect_membership.loadbalancer.joined }}"
+
+        node_tasks:
+          - shell:
+              script: python3 /var/tmp/mmx-demo/demo.py rejoin "$APP"
+              env: {APP: "{{ .app }}"}
+              success_exit_codes: [0, 2]
+              changed_when: {equals: ["{{ .this_node_task.exit_code }}", 2]}
+    outputs:
+      release: "{{ .outputs.verify[.app].release }}"
+
+  - id: report
+    nodes: loadbalancer
+
+    node_tasks:
+      - show: "{{ .outputs.rollout }}"

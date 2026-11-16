@@ -1,0 +1,69 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"architecture": "x86_64",
+		"config": {
+			"image.description": "MMX test image",
+			"image.os": "mmxtest",
+			"image.release": "1",
+			"volatile.apply_template": "create",
+			"volatile.base_image": "aac277e1dcc4b717c8c9e58702d7ac13326d907196fea1377ea07dd66496d666",
+			"volatile.cloud-init.instance-id": "bb78b3dc-ea63-4764-847d-2ff081d159b9",
+			"volatile.eth0.hwaddr": "10:66:6a:53:3b:60",
+			"volatile.idmap.base": "0",
+			"volatile.idmap.next": "[{\"Isuid\":true,\"Isgid\":false,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000},{\"Isuid\":false,\"Isgid\":true,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000}]",
+			"volatile.last_state.idmap": "[]",
+			"volatile.uuid": "64376060-af0d-4ff2-81aa-7d9fd5fa7b33",
+			"volatile.uuid.generation": "64376060-af0d-4ff2-81aa-7d9fd5fa7b33"
+		},
+		"devices": {},
+		"ephemeral": false,
+		"profiles": [
+			"default",
+			"web"
+		],
+		"stateful": false,
+		"description": "",
+		"created_at": "2026-10-10T06:46:36.987283143Z",
+		"expanded_config": {
+			"image.description": "MMX test image",
+			"image.os": "mmxtest",
+			"image.release": "1",
+			"security.protection.delete": "true",
+			"volatile.apply_template": "create",
+			"volatile.base_image": "aac277e1dcc4b717c8c9e58702d7ac13326d907196fea1377ea07dd66496d666",
+			"volatile.cloud-init.instance-id": "bb78b3dc-ea63-4764-847d-2ff081d159b9",
+			"volatile.eth0.hwaddr": "10:66:6a:53:3b:60",
+			"volatile.idmap.base": "0",
+			"volatile.idmap.next": "[{\"Isuid\":true,\"Isgid\":false,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000},{\"Isuid\":false,\"Isgid\":true,\"Hostid\":1000000,\"Nsid\":0,\"Maprange\":1000000000}]",
+			"volatile.last_state.idmap": "[]",
+			"volatile.uuid": "64376060-af0d-4ff2-81aa-7d9fd5fa7b33",
+			"volatile.uuid.generation": "64376060-af0d-4ff2-81aa-7d9fd5fa7b33"
+		},
+		"expanded_devices": {
+			"eth0": {
+				"name": "eth0",
+				"network": "incusbr0",
+				"type": "nic"
+			},
+			"root": {
+				"path": "/",
+				"pool": "default",
+				"type": "disk"
+			}
+		},
+		"name": "shop-test",
+		"status": "Stopped",
+		"status_code": 102,
+		"last_used_at": "1970-01-01T00:00:00Z",
+		"location": "none",
+		"type": "container",
+		"project": "default"
+	}
+}
+

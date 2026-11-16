@@ -1,0 +1,15 @@
+[Unit]
+Description=MMX example worker
+
+[Service]
+Type=simple
+User=mmx-worker
+Group=mmx-worker
+WorkingDirectory=/srv/mmx-worker
+Environment="WORKER_LABEL={{ .inputs.label }}"
+ExecStart=/bin/bash /srv/mmx-worker/worker.sh
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

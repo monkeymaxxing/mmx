@@ -1,0 +1,29 @@
+# Managed by MMX (role mysql_server). Read after the package's mysqld.cnf,
+# so these values win. Every other setting is MySQL's default.
+[mysqld]
+# The application servers connect over the network; the package listens on
+# the loopback only.
+bind_address = *
+# The port that the applications' database.yml names.
+port = 3306
+
+# Binary logs with global transaction IDs: a recovery to any point in time
+# after the last backup, and a replica can be added without a restart.
+server_id = {{ .inputs.server_id }}
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_expire_logs_seconds = {{ .inputs.binary_log_retention_seconds }}
+gtid_mode = ON
+enforce_gtid_consistency = ON
+
+# The default of 151 is too few for every Passenger process, worker, and
+# cron job of the fleet.
+max_connections = {{ .inputs.max_connections }}
+
+# A database server keeps its working set in memory.
+innodb_buffer_pool_size = {{ percent .node.memory.total_mib .inputs.innodb_buffer_pool_percent_of_memory }}M
+# Room for the redo log so that a burst of writes does not stall on flushing.
+innodb_redo_log_capacity = {{ .inputs.innodb_redo_log_capacity }}
+# An SSD sustains far more writes than the default of 200 assumes; flushing
+# may use four times that rate in a burst.
+innodb_io_capacity = {{ .inputs.innodb_io_capacity }}
+innodb_io_capacity_max = {{ mul .inputs.innodb_io_capacity 4 }}

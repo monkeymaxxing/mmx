@@ -1,0 +1,21 @@
+inputs:
+  port: {type: integer, default: 8080}
+  workers: {type: integer, default: 1}
+  name: {type: string, default: app}
+outputs:
+  summary: "{{ .vars.summary }}"
+
+node_tasks:
+  - set_vars:
+      summary: "{{ .inputs.name }}:{{ .inputs.port }}"
+
+  - show: "{{ .vars.summary }}"
+
+  - show: "{{ .inputs.workers }} workers"
+
+  - set_vars: {workers: "{{ .inputs.workers }}"}
+
+  - show: {workers: "{{ .vars.workers }}", name: "{{ .inputs.name }}"}
+
+  - when: {equals: ["{{ .inputs.name }}", sized]}
+    show: sized call

@@ -1,0 +1,25 @@
+summary: Enables or disables one plugin of RabbitMQ.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The plugin's name as the command rabbitmq-plugins list shows it, such as rabbitmq_management.
+  state:
+    type: string
+    required: true
+    allowed_values: [enabled, disabled_with_plugins_that_depend_on_it]
+    description: >-
+      enabled names the plugin in RabbitMQ's file of enabled plugins;
+      RabbitMQ also turns on the plugins that it needs. disabled_with_plugins_that_depend_on_it turns the
+      plugin off, and with it every enabled plugin that needs it.
+examples:
+  - description: Turn on RabbitMQ's management interface.
+    config: |
+      rabbitmq_plugin:
+        name: rabbitmq_management
+        state: enabled
+  - description: Turn off the MQTT plugin.
+    config: |
+      rabbitmq_plugin:
+        name: rabbitmq_mqtt
+        state: disabled_with_plugins_that_depend_on_it

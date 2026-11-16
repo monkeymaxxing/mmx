@@ -1,0 +1,48 @@
+
+
+
+
+fleet_stages:
+  - id: deploy
+    nodes: web
+
+    node_tasks:
+      - task_block:
+          id: release
+          changes:
+            - set_vars: {stage: changes, release: "r-{{ .vars.port }}"}
+            - show: "{{ .vars.stage }} {{ .vars.release }}"
+          validate:
+            - shell: {script: "true", dryrun: "true", env: {STAGE: "{{ .vars.stage }}"}}
+          activate:
+            - show: "{{ .vars.stage }}"
+            - set_vars: {stage: activate}
+          verify:
+            - set_vars: {stage: verify, cores: "{{ .node.cpu_count }}"}
+            - show: "{{ .vars.stage }} {{ .vars.release }}"
+            - show: "{{ .vars.cores }}"
+          on_failure:
+            - set_vars: {stage: failed}
+          cleanup:
+            - show: "{{ .vars.release }}"
+            - set_vars: {stage: cleanup}
+
+      - show: "{{ .vars.stage }}"
+
+      - task_block:
+          id: small
+          changes:
+            - set_vars: {stage: small}
+          cleanup:
+            - show: "{{ .vars.stage }}"
+        when: {equals: ["{{ .node.cpu_count }}", 2]}
+
+      - show: "{{ .vars.stage }}"
+
+      - task_block:
+          id: never
+          changes:
+            - show: never
+          cleanup:
+            - show: never
+        when: false

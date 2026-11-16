@@ -1,0 +1,67 @@
+inputs:
+  repository: {type: string, required: true}
+  release: {type: string, required: true}
+
+node_tasks:
+  # Git and a Python that can make virtual environments.
+  - when: {equals: ["{{ .node.package_manager }}", apt]}
+    apt_package: {packages: [{name: git, version: newest_when_first_installed}, {name: python3-venv, version: newest_when_first_installed}]}
+  - when: {equals: ["{{ .node.package_manager }}", dnf]}
+    dnf_package: {packages: [{name: git, version: newest_when_first_installed}, {name: python3, version: newest_when_first_installed}]}
+
+  - group: {name: greeter, system: true}
+  - user:
+      create_home_directory: false
+      name: greeter
+      primary_group: greeter
+      system: true
+      home: /srv/greeter
+      shell: /usr/sbin/nologin
+  - directory: {path: /srv/greeter, owner: greeter, group: greeter}
+  - directory: {path: /srv/greeter/releases, owner: greeter, group: greeter}
+
+  - task_block:
+      id: greeter
+      changes:
+        # Each release is its own checkout with its own virtual
+        # environment, so installing the next release cannot break the
+        # running one.
+        - git:
+            repo: "{{ .inputs.repository }}"
+            check_out_tag: "{{ .inputs.release }}"
+            path: "/srv/greeter/releases/{{ .inputs.release }}"
+            run_as_user_account: greeter
+        - pip_package:
+            requirements_file_on_node: "/srv/greeter/releases/{{ .inputs.release }}/requirements.txt"
+            virtual_environment: "/srv/greeter/releases/{{ .inputs.release }}/venv"
+            run_as_user_account: greeter
+        # The switch: a tracked symlink, so the service restarts once for a
+        # new release, also when a run stopped before the restart.
+        - symlink:
+            path: /srv/greeter/current
+            target: "releases/{{ .inputs.release }}"
+        - systemd_unit:
+            name: greeter.service
+            content: |
+              [Unit]
+              Description=The greeter application
+
+              [Service]
+              User=greeter
+              WorkingDirectory=/srv/greeter/current
+              ExecStart=/srv/greeter/current/venv/bin/python /srv/greeter/current/app.py
+
+              [Install]
+              WantedBy=multi-user.target
+      activate:
+        - systemd_service: {name: greeter, start_at_boot: true, state: running}
+      verify:
+        - wait_for:
+            url_responds: http://127.0.0.1:8080/
+            response_body_contains: "release {{ .inputs.release }}"
+            wait_at_most: 30s
+
+  # Keep the running release and delete older ones.
+  - directory:
+      path: /srv/greeter/releases
+      delete_everything_inside_except: ["{{ .inputs.release }}"]

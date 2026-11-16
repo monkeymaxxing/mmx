@@ -1,0 +1,13 @@
+nodes:
+  database:
+    address: database.example.com
+    ssh_user: deploy
+
+vars:
+  # The volume group that the new disk becomes, the logical volume in it,
+  # and the directory where the volume's filesystem is mounted. To grow the
+  # volume later, write a larger size here and run the playbook again.
+  data_volume_group: data
+  data_logical_volume: postgresql
+  data_logical_volume_size: 50GiB
+  data_mount_point: /var/lib/postgresql

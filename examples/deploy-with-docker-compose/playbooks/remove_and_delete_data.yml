@@ -1,0 +1,19 @@
+fleet_stages:
+  - id: remove_and_delete_data
+    nodes: all
+
+    node_tasks:
+      # Also deletes the named volume shop_web_data with the data in it. This
+      # state requires compose_project_name: Docker records the project's
+      # name on a volume, not its directory.
+      - docker_compose_project:
+          compose_project_dir: /opt/shop
+          compose_project_name: shop
+          state: containers_and_named_volumes_removed
+
+      # No state of docker_compose_project deletes the project's directory
+      # with its Compose file and its configuration.
+      - directory:
+          path: /opt/shop
+          state: absent
+          also_delete_everything_inside: true

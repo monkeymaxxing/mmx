@@ -1,0 +1,5 @@
+project_name: service_app
+default_inventory: example
+node_task_defaults:
+  retry:
+    pause_between_tries: 200ms

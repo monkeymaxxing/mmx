@@ -1,0 +1,22 @@
+summary: Grows one existing partition into the free space after it through growpart, without changing its contents.
+inputs:
+  device:
+    type: string
+    required: true
+    description: Absolute path of the whole disk, such as /dev/disk/by-id/scsi-0HC_Volume_101 or /dev/sdb.
+  partition_number:
+    type: integer
+    required: true
+    description: The partition's number in the disk's partition table, 1 or more.
+outputs: {}
+examples:
+  - description: Grow partition 2 after the provider enlarges the disk, using its stable disk link.
+    config: |
+      grow_partition_into_free_space_after_it:
+        device: /dev/disk/by-id/scsi-0HC_Volume_101
+        partition_number: 2
+  - description: Grow partition 1 of a disk whose kernel path is /dev/sdb.
+    config: |
+      grow_partition_into_free_space_after_it:
+        device: /dev/sdb
+        partition_number: 1

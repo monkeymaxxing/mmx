@@ -1,0 +1,4 @@
+nodes:
+  app:
+    address: app.example.com
+    ssh_user: deploy

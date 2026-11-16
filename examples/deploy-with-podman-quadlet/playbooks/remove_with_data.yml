@@ -1,0 +1,20 @@
+# mmx run remove_with_data
+#
+# Stop and remove the container, then delete its named volume with the data
+# in it. The container's file goes first: Podman refuses to delete a volume
+# that a container still uses. The volume is also deleted when
+# remove_and_keep_data removed both files before: MMX recorded its name then.
+fleet_stages:
+  - id: remove
+    nodes: all
+
+    node_tasks:
+      - id: container
+        podman_quadlet:
+          name: shop-web.container
+          state: file_and_service_removed_named_volumes_kept
+
+      - id: volume
+        podman_quadlet:
+          name: shop-web-data.volume
+          state: volume_and_its_data_removed

@@ -1,0 +1,16 @@
+#!/bin/bash
+# Managed by MMX (role clickhouse). Copies the rows of the main application's
+# MySQL table page_views that ClickHouse does not have yet, by id.
+# The MYSQL_* variables come from the timer's environment file, which only
+# root reads.
+set -euo pipefail
+
+last_id=$(clickhouse-client --database=reporting --query "SELECT max(id) FROM page_views")
+
+clickhouse-client --database=reporting --receive_timeout=6000 --param_last_id="$last_id" --query "
+  INSERT INTO page_views
+  SELECT id, account_id, viewed_at
+  FROM mysql('$MYSQL_SERVER_ADDRESS:3306', '$MYSQL_DATABASE_NAME', 'page_views', '$MYSQL_COPY_ACCOUNT', '$MYSQL_COPY_ACCOUNT_PASSWORD')
+  WHERE id > {last_id:UInt64}"
+
+echo "page_views copied after id $last_id"

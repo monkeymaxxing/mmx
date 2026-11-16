@@ -1,0 +1,83 @@
+# Managed by MMX (role nginx_load_balancer): the load balancer in front of the
+# application servers. The upstreams and servers are in conf.d/. Every
+# setting not written here is nginx's default.
+# The package's account, which owns the web roots; nginx's default is nobody.
+user www-data;
+# One worker for each processor; the default is one in all.
+worker_processes auto;
+# Each proxied connection holds two file handles, one to the client and one
+# to the application server.
+worker_rlimit_nofile 65535;
+
+# The path that the package's systemd unit reads.
+pid /run/nginx.pid;
+
+# The Brotli module (libnginx-mod-http-brotli-filter) loads from here.
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+    worker_connections 10240;
+}
+
+http {
+    # Content types by file extension, for the maintenance pages.
+    include /etc/nginx/mime.types;
+
+    # The 'combined' format with the host name and the application server
+    # that answered, so a log line shows which server to look at.
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$host" "$upstream_addr" "$upstream_status"';
+    access_log /var/log/nginx/access.log main;
+
+    # The kernel sends the maintenance pages without copying them.
+    sendfile on;
+
+    # TLS 1.0 and 1.1 are broken.
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Compressed text for browsers that ask for it. Level 6 is a good size
+    # for little processor time; a client behind a proxy, such as a content
+    # delivery network, gets compressed responses too; caches keep compressed
+    # and plain responses apart; nginx compresses only text/html by default.
+    gzip on;
+    gzip_comp_level 6;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # Brotli for the browsers that support it: smaller than gzip. 4 of 11 is
+    # the usual balance of size and speed; files under 256 bytes would grow.
+    brotli on;
+    brotli_comp_level 4;
+    brotli_min_length 256;
+    brotli_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # A request goes to the next application server while one restarts, and
+    # while one's Passenger queue is full (Passenger then answers 503).
+    proxy_next_upstream error timeout http_503;
+
+    # Uploads larger than nginx's default of 1 MB.
+    client_max_body_size 10M;
+
+    # nginx's status on this server only: keepalived's check reads it.
+    server {
+        listen 127.0.0.1:8080;
+
+        location /nginx_status {
+            stub_status;
+        }
+    }
+
+    # Limits on POST requests to the login and password reset pages, by
+    # client address: a person who mistypes a password a few times gets in,
+    # a script that tries passwords does not. Other requests are not limited.
+    map $request_method $client_address_of_post_request {
+        default "";
+        POST    $binary_remote_addr;
+    }
+    limit_req_zone $client_address_of_post_request zone=login:10m rate=3r/m;
+    limit_req_zone $client_address_of_post_request zone=password_reset:10m rate=2r/m;
+
+    include /etc/nginx/conf.d/*.conf;
+}

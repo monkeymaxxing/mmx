@@ -1,0 +1,9 @@
+# Managed by MMX (role main_application_config): where the
+# application finds its caches and its search.
+{{ .inputs.server_environment }}:
+  redis:
+{{- range .inputs.redis_instances }}
+    {{ .name }}: redis://{{ $.inputs.redis_and_memcached_server_address }}:{{ .port }}/0
+{{- end }}
+  memcached: {{ .inputs.redis_and_memcached_server_address }}:11211
+  solr: http://{{ .inputs.solr_server_address }}:8983/solr/{{ .inputs.server_environment }}

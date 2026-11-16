@@ -1,0 +1,52 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # certbot from the distribution's own packages. Rocky Linux and
+      # AlmaLinux have it in the EPEL repository, which the package
+      # epel-release adds.
+      - when: {equals: ["{{ .node.distribution.family }}", redhat]}
+        dnf_package: {packages: [{name: epel-release, version: newest_when_first_installed}]}
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: certbot, version: newest_when_first_installed}]}
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: certbot, version: newest_when_first_installed}]}
+
+      # certbot writes below this web root in .well-known/acme-challenge/.
+      # The web server maps /.well-known/acme-challenge/<token> to that
+      # subdirectory for the site's names, over plain HTTP.
+      - directory: {path: /var/www}
+      - directory:
+          path: /var/www/certbot-challenges
+          permissions_mode: "0755"
+
+      # What certbot runs after the first certificate and after every
+      # renewal, also when no MMX run is near.
+      - file:
+          path: /usr/local/bin/reload-web-server-after-certificate-renewal
+          permissions_mode: "0755"
+          content: |
+            #!/bin/sh
+            systemctl reload {{ .vars.web_server_service }}
+
+      # The certificate. Its files are then under
+      # /etc/letsencrypt/live/<site_name>/. A rerun starts no certbot.
+      - id: certificate
+        certbot_certificate:
+          certificate_name: "{{ .vars.site_name }}"
+          domains: ["{{ .vars.site_name }}", "www.{{ .vars.site_name }}"]
+          account_email_when_registered: "{{ .vars.certificate_account_email }}"
+          challenge: webroot
+          webroot_path: /var/www/certbot-challenges
+          run_after_issue_and_renewal: /usr/local/bin/reload-web-server-after-certificate-renewal
+          certificate_authority_url: "{{ .vars.certificate_authority_url }}"
+
+      # certbot's own timer renews every certificate of the node. The
+      # package of Debian and Ubuntu names it certbot.timer; the packages of
+      # the Red Hat family name it certbot-renew.timer.
+      - when: {equals: ["{{ .node.distribution.family }}", debian]}
+        systemd_service: {name: certbot.timer, state: running, start_at_boot: true}
+      - when: {not: {equals: ["{{ .node.distribution.family }}", debian]}}
+        systemd_service: {name: certbot-renew.timer, state: running, start_at_boot: true}

@@ -1,0 +1,94 @@
+# Show or hide the maintenance pages on the load balancers. While a page is
+# shown, the load balancer answers every request to that site with the page
+# and HTTP status 503, so the applications can be down.
+#
+#   mmx run load_balancer_maintenance_pages --inventory production --var maintenance_pages_shown=true
+#   mmx run load_balancer_maintenance_pages --inventory production --var maintenance_pages_shown=false
+#
+# The variable has no default: MMX refuses a run that does not say which of
+# the two it wants. Each fleet stage is one part, so --only-fleet-stages picks
+# a part, such as --only-fleet-stages brand_site_maintenance_pages.
+#
+# A page is shown while maintenance_on.html links to maintenance.html in the
+# site's web root. nginx tests for that file on every request, so a change
+# needs no reload. Each part checks its result in the verify phase of its
+# node task block, which a dryrun skips while the block has changes to make.
+# The brand sites are asked at 127.0.0.1 with their name in the Host header;
+# the API's and the web pages' names resolve to the load balancer through
+# /etc/hosts (role base_server_setup).
+command_line_vars:
+  maintenance_pages_shown:
+    type: boolean
+
+fleet_stages:
+  - id: brand_site_maintenance_pages
+    nodes: nginx_load_balancers
+
+    node_tasks:
+      - task_block:
+          id: brand_site_maintenance_pages
+          changes:
+            - when: "{{ .vars.maintenance_pages_shown }}"
+              loop: "{{ .vars.brand_sites }}"
+              as: site
+              symlink:
+                path: "/var/www/{{ .site.domain }}/maintenance_on.html"
+                target: "/var/www/{{ .site.domain }}/maintenance.html"
+            - when: {not: "{{ .vars.maintenance_pages_shown }}"}
+              loop: "{{ .vars.brand_sites }}"
+              as: site
+              symlink:
+                path: "/var/www/{{ .site.domain }}/maintenance_on.html"
+                state: absent
+          verify:
+            - when: "{{ .vars.maintenance_pages_shown }}"
+              loop: "{{ .vars.brand_sites }}"
+              as: site
+              http:
+                url: http://127.0.0.1/
+                headers: {Host: "{{ .site.domain }}"}
+                expected_http_status_codes: [503]
+            - when: {not: "{{ .vars.maintenance_pages_shown }}"}
+              loop: "{{ .vars.brand_sites }}"
+              as: site
+              http:
+                url: http://127.0.0.1/
+                headers: {Host: "{{ .site.domain }}"}
+                expected_http_status_codes: [200]
+
+  - id: main_application_maintenance_pages
+    nodes: nginx_load_balancers
+
+    node_tasks:
+      - task_block:
+          id: main_application_maintenance_pages
+          changes:
+            - when: "{{ .vars.maintenance_pages_shown }}"
+              loop: [main_application, main_application_api]
+              as: webroot
+              symlink:
+                path: "/var/www/{{ .webroot }}/maintenance_on.html"
+                target: "/var/www/{{ .webroot }}/maintenance.html"
+            - when: {not: "{{ .vars.maintenance_pages_shown }}"}
+              loop: [main_application, main_application_api]
+              as: webroot
+              symlink:
+                path: "/var/www/{{ .webroot }}/maintenance_on.html"
+                state: absent
+          verify:
+            - when: "{{ .vars.maintenance_pages_shown }}"
+              http:
+                url: "http://{{ .vars.api_host_name }}/v1/ping"
+                expected_http_status_codes: [503]
+            - when: "{{ .vars.maintenance_pages_shown }}"
+              http:
+                url: "http://{{ .vars.main_application_host_name }}/"
+                expected_http_status_codes: [503]
+            - when: {not: "{{ .vars.maintenance_pages_shown }}"}
+              http:
+                url: "http://{{ .vars.api_host_name }}/v1/ping"
+                expected_http_status_codes: [200]
+            - when: {not: "{{ .vars.maintenance_pages_shown }}"}
+              http:
+                url: "http://{{ .vars.main_application_host_name }}/"
+                expected_http_status_codes: [200]

@@ -1,0 +1,16 @@
+# Removes MMX and everything the benchmark workload manages, so each tool's
+# first run changes every host and MMX's first contact installs from scratch.
+- hosts: fleet
+  gather_facts: false
+  tasks:
+    - ansible.builtin.shell: |
+        pkill -KILL -f '[m]mx-runner worker' || true
+        systemctl disable --now mmx-https-api.service 2>/dev/null || true
+        rm -f /etc/systemd/system/mmx-https-api.service
+        systemctl daemon-reload
+        rm -rf /var/lib/mmx /run/mmx /opt/mmx
+      tags: [mmx]
+    - ansible.builtin.file: {path: "{{ item }}", state: absent}
+      loop: [/etc/bench, /etc/bench-motd, /var/lib/bench]
+    - ansible.builtin.user: {name: benchsvc, state: absent}
+    - ansible.builtin.group: {name: benchsvc, state: absent}

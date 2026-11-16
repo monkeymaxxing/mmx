@@ -1,0 +1,6 @@
+project_name: postgresql_server_for_one_application
+default_inventory: example
+# The password of the application's database role. MMX reads it from this
+# environment variable on the controller machine.
+secrets_from_env:
+  shop_database_password: SHOP_DATABASE_PASSWORD

@@ -1,0 +1,8 @@
+project_name: rabbitmq_server_for_one_application
+default_inventory: example
+
+# The password of the application's RabbitMQ user comes from the controller
+# machine's environment. Remove these two lines to keep it in the project's
+# encrypted vault instead (mmx secrets edit).
+secrets_from_env:
+  shop_rabbitmq_password: SHOP_RABBITMQ_PASSWORD

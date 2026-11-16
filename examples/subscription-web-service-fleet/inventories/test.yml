@@ -1,0 +1,183 @@
+# The test fleet: the whole service on two test machines, for the guest suite
+# tests/integration/subscription_web_service_example.py.
+#
+# The playbooks select inventory groups, never node names, so this inventory
+# puts the same groups as inventories/production.yml on two nodes:
+#
+#   test_load_balancer_and_data  the load balancer, MySQL, Redis, memcached,
+#                                Solr, and ClickHouse
+#   test_application             the main application, the brand sites, the
+#                                workers, and the cron jobs
+#
+# Two nodes, not one for each production server, for two reasons:
+#
+# - The load balancer and the application servers both run nginx, and both
+#   own /etc/nginx/nginx.conf, so they cannot share a machine.
+# - A machine runs one node job at a time. Two inventory nodes on one machine
+#   in one fleet stage would collide.
+#
+# Test values differ from production where a test machine is small (memory
+# sizes, process counts) or must not reach outside services (self-signed
+# certificates instead of Let's Encrypt, Git repositories on the application
+# server instead of a Git host).
+vars:
+  server_environment: production
+  time_zone: Europe/Berlin
+  # The private IPv4 ranges, which hold the test machines' network.
+  trusted_networks: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+  administrator_accounts:
+    - {name: alice, full_name: Alice Example, uid: 2001}
+    - {name: bob, full_name: Bob Example, uid: 2002}
+  # On the test machines' cloud image, the account ubuntu takes 1000 and the
+  # test harness's login account may take 1001.
+  deploy_account_uid: 1101
+  unattended_upgrade_start_time: "08:00"
+
+  load_balancer_node: test_load_balancer_and_data
+  mysql_server_node: test_load_balancer_and_data
+  redis_and_memcached_node: test_load_balancer_and_data
+  solr_node: test_load_balancer_and_data
+
+  names_resolved_to_load_balancer: "api.example.com www.example.com"
+  main_application_host_name: www.example.com
+  api_host_name: api.example.com
+  main_application_certificate_name: example.com
+
+  # The playbook test_stand_in_applications makes these Git repositories on
+  # the application server.
+  brand_sites:
+    - name: gardening
+      domain: gardening.example.net
+      application_port: 8092
+      repository: /home/deploy/test_stand_in_git_repositories/gardening.git
+    - name: cooking
+      domain: cooking.example.net
+      application_port: 8093
+      repository: /home/deploy/test_stand_in_git_repositories/cooking.git
+
+  # No test may ask a public certificate authority: the role
+  # test_self_signed_certificates makes the certificates instead.
+  certificates_from_lets_encrypt: false
+  lets_encrypt_account_email: operations@example.com
+  tls_certificate_dir: /etc/ssl/test-self-signed
+  tls_certificate_names: [example.com, gardening.example.net, cooking.example.net]
+
+  applications_dir: /home/deploy/apps
+  main_application_dir: /home/deploy/apps/main_application
+  main_application_repository: /home/deploy/test_stand_in_git_repositories/main_application.git
+  passenger_min_instances: 1
+  memory_per_passenger_process_mib: 250
+  nodejs_major_version: 22
+
+  main_application_database_name: main_application_production
+  main_application_database_account: main_application
+  main_application_database_account_connects_from: "%"
+  clickhouse_copy_account: clickhouse_copy
+
+  mysql_max_connections: 200
+  mysql_innodb_buffer_pool_percent_of_memory: 10
+  mysql_innodb_redo_log_capacity: 256M
+  mysql_binary_log_retention_seconds: 259200
+  mysql_backup_retention_days: 7
+
+  swap_file_size: 1GiB
+
+  redis_instances:
+    - name: application-persistent
+      port: 6379
+      persisted: true
+      maxmemory: "0"
+      maxmemory_policy: noeviction
+    - name: application-cache
+      port: 6380
+      persisted: false
+      maxmemory: 64mb
+      maxmemory_policy: allkeys-lru
+  memcached_memory_mib: 64
+
+  solr_version: 9.11.0
+  solr_archive_url: https://archive.apache.org/dist/solr/solr/9.11.0/solr-9.11.0-slim.tgz
+  solr_archive_sha256: 6d112abc61acc6a016c5d5355d35792d1fe05be1ffa1c95191583666c7a2da78
+  solr_heap: 256m
+
+  clickhouse_version: "26.8.*"
+  clickhouse_max_server_memory_bytes: 805306368       # 768 MiB
+  clickhouse_max_query_memory_bytes: 268435456        # 256 MiB
+  clickhouse_mark_cache_bytes: 67108864               # 64 MiB
+  clickhouse_uncompressed_cache_bytes: 67108864       # 64 MiB
+
+  worker_queue_groups:
+    default: {}
+    long_running: {}
+    notifications:
+      queues: [Notifications::EmailDelivery, Notifications::PushDelivery]
+
+  cron_jobs:
+    - name: billing-renew-subscriptions
+      cron_schedule: "10 0 * * *"
+      rake_task: billing:renew_subscriptions
+      log_file: billing_renew_subscriptions.log
+    - name: sessions-delete-expired
+      cron_schedule: "0 2 * * *"
+      rake_task: sessions:delete_expired
+      log_file: sessions_delete_expired.log
+    - name: reports-send-weekly-summary
+      cron_schedule: "30 6 * * 1"
+      rake_task: "reports:send_summary[weekly]"
+      log_file: reports_send_weekly_summary.log
+
+nodes:
+  test_load_balancer_and_data:
+    # The suite tests/integration/subscription_web_service_example.py
+    # replaces this line with the connection of its first test machine.
+    address: test-load-balancer-and-data.invalid
+    vars:
+      # The first server of its roles, as lb1 and db1 in production.
+      unattended_upgrade_start_time: "10:00"
+      mysql_server_id: 1
+      mysql_innodb_io_capacity: 2000
+      mysql_backup_schedule_enabled: true
+      solr_backup_schedule_enabled: true
+      clickhouse_copy_schedule_enabled: true
+      keepalived_priority: 101
+      # A single load balancer has no peer.
+      keepalived_peer_nodes: []
+  test_application:
+    # The suite replaces this line with the connection of its second test
+    # machine.
+    address: test-application.invalid
+    vars:
+      load_balancer_weight_for_main_application: 1
+      load_balancer_weight_for_brand_sites: 1
+
+groups:
+  nginx_load_balancers:
+    nodes: [test_load_balancer_and_data]
+    vars:
+      # The network card of the test machines; the suite writes the card of
+      # another kind of test machine here.
+      keepalived_network_interface: enp5s0
+      keepalived_virtual_router_id: 51
+      keepalived_virtual_address: 192.0.2.10/32
+  mysql_servers:
+    nodes: [test_load_balancer_and_data]
+  redis_and_memcached_servers:
+    nodes: [test_load_balancer_and_data]
+  solr_servers:
+    nodes: [test_load_balancer_and_data]
+  clickhouse_servers:
+    nodes: [test_load_balancer_and_data]
+  main_application_servers:
+    nodes: [test_application]
+  brand_site_servers:
+    nodes: [test_application]
+  main_application_worker_servers:
+    nodes: [test_application]
+    vars:
+      worker_processes_per_queue_group:
+        default: 2
+        long_running: 1
+        notifications: 1
+  # Exactly one node: each job must run on one server only.
+  main_application_cron_job_servers:
+    nodes: [test_application]

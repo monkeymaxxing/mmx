@@ -1,0 +1,28 @@
+NilAway of 2026-09-18 (go.uber.org/nilaway v0.0.0-20260918162853-acb8859b9031)
+panics with "interface conversion: types.Object is *types.Var, not *types.Func"
+on an assignment whose left side calls a function held in a variable, such as
+MMX's `*from(&r), *group(&r) = address, nil` in internal/modules/ufw.go.
+NilAway then reports nothing for the whole package, sometimes without saying
+so. The call names no declared function whose result could carry an
+annotation, so the fix lets NilAway fall through to its type-based handling
+of the expression. scripts/static-analysis.sh applies this patch to the pinned
+NilAway source before it builds the tool. Remove the patch and the build step
+when a NilAway release with this fix is pinned.
+
+--- a/assertion/function/assertiontree/backprop_util.go	2026-10-16 20:06:49
++++ b/assertion/function/assertiontree/backprop_util.go	2026-10-16 20:07:40
+@@ -561,7 +561,13 @@
+ 			case *ast.CallExpr:
+ 				// check if this is a call to a function by name
+ 				if ident := asthelper.FuncIdentFromCallExpr(expr); ident != nil {
+-					obj := rootNode.ObjectOf(ident).(*types.Func)
++					obj, isFunc := rootNode.ObjectOf(ident).(*types.Func)
++					if !isFunc {
++						// A call through a variable that holds a function names no
++						// declared function whose result could carry an annotation;
++						// fall through to the type-based handling below.
++						break
++					}
+ 					if obj.Type().(*types.Signature).Results().Len() != 1 {
+ 						return nil, errors.New("multiply returning function treated as assignment consumer")
+ 					}

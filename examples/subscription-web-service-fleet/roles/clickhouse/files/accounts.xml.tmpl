@@ -1,0 +1,35 @@
+<!-- Managed by MMX (role clickhouse): the memory of one query and the
+     accounts. ClickHouse reads changes of this file by itself, without a
+     restart. -->
+<clickhouse>
+    <profiles>
+        <default>
+            <!-- One query may not take the whole server's memory. -->
+            <max_memory_usage>{{ .inputs.max_query_memory_bytes }}</max_memory_usage>
+        </default>
+    </profiles>
+
+    <users>
+        <!-- The administrator account has no password, so it answers only
+             on this server. -->
+        <default>
+            <networks replace="replace">
+                <ip>::1</ip>
+                <ip>127.0.0.1</ip>
+            </networks>
+        </default>
+
+        <!-- Read-only reports from the company's own networks. -->
+        <reporting>
+            <password_sha256_hex>{{ sha256sum .inputs.reporting_password }}</password_sha256_hex>
+            <profile>readonly</profile>
+            <quota>default</quota>
+            <networks>
+{{- range .inputs.trusted_networks }}
+                <ip>{{ . }}</ip>
+{{- end }}
+                <ip>127.0.0.1</ip>
+            </networks>
+        </reporting>
+    </users>
+</clickhouse>

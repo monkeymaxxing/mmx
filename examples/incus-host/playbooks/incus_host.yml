@@ -1,0 +1,164 @@
+# mmx run incus_host
+command_line_vars:
+  # The image that the instance shop-test is made from. The default is the
+  # Debian 13 image of the Incus project's public image server.
+  instance_image:
+    type: string
+    default: images:debian/13
+
+fleet_stages:
+  # Incus on the node, ready to make instances.
+  - id: incus_server
+    nodes: all
+
+    node_tasks:
+      # Debian 13 packages Incus itself. Debian 12 has it in its backports
+      # repository, which the keyring of the node's own Debian signs.
+      - when:
+          all:
+            - equals: ["{{ .node.distribution.id }}", debian]
+            - number_equals: ["{{ .node.distribution.major_version }}", 12]
+        file:
+          path: /etc/apt/sources.list.d/bookworm-backports.sources
+          permissions_mode: "0644"
+          content: |
+            Types: deb
+            URIs: http://deb.debian.org/debian
+            Suites: bookworm-backports
+            Components: main
+            Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+      # incus-base is Incus for containers. The package incus adds what
+      # virtual machines need. dnsmasq-base serves the addresses of Incus's
+      # bridge; the package only recommends it, and a server whose apt
+      # installs no recommended packages would lack it.
+      - when:
+          any:
+            - equals: ["{{ .node.distribution.id }}", debian]
+            - all:
+                - equals: ["{{ .node.distribution.id }}", ubuntu]
+                - number_at_least: ["{{ .node.distribution.major_version }}", 26]
+        apt_package: {packages: [{name: incus-base, version: newest_when_first_installed}, {name: dnsmasq-base, version: newest_when_first_installed}]}
+
+      # Ubuntu 24.04 has no package incus-base. Its package incus brings Incus
+      # without QEMU.
+      - when:
+          all:
+            - equals: ["{{ .node.distribution.id }}", ubuntu]
+            - number_equals: ["{{ .node.distribution.major_version }}", 24]
+        apt_package: {packages: [{name: incus, version: newest_when_first_installed}, {name: dnsmasq-base, version: newest_when_first_installed}]}
+
+      # Rocky Linux and AlmaLinux have no Incus package. The Incus project
+      # names the COPR repository neelc/incus for them. Its packages need
+      # libraries from EPEL, and EPEL needs the repository CRB. The COPR
+      # repository has one directory for release 9 and one for 10.
+      - when:
+          any:
+            - equals: ["{{ .node.distribution.id }}", rocky]
+            - equals: ["{{ .node.distribution.id }}", almalinux]
+        task_block:
+          id: incus_from_the_copr_repository
+          changes:
+            - dnf_package: {packages: [{name: epel-release, version: newest_when_first_installed}]}
+            - dnf_repository:
+                existing_repository: crb
+                enabled: true
+            - when: {number_equals: ["{{ .node.distribution.major_version }}", 9]}
+              dnf_repository:
+                name: copr-neelc-incus
+                description: Incus for Enterprise Linux 9 (COPR neelc/incus)
+                baseurl: ["https://download.copr.fedorainfracloud.org/results/neelc/incus/epel-9-$basearch/"]
+                signing_key_url: https://download.copr.fedorainfracloud.org/results/neelc/incus/pubkey.gpg
+                signing_key_sha256: 635810d20f5705f696a0c0ee0aa6e6ac9faeffeb55bb8e7e20b3d9014f930ce9
+            - when: {number_equals: ["{{ .node.distribution.major_version }}", 10]}
+              dnf_repository:
+                name: copr-neelc-incus
+                description: Incus for Enterprise Linux 10 (COPR neelc/incus)
+                baseurl: ["https://download.copr.fedorainfracloud.org/results/neelc/incus/rhel+epel-10-$basearch/"]
+                signing_key_url: https://download.copr.fedorainfracloud.org/results/neelc/incus/pubkey.gpg
+                signing_key_sha256: 635810d20f5705f696a0c0ee0aa6e6ac9faeffeb55bb8e7e20b3d9014f930ce9
+            - dnf_package: {packages: [{name: incus, version: newest_when_first_installed}]}
+
+      # The socket starts the Incus server at the first incus command. MMX
+      # installs a package without starting its services, and the packages of
+      # the Red Hat family enable nothing.
+      - systemd_service:
+          name: incus.socket
+          state: running
+          start_at_boot: true
+
+      # Start the server when the node boots, so that an instance with
+      # boot.autostart: "true" starts then. This unit starts the server only
+      # when an instance needs it.
+      - systemd_service:
+          name: incus-startup.service
+          state: do_not_start_or_stop
+          start_at_boot: true
+
+      # A container's accounts are a range of the node's user and group IDs
+      # that belongs to root. Debian's and Ubuntu's packages write this
+      # range; the others leave it out, and Incus then makes no container.
+      # The server reads the files only when it starts, so it is restarted
+      # when a line changes.
+      - task_block:
+          id: incus_server
+          changes:
+            - line:
+                insert_at_end_of_file: true
+                path: /etc/subuid
+                match: '^root:'
+                line: "root:1000000:1000000000"
+            - line:
+                insert_at_end_of_file: true
+                path: /etc/subgid
+                match: '^root:'
+                line: "root:1000000:1000000000"
+          activate:
+            - systemd_service:
+                name: incus.service
+                state: running
+
+      # Once for each server: a storage pool, the bridge incusbr0, and the
+      # root disk and the network card in the profile default. The guard
+      # asks for the root disk, the last thing that the command makes. Its
+      # exit code 127 says that incus is not installed yet, as in the dryrun
+      # of a new node.
+      - shell:
+          script: incus admin init --minimal
+          skip_if_this_command_succeeds:
+            script: incus profile device get default root pool
+            true_exit_codes: [0]
+            false_exit_codes: [1, 127]
+
+  # One profile and one instance.
+  - id: instances
+    nodes: all
+
+    node_tasks:
+      # What every web container shares: one CPU and 512 MiB of memory.
+      - incus_profile:
+          name: web
+          description: Limits for web containers
+          config:
+            limits.cpu: "1"
+            limits.memory: 512MiB
+          config_keys_not_listed: remove
+
+      # A container that runs and starts again when the node boots. Port
+      # 8080 of the node reaches port 80 inside it. The profile default gives
+      # it its root disk and its network card; web adds the limits.
+      - incus_instance:
+          name: shop-test
+          state: running
+          image_when_created: "{{ .vars.instance_image }}"
+          profiles: [default, web]
+          config:
+            boot.autostart: "true"
+          config_keys_not_listed: remove
+          devices:
+            web:
+              type: proxy
+              listen: tcp:0.0.0.0:8080
+              connect: tcp:127.0.0.1:80
+          devices_not_listed: remove
+          instance_type: container

@@ -1,0 +1,63 @@
+# mmx run configure --var data_disk=/dev/sdb
+command_line_vars:
+  # The whole new disk on the node, such as /dev/sdb. It must hold nothing
+  # yet: the partition task never writes on a disk that holds anything.
+  data_disk:
+    type: string
+
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      # LVM's programs come with the package lvm2, and mkfs.ext4 with
+      # e2fsprogs. On Debian and Ubuntu, sfdisk, which writes the partition
+      # table, is in the package fdisk; the other distributions have it in
+      # util-linux, which every node has.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: fdisk, version: newest_when_first_installed}, {name: lvm2, version: newest_when_first_installed}, {name: e2fsprogs, version: newest_when_first_installed}]}
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: lvm2, version: newest_when_first_installed}, {name: e2fsprogs, version: newest_when_first_installed}]}
+
+      # One partition for LVM that takes the whole disk. Later node tasks
+      # find it by its name, whatever the kernel calls the disk.
+      - create_partitions_on_empty_disk:
+          device: "{{ .vars.data_disk }}"
+          partitions:
+            - name: "{{ .vars.data_volume_group }}-lvm"
+              size: rest_of_disk
+              type: linux_lvm
+
+      # The volume group on that partition. keep: a disk that someone adds
+      # to the volume group later, to make room, stays in it.
+      - lvm_volume_group:
+          name: "{{ .vars.data_volume_group }}"
+          physical_volumes: ["/dev/disk/by-partlabel/{{ .vars.data_volume_group }}-lvm"]
+          physical_volumes_not_listed: keep
+
+          grow_physical_volumes_with_their_devices: true
+      # The logical volume. A run with a larger size grows it together with
+      # its filesystem, while the filesystem stays mounted.
+      - lvm_logical_volume:
+          name: "{{ .vars.data_logical_volume }}"
+          volume_group: "{{ .vars.data_volume_group }}"
+          size: "{{ .vars.data_logical_volume_size }}"
+
+          grow_filesystem_with_volume: true
+      # An ext4 filesystem on the new volume; a volume that already holds
+      # one is left alone.
+      - create_filesystem_on_empty_device:
+          device: "/dev/{{ .vars.data_volume_group }}/{{ .vars.data_logical_volume }}"
+          filesystem_type: ext4
+
+      - directory:
+          path: "{{ .vars.data_mount_point }}"
+
+      # The mount, now and after every boot.
+      - fstab_mount:
+          check_filesystem_at_boot: never
+          options: [defaults]
+          mount_point: "{{ .vars.data_mount_point }}"
+          mount_source: "/dev/{{ .vars.data_volume_group }}/{{ .vars.data_logical_volume }}"
+          filesystem_type: ext4
+          state: mounted

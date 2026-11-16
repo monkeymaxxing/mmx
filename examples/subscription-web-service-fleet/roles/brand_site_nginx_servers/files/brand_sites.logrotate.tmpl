@@ -1,0 +1,17 @@
+# Managed by MMX (role brand_site_nginx_servers): the logs of the running
+# release of each brand site.
+{{- range .inputs.brand_sites }}
+{{ $.inputs.applications_dir }}/{{ .name }}/current/log/*.log
+{{- end }} {
+  # The logs belong to deploy, in directories that deploy may write.
+  su deploy deploy
+  # logrotate looks every day; a log rotates once it has 1 GB.
+  size 1G
+  # Nine old logs, compressed.
+  rotate 9
+  compress
+  # The application keeps its log open: copy the log, then empty it.
+  copytruncate
+  # A release that has not written a log yet is fine.
+  missingok
+}

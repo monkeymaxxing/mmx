@@ -1,0 +1,46 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - group:
+          name: mmx-account-demo
+          gid: "{{ .vars.gid }}"
+
+      - user:
+          create_home_directory: false
+          name: mmx-account-demo
+          uid: "{{ .vars.uid }}"
+          primary_group: mmx-account-demo
+          system: true
+
+      - directory:
+          path: /srv/mmx-account-demo
+          owner: mmx-account-demo
+          group: mmx-account-demo
+          permissions_mode: "0750"
+
+      - task_block:
+          id: application
+          changes:
+            - systemd_unit:
+                name: mmx-account-demo.service
+                content: |
+                  [Unit]
+                  Description=MMX account and unit example
+                  [Service]
+                  User=mmx-account-demo
+                  Group=mmx-account-demo
+                  ExecStart=/bin/sleep infinity
+                  Environment=MMX_PROFILE=base
+                  [Install]
+                  WantedBy=multi-user.target
+            - systemd_unit:
+                name: mmx-account-demo.service
+                drop_in: 20-limits.conf
+                template: files/limits.conf.tmpl
+          activate:
+            - systemd_service:
+                name: mmx-account-demo
+                start_at_boot: true
+                state: running

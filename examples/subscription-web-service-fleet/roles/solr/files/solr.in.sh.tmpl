@@ -1,0 +1,18 @@
+# Managed by MMX (role solr). Read by /opt/solr/bin/solr; these values
+# replace the script's defaults. Every other setting is Solr's default.
+
+SOLR_HEAP="{{ .inputs.java_heap_size }}"
+# The application servers connect over the network; Solr 9 listens on the
+# loopback only by default.
+SOLR_JETTY_HOST="0.0.0.0"
+# The nightly backups go outside SOLR_HOME, which Solr allows only when told.
+SOLR_OPTS="$SOLR_OPTS -Dsolr.allowPaths={{ .inputs.backup_dir }}"
+
+# Solr's files outside the unpacked archive, which stays root-owned.
+SOLR_HOME={{ .inputs.data_dir }}
+SOLR_LOGS_DIR=/var/log/solr
+# The port that the applications' services.yml names.
+SOLR_PORT=8983
+# systemd sets the limits that the script asks for (solr.service), so its
+# own check is not needed.
+SOLR_ULIMIT_CHECKS=false

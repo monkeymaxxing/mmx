@@ -1,0 +1,32 @@
+inputs:
+  cache_percent: {type: integer, default: 25}
+
+node_tasks:
+  - directory:
+      path: /srv/mmx-facts-demo
+      permissions_mode: "0755"
+
+  - task_block:
+      id: sized_service
+      changes:
+        - file:
+            path: /usr/local/bin/mmx-facts-demo-load
+            source: files/load.sh
+            permissions_mode: "0755"
+        - file:
+            path: /srv/mmx-facts-demo/config
+            template: files/config.tmpl
+            permissions_mode: "0644"
+        - systemd_unit:
+            name: mmx-facts-demo.service
+            template: files/demo.service
+      activate:
+        - systemd_service:
+            name: mmx-facts-demo
+            start_at_boot: true
+            refresh: reload
+            state: running
+      verify:
+        - shell:
+            script: cmp /srv/mmx-facts-demo/config /srv/mmx-facts-demo/loaded
+            changed_when: false

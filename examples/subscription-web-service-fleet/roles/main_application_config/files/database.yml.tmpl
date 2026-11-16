@@ -1,0 +1,10 @@
+# Managed by MMX (role main_application_config). Every setting not
+# written here is Rails's default.
+{{ .inputs.server_environment }}:
+  adapter: mysql2
+  host: {{ .inputs.mysql_server_address }}
+  database: {{ .inputs.database_name }}
+  username: {{ .inputs.database_account }}
+  password: "{{ .inputs.database_password }}"
+  # The database's character set (role mysql_server).
+  encoding: utf8mb4

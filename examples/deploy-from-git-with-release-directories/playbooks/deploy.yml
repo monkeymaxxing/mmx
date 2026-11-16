@@ -1,0 +1,14 @@
+# mmx run deploy --var release=v1.4.2
+command_line_vars:
+  release:
+    type: string
+
+fleet_stages:
+  - id: deploy
+    nodes: all
+
+    node_tasks:
+      - role: greeter
+        inputs:
+          repository: "{{ .vars.greeter_repository }}"
+          release: "{{ .vars.release }}"

@@ -1,0 +1,24 @@
+inputs:
+  release: {type: string, required: true}
+  site: {type: string, required: true}
+
+node_tasks:
+  - task_block:
+      id: configure
+      changes:
+        - id: configs
+          loop:
+            release: "{{ .inputs.release }}"
+            site: "{{ .inputs.site }}"
+          as: config
+          file:
+            path: "/var/tmp/mmx-demo/{{ .config.key }}"
+            content: "{{ .config.value }}"
+            permissions_mode: "0644"
+        - shell:
+            script: test ! -f /var/tmp/mmx-demo/fail-before-reload
+            changed_when: false
+      activate:
+        - systemd_service: {name: mmx-demo-app, state: running, refresh: reload}
+      verify:
+        - wait_for: {url_responds: "http://127.0.0.1:18990/health", expected_http_status_codes: [200], wait_at_most: 10s}

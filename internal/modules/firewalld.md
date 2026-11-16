@@ -1,0 +1,170 @@
+# `firewalld`
+
+`firewalld` manages the services, ports, and rich rules of one firewalld
+zone, through the node's `firewall-cmd`. firewalld is the usual
+firewall on the Red Hat family. It groups network interfaces into zones,
+and each zone admits named services (such as `ssh`, which stands for port
+22), ports, and sources.
+
+Two other modules handle the rest of firewalld:
+[`firewalld_zone_membership`](firewalld_zone_membership.md) chooses which
+interfaces and source networks use a zone, and
+[`firewalld_zone`](firewalld_zone.md) creates or removes a zone. On Debian
+and Ubuntu, the usual firewall is ufw; use [`ufw`](ufw.md) there.
+
+## Set up
+
+Install firewalld and start it:
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: firewalld, version: newest_when_first_installed}
+
+- systemd_service:
+    name: firewalld
+    start_at_boot: true
+    state: running
+```
+
+Whether firewalld runs is a `systemd_service` task, because firewalld is an
+ordinary systemd service. If firewalld is not installed or not running,
+dryrun reports the `firewalld` node task not checked, because an earlier
+node task may install or start it, and a run fails.
+
+## Examples
+
+### Allow SSH, MMX's HTTPS port, HTTPS, and a database port
+
+```yaml
+- firewalld:
+    zone: public
+    rules:
+      - {action: allow, firewalld_service: ssh}
+      - {action: allow, port: 7443, protocol: tcp}
+      - {action: allow, firewalld_service: https}
+      - {action: allow, port: 5432, protocol: tcp, from: 10.0.0.0/8}
+    rules_not_listed: remove
+```
+
+`zone` is required; MMX never guesses the zone. Allow the node HTTPS API
+port (7443 by default): a fresh Red Hat family server blocks it, and MMX
+then continues over SSH and says so. MMX never opens that port itself.
+
+The first three rules become services and a port of zone `public`. The
+fourth has a source, so MMX writes it as a rich rule:
+
+```text
+rule family="ipv4" source address="10.0.0.0/8" port port="5432" protocol="tcp" accept
+```
+
+### One rule for each node of an inventory group
+
+`from_inventory_group` in place of `from` stands for one rule for each node
+of an inventory group, as on `ufw`. The `ufw` page's example
+[One rule for each node of an inventory group](ufw.md#one-rule-for-each-node-of-an-inventory-group)
+shows the inventory, and its section
+[Rules for an inventory group](ufw.md#rules-for-an-inventory-group) says
+what MMX checks. With `rules_not_listed: remove`, the task holds the whole
+rule set, so a node that leaves the group loses its rule on the next run,
+and a node that joins gets one.
+
+## How it works
+
+### Rules
+
+Each rule has `action` (`allow`, `reject`, or `drop`); exactly one of
+`firewalld_service` or `port` with a required `protocol` (`tcp` or `udp`),
+or neither when the rule has only a source; and an optional `from` or
+`from_inventory_group`. `firewalld_service` is a service name firewalld
+knows, such as `ssh`: firewalld's own list of ports, not a systemd service.
+`zone`, `firewalld_service`, `port`, and `from` may be references.
+
+MMX writes each rule in firewalld's own form. An `allow` rule with only a
+service or a port becomes that service or port of the zone. Every other rule
+becomes a rich rule, firewalld's name for a rule with a source or an action
+other than accept.
+
+A rule's identity is its service or port, protocol, and source; listing it
+with another action replaces it. `rules_not_listed` is required: `remove`
+makes the listed rules the complete set of services, ports, and rich rules,
+and `keep` adds what is missing. The list is not everything the zone admits:
+for example, a zone with target `ACCEPT` also admits traffic outside the
+listed rules. The zone's interfaces and
+sources, its target, and other zones are left alone. `state: absent` takes
+`zone` and `rules` and removes those rules whatever their action.
+
+### Both layers, without a reload
+
+firewalld keeps two layers: the running firewall and the stored
+configuration that it loads on a restart or reload. Each change goes to the
+running firewall and to the stored configuration together, one rule at a
+time, so nothing is lost at a reboot, and firewalld is never reloaded as a
+whole. A rule found in only one of the two is written to the other. MMX
+then inspects the zone again and fails the node task if a difference
+remains. Dryrun and results list the rules to add or remove in
+`.this_node_task.value.added` and `.removed`, as `service ssh`,
+`port 7443/tcp`, or the rich rule's text. A run that fails lists only the
+rules that a `firewall-cmd` call added or removed before the failure, so a
+node task in `on_failure` can read what happened.
+
+### The SSH safeguard
+
+The safeguard applies to every zone, including a zone without SSH traffic.
+In particular, a change to `rules: []` with `rules_not_listed: remove` is
+refused on every zone. An already empty zone is unchanged and needs no
+safeguard check. Before a change, MMX checks that the zone, running and stored, still admits
+a TCP port sshd listens on (from `sshd -T`), through a port rule or through
+a firewalld service whose definition holds that port, also when the rule
+admits only one network. A rule that admits a source on every port does not
+count, so list the SSH port. firewalld applies `reject` and `drop` rules
+before services and ports, so a `reject` or `drop` rule for that port or
+service without `from` would block SSH whatever allows it; one limited to
+an address with `from` blocks only that address and is allowed. Otherwise
+the node task fails before changing anything, in dryrun too.
+
+## Errors and what they mean
+
+| What fails | What it means, and what to do |
+|---|---|
+| The node task fails before any change, in dryrun too, because the zone would no longer admit sshd's TCP port, such as `no longer admit sshd's TCP port 22` | After the change, no port or `firewalld_service` rule of the zone would admit SSH, or a `reject` or `drop` rule without `from` would block it. List the SSH port or the `ssh` service; see [The SSH safeguard](#the-ssh-safeguard). |
+| The node task fails after its changes | The zone, inspected again in both layers, still differs from the task. |
+| A run fails, or a dryrun reports the node task not checked, because firewalld is missing or stopped | Install and start firewalld in earlier node tasks; see [Set up](#set-up). |
+| A run reports `connection_used: ssh_fallback` and names the firewall | The zone blocks port 7443. Add a rule for it; MMX never adds one itself. |
+
+## Tested on
+
+**Distributions:** Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The suite `tests/integration/firewalld_and_selinux.py` tests the module on
+the Red Hat family: Rocky Linux 9, AlmaLinux 10, and Fedora 45. It works in a zone of
+its own that no network interface or source uses, so no rule it writes can
+reach the test harness's SSH connection. The
+[validation record](../../docs/changing-mmx/validation.md#firewalld-zone-modules) gives the latest results; the
+firewalld versions it records for the zone modules are 1.3.4 on Rocky
+Linux 9 and 2.4.3 on AlmaLinux 10.
+
+## Why it works this way
+
+- **The rule list leaves the zone target alone.** A zone's target is a separate
+  firewalld setting. Owning services, ports, and rich rules does not replace it.
+
+- **One rule at a time in both layers, never a reload.** A reload of
+  firewalld as a whole would drop every rule for a moment. Creating and
+  removing zones, which needs a reload, is the separate module
+  [`firewalld_zone`](firewalld_zone.md), so this module keeps its promise
+  never to reload firewalld.
+- **The field is `firewalld_service`, not `service`.** In MMX a bare
+  "service" is a systemd service.
+- **The rule fields are ufw's wherever firewalld has the same thing.** The
+  module carries no ufw syntax, and `ufw` carries no fields for firewalld.
+  Why there are two modules, and not one for both firewalls, is on the
+  [`ufw` page](ufw.md#why-it-works-this-way).
+- **MMX never opens port 7443 by itself.** A firewall change the project did
+  not write is a surprise; the run says which rule to add, as
+  [A blocked port 7443 is reported, never opened](../../docs/changing-mmx/design/execution.md#a-blocked-port-7443-is-reported-never-opened)
+  describes.
+- **A rule for each node of a group is `from_inventory_group` inside a task
+  with `rules_not_listed: remove`, not a loop that adds one rule per
+  node.** A loop cannot remove the rule of a node that left the inventory;
+  a task that holds the whole set can.

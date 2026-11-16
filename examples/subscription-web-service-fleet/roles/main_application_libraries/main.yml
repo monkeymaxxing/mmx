@@ -1,0 +1,25 @@
+# The libraries that the main application and its API build their gems
+# against, and the rotation of their logs.
+inputs:
+  # Where the application's releases live, such as
+  # /home/deploy/apps/main_application.
+  application_dir: {type: string, required: true}
+
+node_tasks:
+  # XML parsing, image processing (imagemagick and libvips), and MySQL's
+  # client library for the gem mysql2.
+  - apt_package:
+      packages:
+        - {name: libxml2-dev, version: newest_when_first_installed}
+        - {name: libxslt1-dev, version: newest_when_first_installed}
+        - {name: imagemagick, version: newest_when_first_installed}
+        - {name: libvips-dev, version: newest_when_first_installed}
+        - {name: libmysqlclient-dev, version: newest_when_first_installed}
+        - {name: logrotate, version: newest_when_first_installed}
+
+  - file:
+      path: /etc/logrotate.d/main_application
+      template: files/main_application.logrotate.tmpl
+      owner: root
+      group: root
+      permissions_mode: "0644"

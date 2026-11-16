@@ -1,0 +1,92 @@
+# The MySQL server, the main application's database, and the accounts of the
+# main application and of ClickHouse's hourly copy. The distribution's MySQL 8
+# on the root filesystem; settings that MySQL's defaults already get right
+# are left out (README, "Why it works this way").
+inputs:
+  server_id: {type: integer, required: true}
+  max_connections: {type: integer, required: true}
+  innodb_buffer_pool_percent_of_memory: {type: integer, required: true}
+  # Such as 2G.
+  innodb_redo_log_capacity: {type: string, required: true}
+  # Write operations per second that the disk sustains.
+  innodb_io_capacity: {type: integer, required: true}
+  binary_log_retention_seconds: {type: integer, required: true}
+  # A restart of the MySQL server drops every connection: a routine run
+  # refuses it until the command line approves it.
+  restart_approved: {type: boolean, required: true}
+  main_application_database_name: {type: string, required: true}
+  main_application_database_account: {type: string, required: true}
+  # The machines the accounts may connect from, in MySQL's pattern form.
+  main_application_database_account_connects_from: {type: string, required: true}
+  main_application_database_password: {type: string, required: true, secret: true}
+  # The account that ClickHouse reads the main application's tables with.
+  clickhouse_copy_account: {type: string, required: true}
+  clickhouse_copy_database_password: {type: string, required: true, secret: true}
+
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: mysql-server, version: newest_when_first_installed}
+
+  - task_block:
+      id: mysql_server
+      changes:
+        # max_connections and the table caches need more open files than
+        # the package's limit of 10000.
+        - systemd_unit:
+            name: mysql.service
+            drop_in: 90-open-files.conf
+            content: |
+              [Service]
+              LimitNOFILE=65536
+        - file:
+            path: /etc/mysql/mysql.conf.d/zz-server-settings.cnf
+            template: files/zz-server-settings.cnf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+      validate:
+        - shell:
+            script: mysqld --validate-config --user=mysql
+            dryrun: mysqld --validate-config --user=mysql
+            changed_when: false
+      checks_before_restart_or_reload:
+        - assert:
+            that: "{{ .inputs.restart_approved }}"
+            message: >-
+              MySQL must restart to load this change, and a restart drops
+              every connection of the applications. Run again off-peak with
+              --var mysql_restart_approved=true.
+      activate:
+        - systemd_service:
+            name: mysql
+            state: running
+            start_at_boot: true
+            refresh: restart
+      verify:
+        - wait_for:
+            tcp_port_accepts_connections: 3306
+            wait_at_most: 60s
+
+  - mysql_database:
+      name: "{{ .inputs.main_application_database_name }}"
+      character_set: utf8mb4
+
+  # Last: tasks that read a secret hide their results and those after them.
+  - mysql_user:
+      name: "{{ .inputs.main_application_database_account }}"
+      may_connect_from: "{{ .inputs.main_application_database_account_connects_from }}"
+      password: "{{ .inputs.main_application_database_password }}"
+      privileges:
+        - grant_on: "{{ .inputs.main_application_database_name }}.*"
+          grant: [ALL]
+      privileges_not_listed: remove
+
+  - mysql_user:
+      name: "{{ .inputs.clickhouse_copy_account }}"
+      may_connect_from: "{{ .inputs.main_application_database_account_connects_from }}"
+      password: "{{ .inputs.clickhouse_copy_database_password }}"
+      privileges:
+        - grant_on: "{{ .inputs.main_application_database_name }}.*"
+          grant: [SELECT]
+      privileges_not_listed: remove

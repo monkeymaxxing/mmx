@@ -1,0 +1,83 @@
+summary: Adds or removes one software repository, with its signing key, on an openSUSE node through zypper's repository files.
+inputs:
+  name:
+    type: string
+    required: true
+    description: >-
+      A name you choose for the repository: letters, digits, and _ - . It is
+      the repository's alias for zypper and the base name of its files
+      /etc/zypp/repos.d/NAME.repo and /etc/zypp/mmx_repository_keys/NAME.asc.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: >-
+      present (the default) writes the signing key, imports it into rpm, and
+      writes the repository file. absent removes the repository with its
+      cache, the signing keys that the module imported for it from rpm (not
+      a key that another repository's key file holds, and not a key that rpm
+      held before), and the key file, and accepts only name and state;
+      packages that came from the repository stay installed.
+  url:
+    type: string
+    required: false
+    description: >-
+      The address of the repository, which holds the directory repodata, such
+      as https://download.example.org/leap/16.1/. Starts with https:// or
+      http://; with repository_metadata_is_signed false, https:// only,
+      because nothing else then stops a change of the list of packages on the
+      way. Required for state present.
+  repository_metadata_is_signed:
+    type: boolean
+    required: false
+    description: >-
+      true when the repository signs its metadata (the file repodata/repomd.xml
+      has a repomd.xml.asc beside it): zypper then checks that signature. false
+      for a repository that does not sign its metadata, which zypper then
+      cannot check. Packages are always checked against the signing key.
+      Required for state present, because only the repository's vendor knows
+      which it is.
+  signing_key_text:
+    type: string
+    required: false
+    description: >-
+      The repository's public signing key as ASCII-armored text, such as the
+      content of a .asc file, usually given by a reference to a variable.
+      Exactly one of signing_key_text or signing_key_url for state present.
+  signing_key_url:
+    type: string
+    required: false
+    description: >-
+      An https:// address of the ASCII-armored signing key. The node fetches
+      it, and with signing_key_sha256 checks its SHA-256 first.
+  signing_key_sha256:
+    type: string
+    required: false
+    description: >-
+      The key's SHA-256 as 64 hexadecimal characters. With signing_key_url,
+      exactly one of signing_key_sha256 or dangerously_skip_checksum.
+  dangerously_skip_checksum:
+    type: boolean
+    required: false
+    description: >-
+      true in place of signing_key_sha256: the key is trusted as it arrives
+      from the web address.
+outputs:
+  created:
+    type: boolean
+    description: true when this task created the repository file, and in a dryrun when a run would.
+examples:
+  - description: Add a vendor's repository with a key from a web address.
+    config: |
+      zypper_repository:
+        name: vendor
+        url: https://download.example.org/leap/16.1/
+        repository_metadata_is_signed: true
+        signing_key_url: https://download.example.org/key.asc
+        # Replace with the SHA-256 of the key you have verified.
+        signing_key_sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  - description: Remove a repository.
+    config: |
+      zypper_repository:
+        name: vendor
+        state: absent

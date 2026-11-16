@@ -1,0 +1,37 @@
+fleet_stages:
+  - id: install
+    nodes: all
+
+    node_tasks:
+      - task_block:
+          id: install_release
+          changes:
+            - id: executable
+              download:
+                url: https://downloads.example.com/sleep-linux-arm64
+                sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                path: /usr/local/bin/mmx-download-demo
+                owner: root
+                group: root
+                permissions_mode: "0755"
+                check_new_file:
+                  shell:
+                    script: test -s "$NEW_FILE"
+                    dryrun: test -s "$NEW_FILE"
+                    env:
+                      NEW_FILE: "{{ .new_file.path }}"
+            - systemd_unit:
+                name: mmx-download-demo.service
+                content: |
+                  [Unit]
+                  Description=MMX pinned download example
+                  [Service]
+                  ExecStart=/usr/local/bin/mmx-download-demo infinity
+                  [Install]
+                  WantedBy=multi-user.target
+          activate:
+            - systemd_service:
+                name: mmx-download-demo.service
+                state: running
+                start_at_boot: true
+                refresh: restart

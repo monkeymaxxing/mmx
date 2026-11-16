@@ -1,0 +1,42 @@
+# Managed by MMX (role nginx_load_balancer): the brand sites, one server for
+# each, under its own name and its www name.
+#
+# Maintenance pages: the playbook load_balancer_maintenance_pages links
+# maintenance_on.html to maintenance.html in a site's web root. Each server
+# tests for that file on every request, so a change needs no reload.
+{{- $certificates := .inputs.tls_certificate_dir }}
+{{- range .inputs.brand_sites }}
+
+server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name {{ .domain }} www.{{ .domain }};
+    ssl_certificate     {{ $certificates }}/{{ .domain }}/fullchain.pem;
+    ssl_certificate_key {{ $certificates }}/{{ .domain }}/privkey.pem;
+    include /etc/nginx/includes/proxy_headers.conf;
+
+    if (-f /var/www/{{ .domain }}/maintenance_on.html) {
+        return 503;
+    }
+    error_page 503 @maintenance;
+    location @maintenance {
+        root /var/www/{{ .domain }};
+        rewrite ^ /maintenance.html break;
+    }
+
+    location / {
+        proxy_pass http://brand_site_{{ .name }};
+    }
+
+    # A few tries in a row, then a pause (nginx.conf).
+    location /login {
+        limit_req zone=login burst=6 nodelay;
+        proxy_pass http://brand_site_{{ .name }};
+    }
+
+    location /password_reset {
+        limit_req zone=password_reset burst=2 nodelay;
+        proxy_pass http://brand_site_{{ .name }};
+    }
+}
+{{- end }}

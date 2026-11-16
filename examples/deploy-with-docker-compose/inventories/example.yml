@@ -1,0 +1,29 @@
+nodes:
+  shop01:
+    address: shop01.example.com
+    ssh_user: admin
+
+# What is specific to the application: here, nginx as a small web server.
+vars:
+  # The image, with a tag that names one version, or a digest.
+  shop_image: nginx:1.27.3
+  # The application's health check, as Compose's healthcheck takes it: the
+  # command inside the container that succeeds while the application works,
+  # and how often Docker runs it.
+  shop_health_check: '{test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8080/"], interval: 5s}'
+  # The directory inside the container where the application reads its
+  # configuration file, the file's name, and its text.
+  shop_config_dir_in_container: /etc/nginx/conf.d
+  shop_config_file_name: default.conf
+  shop_config: |
+    server {
+      listen 8080;
+      location / {
+        return 200 "The shop is open.\n";
+      }
+    }
+  # The command inside the container that makes the application read its
+  # configuration file again.
+  shop_reload_command: nginx -s reload
+  # A setting that the application reads from its environment.
+  shop_time_zone: Europe/Berlin

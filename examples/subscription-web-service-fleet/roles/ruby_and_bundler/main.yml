@@ -1,0 +1,22 @@
+# Ruby and Bundler for the applications, from the distribution, and what
+# their gems with native code build against.
+node_tasks:
+  - apt_package:
+      packages:
+        - {name: build-essential, version: newest_when_first_installed}
+        - {name: libssl-dev, version: newest_when_first_installed}
+        - {name: libyaml-dev, version: newest_when_first_installed}
+        - {name: libmysqlclient-dev, version: newest_when_first_installed}
+        - {name: ruby, version: newest_when_first_installed}
+        - {name: ruby-dev, version: newest_when_first_installed}
+        - {name: ruby-bundler, version: newest_when_first_installed}
+        - {name: git, version: newest_when_first_installed}
+
+  # No documentation for every gem installed: it takes time and space and
+  # nobody reads it on a server.
+  - file:
+      path: /home/deploy/.gemrc
+      content: "gem: --no-document\n"
+      owner: deploy
+      group: deploy
+      permissions_mode: "0644"

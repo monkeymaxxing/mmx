@@ -1,0 +1,76 @@
+summary: Manages the pg_auto_failover monitor of a formation on the monitor's server, with its systemd unit, the password of its login autoctl_node, and which nodes belong to the formation.
+inputs:
+  data_directory:
+    type: string
+    required: true
+    description: The monitor's PostgreSQL data directory, an absolute path such as /var/lib/postgresql/18/monitor. Its parent directory must belong to the account postgres.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, deleted_with_all_its_data]
+    description: present (the default) creates the monitor or keeps it as the task says; deleted_with_all_its_data stops its service, removes its unit, and deletes the monitor with its data directory. deleted_with_all_its_data accepts only data_directory.
+  postgresql_major_version:
+    type: integer
+    required: false
+    description: The major version of PostgreSQL whose programs run the monitor, such as 18. Required for state present.
+  port:
+    type: integer
+    required: false
+    description: The port of the monitor's PostgreSQL, such as 5432. Required for state present.
+  host_name:
+    type: string
+    required: false
+    description: The host name or IP address with which the nodes reach the monitor, such as its address on a private network. pg_autoctl lets autoctl_node log in from that address's subnet. Required for state present.
+  listen_address:
+    type: string
+    required: false
+    description: The address on which the monitor's PostgreSQL listens for connections, such as the same private address as host_name, or * for every address of the server. host_name is the address that the nodes connect to; listen_address is where PostgreSQL listens. A changed address takes a restart of pgautofailover.service. Required for state present.
+  autoctl_node_password:
+    type: string
+    required: false
+    private_value: true
+    description: The password of the monitor's login autoctl_node, with which the nodes reach the monitor. The module logs in once as autoctl_node to compare it and sets it only when the monitor refuses that login. Required for state present.
+  formation:
+    type: string
+    required: false
+    description: The formation whose nodes node_names lists, such as default, which pg_auto_failover always has; the module creates another formation that the monitor lacks. Required for state present.
+  node_names:
+    type: list_of_strings
+    required: false
+    description: The names of the nodes that belong to the formation, such as the inventory names of the database servers. A listed node that has not registered yet is no error; each node registers itself. Required for state present.
+  nodes_not_listed:
+    type: string
+    required: false
+    allowed_values: [remove, keep]
+    description: What happens to a registered node that node_names does not list; remove drops it from the formation, also when its server is gone, and keep leaves it. A node that the monitor reports healthy and has made the primary is never dropped. Required for state present.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the monitor, or in a dryrun would create it.
+  primary_node_name:
+    type: string
+    description: The name of the node that the monitor has made the formation's primary, by its assigned state (single, wait_primary, primary, join_primary, or apply_settings), or the empty text when no node or more than one has such a state. Not known in a dryrun that would start the monitor's stopped service.
+  nodes:
+    type: any
+    description: One entry for each node that the monitor lists for the formation, with name, host_name, port, current_state, assigned_state, healthy, candidate_priority, and replication_quorum. Not known in a dryrun that would start the monitor's stopped service.
+  node_monitor_uri:
+    type: string
+    description: The connection URI with which nodes reach the monitor, without a password, such as postgres://autoctl_node@10.20.0.31:5432/pg_auto_failover?sslmode=require.
+examples:
+  - description: The monitor of the formation default on its own server, whose nodes are the database servers db01 and db02. A server that leaves the list leaves the formation.
+    config: |
+      pg_auto_failover_monitor:
+        data_directory: /var/lib/postgresql/18/monitor
+        postgresql_major_version: 18
+        port: 5432
+        host_name: 10.20.0.31
+        listen_address: 10.20.0.31
+        autoctl_node_password: "{{ .secrets.autoctl_node_password }}"
+        formation: default
+        node_names: [db01, db02]
+        nodes_not_listed: remove
+  - description: Delete the monitor and its data directory.
+    config: |
+      pg_auto_failover_monitor:
+        data_directory: /var/lib/postgresql/18/monitor
+        state: deleted_with_all_its_data

@@ -1,0 +1,17 @@
+nodes:
+  app:
+    address: app.example.com
+    ssh_user: deploy
+
+vars:
+  # The image to run. Its tag names one version: to deploy the next version,
+  # change the tag here and run the playbook again.
+  shop_web_image: registry.example.com/shop/web:2.4
+  # A setting of the application, written into its configuration file.
+  shop_web_greeting: Welcome to the shop
+  # What this image expects. Set these five to your application's.
+  shop_web_health_check_command: '["/usr/local/bin/shop-web", "check-health"]'
+  shop_web_health_check_interval: 10s
+  shop_web_reload_command: /usr/local/bin/shop-web reload-configuration
+  shop_web_config_dir_in_container: /etc/shop-web
+  shop_web_data_dir_in_container: /var/lib/shop-web

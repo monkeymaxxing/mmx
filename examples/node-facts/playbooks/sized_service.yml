@@ -1,0 +1,8 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - role: sized_service
+        inputs:
+          cache_percent: 25

@@ -1,0 +1,42 @@
+#!/usr/sbin/nft -f
+# Managed by MMX (role nftables_firewall). The firewall of {{ .node.name }}.
+#
+# Loading this file replaces the table fleet_firewall in one step and leaves
+# the tables of other programs alone. The first line creates the table when
+# it is missing, so that the delete that follows always has a table to delete.
+{{- $groups := .inputs.inventory_groups }}
+{{- $node := .node.name }}
+
+table inet fleet_firewall
+delete table inet fleet_firewall
+
+table inet fleet_firewall {
+    set trusted_networks_ipv4 {
+        type ipv4_addr
+        flags interval
+        elements = { {{ join ", " .inputs.trusted_networks }} }
+    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        ct state established,related accept
+        iifname "lo" accept
+        meta l4proto { icmp, ipv6-icmp } accept
+
+        tcp dport 22 accept comment "SSH"
+        tcp dport 7443 accept comment "MMX node HTTPS API"
+        udp dport 60000-61000 accept comment "mosh"
+
+        ip saddr @trusted_networks_ipv4 accept comment "the company's own networks"
+{{- if has $node (index $groups "nginx_load_balancers") }}
+
+        tcp dport { 80, 443 } accept comment "load balancer: HTTP and HTTPS"
+        ip protocol vrrp accept comment "load balancer: keepalived"
+{{- end }}
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+    }
+}

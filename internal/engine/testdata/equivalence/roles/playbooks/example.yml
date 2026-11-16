@@ -1,0 +1,45 @@
+
+
+
+
+
+
+fleet_stages:
+  - id: configure
+    nodes: web
+
+    node_tasks:
+      - id: app
+        role: app
+        inputs:
+          port: "{{ .vars.app_port }}"
+          workers: "{{ .node.cpu_count }}"
+
+      - show: "{{ .node_tasks.app.outputs.summary }}"
+
+      - id: defaults
+        role: app
+
+      - id: sized
+        role: app
+        when: {equals: ["{{ .node.cpu_count }}", 4]}
+        inputs: {name: sized}
+
+      - id: skipped
+        role: app
+        when: false
+
+      - id: per_site
+        role: app
+        loop: [a, b]
+        as: site
+        inputs: {name: "{{ .site }}"}
+
+      - id: vault
+        role: vault
+        inputs: {password: "{{ .secrets.token }}"}
+
+      - id: guarded
+        role: vault
+        when: {equals: ["{{ .node.cpu_count }}", 2]}
+        inputs: {password: "{{ .secrets.token }}", label: guarded}

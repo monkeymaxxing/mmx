@@ -1,0 +1,42 @@
+fleet_stages:
+  - id: configure
+    nodes: all
+
+    node_tasks:
+      - directory:
+          path: /srv/mmx-config-demo
+          permissions_mode: "0755"
+
+      - file:
+          path: /usr/local/bin/mmx-config-demo-load
+          source: files/load.sh
+          permissions_mode: "0755"
+
+      - systemd_unit:
+          name: mmx-config-demo.service
+          template: files/config-demo.service
+
+      - task_block:
+          id: configuration
+          changes:
+            - id: tree
+              directory:
+                path: /etc/mmx-config-demo
+                source: conf.d
+                owner: root
+                group: root
+                permissions_mode: "0755"
+                file_permissions_mode: "0644"
+          validate:
+            - shell:
+                script: |
+                  awk -F= 'NF != 2 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ { exit 1 }' /etc/mmx-config-demo/*.conf
+          activate:
+            - systemd_service:
+                name: mmx-config-demo
+                start_at_boot: true
+                refresh: reload
+                state: running
+          verify:
+            - shell:
+                script: cat /etc/mmx-config-demo/*.conf | cmp - /srv/mmx-config-demo/loaded

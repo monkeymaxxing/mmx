@@ -1,0 +1,2 @@
+project_name: deploy_from_git
+default_inventory: example

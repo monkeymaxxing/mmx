@@ -1,0 +1,2 @@
+project_name: data_disk_with_lvm
+default_inventory: example

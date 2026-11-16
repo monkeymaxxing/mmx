@@ -1,0 +1,15 @@
+{
+	"type": "sync",
+	"status": "Success",
+	"status_code": 200,
+	"operation": "",
+	"error_code": 0,
+	"error": "",
+	"metadata": {
+		"description": "",
+		"target": "5006248f5b77219a9678226e6877086dd8c9f5584ab7c54340400f0f7de7edde",
+		"name": "mmx-test",
+		"type": "container"
+	}
+}
+

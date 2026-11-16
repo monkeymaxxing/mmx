@@ -1,0 +1,10 @@
+[Unit]
+Description=MMX configuration directory example
+
+[Service]
+ExecStartPre=/usr/local/bin/mmx-config-demo-load
+ExecStart=/bin/sleep infinity
+ExecReload=/usr/local/bin/mmx-config-demo-load
+
+[Install]
+WantedBy=multi-user.target

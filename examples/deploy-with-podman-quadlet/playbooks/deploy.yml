@@ -1,0 +1,77 @@
+# mmx run deploy
+fleet_stages:
+  - id: deploy
+    nodes: all
+
+    node_tasks:
+      # The application's configuration, in a directory of the node that the
+      # container reads. On a node with SELinux, the label rule lets
+      # containers read the directory and every file MMX writes there later;
+      # elsewhere the task reports skipped.
+      - selinux_file_context:
+          path: /etc/shop-web
+          also_apply_to_everything_inside: true
+          selinux_type: container_file_t
+      - directory:
+          path: /etc/shop-web
+          permissions_mode: "0755"
+
+      # One node task block for everything the container runs with. Its
+      # service task says refresh: reload, which applies to the configuration
+      # file: the Quadlet file below says how to reload. A new image and a
+      # changed Quadlet file restart the service whatever refresh says.
+      - task_block:
+          id: shop_web
+          changes:
+            - id: configuration
+              file:
+                path: /etc/shop-web/configuration
+                permissions_mode: "0644"
+                content: |
+                  greeting = {{ .vars.shop_web_greeting }}
+            - id: image
+              podman_image:
+                image: "{{ .vars.shop_web_image }}"
+                pull_image: when_missing
+            # The volume's file comes before the container's file, which
+            # names it: Podman rejects a container file that names a Quadlet
+            # file it cannot find.
+            - id: volume
+              podman_quadlet:
+                name: shop-web-data.volume
+                content: |
+                  [Volume]
+                  VolumeName=shop-web-data
+            - id: container
+              podman_quadlet:
+                name: shop-web.container
+                content: |
+                  [Unit]
+                  Description=Shop web application
+
+                  [Container]
+                  ContainerName=shop-web
+                  Image={{ .vars.shop_web_image }}
+                  PublishPort=127.0.0.1:8080:8080
+                  Volume=shop-web-data.volume:{{ .vars.shop_web_data_dir_in_container }}
+                  Volume=/etc/shop-web:{{ .vars.shop_web_config_dir_in_container }}:ro
+                  HealthCmd={{ .vars.shop_web_health_check_command }}
+                  HealthInterval={{ .vars.shop_web_health_check_interval }}
+
+                  [Service]
+                  Restart=always
+                  ExecReload=/usr/bin/podman exec shop-web {{ .vars.shop_web_reload_command }}
+
+                  [Install]
+                  WantedBy=multi-user.target
+          activate:
+            - id: service
+              systemd_service:
+                name: shop-web.service
+                state: running
+                refresh: reload
+          verify:
+            - id: healthy
+              wait_for:
+                podman_container_is_healthy: shop-web
+                wait_at_most: 2m

@@ -1,0 +1,504 @@
+# `dnf_package`
+
+`dnf_package` manages packages through dnf and rpm on the Red Hat family
+(RHEL, Rocky Linux, AlmaLinux, Fedora). It does there what [`apt_package`](apt_package.md) does on Debian and
+Ubuntu: a task keeps packages present or absent, keeps packages at a
+version, brings named packages to the newest version, installs a package
+that comes as an `.rpm` file, or upgrades the whole node, also with security
+updates only. It drives dnf 4, the dnf of Enterprise Linux 9 and 10, and
+dnf 5, the dnf of Fedora; [dnf 5 differs](#dnf-5) in how it keeps a package at a version.
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: nginx, version: newest_when_first_installed}
+      - {name: certbot, version: newest_when_first_installed}
+```
+
+A task gives a `packages` list. Each present entry requires `name` and
+`version`; each absent entry gives only `name`. One entry may use a version
+pattern while another uses a keyword or a package file. Every check runs
+before any version rule is written. MMX writes all rules before installing
+all entries with one package-manager command, so list order does not matter.
+With `enable_dnf_module_stream`, the requested stream is enabled before
+version checks; a later refusal leaves that stream enabled. See
+[module streams](#module-streams).
+
+A node that uses apt gets `apt_package` tasks instead; a role for
+several distributions has one task for each package manager, as [one module
+for each
+tool](../../docs/changing-mmx/design/modules-packages.md#one-module-for-each-tool) shows.
+The rules that the two package modules share are in [what every package
+manager module
+does](../../docs/changing-mmx/design/modules-packages.md#what-every-package-manager-module-does).
+A vendor's repository, or a repository that the node has switched off, comes
+from a [`dnf_repository`](dnf_repository.md) task before the package task.
+
+Two inputs that `apt_package` has are missing here:
+
+- `also_delete_its_config_files`: rpm has no such operation. On
+  removal, rpm deletes a configuration file that was never changed and keeps
+  a changed one beside its old place with the ending `.rpmsave`. Delete those
+  with `file.state: absent`.
+- `allow_package_to_start_its_services`: packages of the Red Hat family do
+  not start their services when they are installed. A service starts when a
+  [`systemd_service`](systemd_service.md) task says `state: running`.
+
+## Examples
+
+### Choose each package's version
+
+The `version` field has no default. Choose an exact version, a `*`
+pattern, or a keyword for each entry; [Package versions](../../docs/reference/shared-module-behavior.md#package-versions) lists what
+each does. Both keywords remove only the version rule MMX wrote for the
+package, and administrator rules stay. The
+[required-settings rule](../../docs/changing-mmx/design/modules.md#a-setting-with-no-safe-guess-is-required)
+explains why each entry must state its version policy.
+
+### Install and remove packages
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: nginx, version: newest_when_first_installed}
+      - {name: certbot, version: newest_when_first_installed}
+```
+
+On the node, MMX inspects each name with rpm. A required installation is one
+dnf command for the missing names. A package that is installed stays at its
+version.
+
+`packages[].name` are package names. dnf also installs a package by a name that it
+only provides, such as `nc`, for which it installs `nmap-ncat`; MMX then
+fails the task and names the package to write, because it checks each
+package by its own name.
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: httpd}
+    state: absent
+```
+
+`state: absent` asks dnf to simulate removal first. If dnf would also
+remove a package that the task does not name, the task fails before any
+change. Add `also_remove_packages_that_depend_on_these: true` to permit
+those removals, or list the whole intended removal set.
+`also_remove_packages_only_it_needed: true` also asks dnf to remove packages
+installed only because the named ones needed them. The simulation still
+checks every unnamed removal. An already absent package is unchanged.
+The result lists each removal as `{name, from}`; dryrun uses the same check.
+
+### Keep a package at a version
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: python3-dnf-plugin-versionlock, version: newest_when_first_installed}
+
+- dnf_package:
+    packages:
+      - {name: docker-ce, version: "3:27.3.*"}
+```
+
+`version` works as on
+[`apt_package`](apt_package.md#keep-a-package-at-a-version), with these
+differences:
+
+- The version text is what dnf shows: the epoch and a colon when the package
+  has an epoch, then the version, a hyphen, and the release, such as
+  `3:27.3.1-1.el9`. A pattern uses `*` the same way.
+- The rule is an entry in dnf's version lock, not a file that MMX names.
+  On dnf 4 the version lock is a plugin that must be installed first, by an
+  ordinary `dnf_package` task as above; when it is missing, the task fails
+  with a message that names the package to install. dnf 5 has the version
+  lock built in and needs no plugin; see [dnf 5](#dnf-5).
+- MMX marks each of its version lock entries with a preceding comment.
+  A version keyword deletes only that owned pair; administrator entries
+  stay, including entries for the same package. See
+  [MMX's version lock entries](#mmxs-version-lock-entries).
+
+The [tables of situations and of changes in the project](apt_package.md#the-version-rule-file)
+are the same as for apt, with "the version lock entry" in place of "the
+file". Which version is newer is rpm's answer. `upgrade_all_packages_within_their_version_rules: true`,
+`version: newest_on_every_run` for other packages, and the distribution's automatic
+updates all stay inside the lock.
+
+### Upgrade named packages or the whole node
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: ca-certificates, version: newest_on_every_run}
+      - {name: openssl, version: newest_on_every_run}
+      - {name: tzdata, version: newest_on_every_run}
+```
+
+`version: newest_on_every_run` installs each named package that is missing and upgrades
+each one to the newest version the node's repositories offer.
+
+```yaml
+- dnf_package:
+    upgrade_all_packages_within_their_version_rules: true
+    also_remove_packages_no_longer_needed: true
+```
+
+`upgrade_all_packages_within_their_version_rules: true` runs `dnf upgrade` for the whole node, and with
+`also_remove_packages_no_longer_needed: true` then runs `dnf autoremove`.
+
+Both refresh dnf's index once per node job first. The result's `value` lists
+every package changed by the command, including dependencies outside
+`packages`, as `{name, from, to}`. A newly installed package has no `from`;
+a removed package has no `to`. The task is unchanged when dnf has nothing to do. A
+dryrun asks dnf what it would do against the index the node has, and changes
+nothing. MMX restarts nothing itself, but a package's own scripts may restart
+a running service when dnf upgrades the package, as packages that use
+systemd's RPM macro `%systemd_postun_with_restart` do. A node task block that
+declares an upgraded package restarts its service at its next activation, and
+a new kernel needs an explicit reboot.
+
+### Apply only security updates
+
+```yaml
+- dnf_package:
+    upgrade_all_packages_within_their_version_rules: true
+    only_security_updates: true
+```
+
+`only_security_updates` is a boolean, default `false`, allowed only with
+`upgrade_all_packages_within_their_version_rules: true`. With `true`, MMX runs `dnf upgrade --security`. A security
+advisory is a notice from a package source that names packages with
+security fixes. dnf selects those packages and resolves their dependencies.
+The result's `value` lists the transaction as `{name, from, to}`, in a
+dryrun and in a run. Version locks still apply, and
+`also_remove_packages_no_longer_needed` still removes unused packages
+afterwards.
+
+MMX first checks dnf's list of all advisories for the installed package
+names, including applied advisories and all advisory types. When that list
+is empty, the task fails before it changes packages, also in a dryrun; see
+[errors](#errors-and-what-they-mean). When advisories exist but no security
+update applies, the task is unchanged.
+
+### Install an `.rpm` file
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: rclone, version: "1.68.2-1", package_file_url: https://downloads.rclone.org/v1.68.2/rclone-v1.68.2-linux-amd64.rpm, package_file_sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+```
+
+The rules are those of the
+[apt package file](apt_package.md#install-a-package-from-a-deb-file): one or more entries with an exact `version`, the file from `package_file_url` or
+`package_file_source`, the name and version read from the file on the node,
+dependencies from the node's repositories, and a version lock entry for the
+file's version. The controller machine fetches and verifies the file as
+[files fetched from a web address](../../docs/changing-mmx/design/modules-packages.md#files-fetched-from-a-web-address)
+describes. dnf does not check a signature on a local package file here; the
+SHA-256 in the task is the check.
+
+### Use a repository for one task only
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: kernel-ml, version: newest_when_first_installed}
+    repositories_enabled_only_for_this_task: [elrepo-kernel]
+```
+
+The named repositories exist on the node and are switched off. dnf may use
+them for this task's installation or upgrade, including a whole-node upgrade.
+This changes no saved repository setting. A
+[`dnf_repository`](dnf_repository.md) task with `enabled: false` writes such
+a repository.
+
+### Packages that come in a module stream
+
+On Enterprise Linux 8 and 9, some software (PostgreSQL, Node.js, nginx, PHP,
+and others) comes in several major versions as dnf "module streams". The
+plain package name installs the oldest: `postgresql-server` is PostgreSQL 13.
+A stream must be enabled before its packages are installed:
+
+```yaml
+- dnf_package:
+    packages:
+      - {name: postgresql-server, version: newest_when_first_installed}
+      - {name: postgresql-contrib, version: newest_when_first_installed}
+    enable_dnf_module_stream: "postgresql:16"
+```
+
+The field is allowed only with present `packages` and no package files. One fleet stage
+may not enable two streams of one module. Taking the field out of the task,
+or deleting the task, leaves the stream enabled, as removing a task leaves
+things in place everywhere else.
+[Module streams](#module-streams) says what the task does in each situation
+on the node.
+
+## How it works
+
+### MMX's version lock entries
+
+MMX writes a comment immediately before each lock that it owns:
+
+```text
+# Written by MMX for package docker-ce
+docker-ce-3:27.3.*
+```
+
+A version keyword or removal deletes only a matching comment and its next
+lock line. A version rule replaces only that owned pair. Administrator
+entries remain, including entries for the same package. MMX never deletes
+the lock file, because the plugin needs the file even when it is empty.
+
+The lock uses dnf's raw package specification with an explicit epoch, the
+number before a colon in an RPM version. An omitted epoch is zero; a leading
+`*` can match any epoch. For example, `version: "16.*"` writes
+`postgresql-server-0:16.*`. The explicit epoch prevents a hyphenated package
+name from being read as another package's name and version. MMX adds no
+architecture suffix: in a version-only rule, an added `.*` would become part
+of RPM's version pattern.
+
+### dnf 5
+
+On a node whose `dnf` program is a link to `dnf5` (Fedora 41 and newer),
+the module works the same way for the task's settings and results. Some
+things differ inside, and one of them reaches the playbook.
+
+- **The version lock is built into dnf, as a TOML file.** MMX writes
+  `/etc/dnf/versionlock.toml`; no plugin package is needed, and a task that
+  installs `python3-dnf-plugin-versionlock` first is not needed on Fedora.
+  MMX marks its table with `comment = "Written by MMX for package <name>"`
+  and replaces or removes only that table, as it does on dnf 4.
+- **The lock has no wildcard.** A `version` rule is written as follows:
+
+  | Rule | Written to the lock |
+  |---|---|
+  | An exact version, such as `3:27.3.1-1.fc45` | `evr = 3:27.3.1-1.fc45` |
+  | Numbers that end in `.*`, such as `16.*` or `3:27.3.*` | a range: `evr >= 0:16` and `evr < 0:17~` |
+  | `*` | no table (every version is allowed) |
+
+  Any other wildcard, such as `1.2*`, `1.2.3-*`, or `*:16.*`, fails the task
+  before it changes anything, and the reason lists what works. The reason for
+  the limit: dnf 5.4.7 reads only exact and relational comparisons, and reports
+  the comparator `GLOB` as invalid. The range for `27.3.*` also admits the
+  bare version `27.3`, and also `27.3^<snapshot>` and `27.3a`, which rpm
+  sorts after `27.3`; MMX's own search for the newest matching version
+  uses the pattern as written, so it never picks them. The upper bound ends
+  in `~`, which rpm sorts before any text, so `27.4~rc1` stays out. A suite
+  step asks dnf 5 about versions on both sides of the range.
+- **A rule change previews with excludes off.** dnf 5 offers no way to read a
+  lock file other than the node's, so a preview cannot stage the new rule, and
+  the old rule would hide the version the task wants. When the task changes
+  or drops a rule that MMX wrote, the preview of the installation runs with
+  dnf's excludes switched off (`--setopt=disable_excludes=*`); the entries
+  are named with their exact versions, so it plans the installation the
+  run will make. Excludes off also hides the administrator's tables and the
+  repositories' `exclude` settings from that preview. So, before anything is
+  written, MMX checks each planned version against the administrator's
+  tables in the lock file (conditions on `evr` and `epoch` with `=`, `!=`,
+  `<`, `<=`, `>`, and `>=`; tables of one package are alternatives, the
+  conditions of one table all hold) and fails with "outside a version lock
+  that an administrator wrote" when no table allows it. A table with a
+  condition on `arch` is left to dnf. A repository's `exclude` setting is not
+  checked: there the install can be refused after the rule is written, and a
+  rerun with the rule fixed repairs it.
+- **MMX edits the lock file only when it recognises every line.** It reads
+  the version line, `[[packages]]` tables with `name` and `comment`, and
+  their `[[packages.conditions]]` with `key`, `comparator`, and `value`, as
+  strings, with comments and blank lines anywhere and spaces and a comment
+  in a header. Comment lines stay with the table that follows them. It
+  recognises its own table by the comment's value, whatever the quotes and
+  spaces. For anything else, such as an inline `packages = [...]` array, it
+  fails and says which line, because dnf 5 fails every command (exit status
+  1, "Error parsing versionlock file") when the file is invalid. After it
+  builds the new text, it checks that every table it did not write is
+  unchanged. `dnf versionlock add` writes its table beside MMX's and leaves
+  MMX's alone.
+- **`newest_on_every_run` stays inside the administrator's tables.** dnf 5's
+  `repoquery` lists the versions that a lock excludes, so MMX leaves out the
+  versions that the tables exclude and installs the newest of the rest.
+- **The module reads dnf 5's other output forms.** A transaction table lists
+  the replaced package of an upgrade on a `replacing` line, advisories name
+  their type in words, and `dnf_repository` switches a repository with
+  `config-manager enable` and `disable`.
+- **`newest_on_every_run` names the newest version.** dnf 5's `install`
+  leaves an installed package alone, where dnf 4's `install` upgrades it. For
+  an installed package the module looks up the newest version and installs it
+  by name and version, which upgrades.
+- **Fedora has no module streams.** `enable_dnf_module_stream` fails with the
+  message for a node without the module.
+
+### The package index and the lock
+
+dnf refreshes its own package index when the index has expired. A changed
+file under `/etc/yum.repos.d/` or `/etc/dnf/` in the same node job, such as a
+repository that a `dnf_repository` task added, makes the next installation
+refresh first, so the new repository is found. An upgrade, and a task with
+`version` whose package is not installed at a matching version, read the
+newest versions that the repositories offer. With `mmx run`, they refresh the
+index once per node job first; a dryrun reads the index the node has. MMX waits a bounded time for
+dnf's lock.
+
+A repository package such as `epel-release` must be installed in an earlier
+node task. dnf cannot use repository files from a package that the same
+transaction has not installed yet. During a dryrun, that earlier task leaves
+the node unchanged. If dnf cannot find a later task's package in the node's
+current repositories, MMX reports `not_checked`, with dnf's reason. A run
+fails without changes when a package cannot be found.
+
+### Module streams
+
+MMX reads dnf's record of the module,
+`/etc/dnf/modules.d/<module>.module`, then follows this order:
+
+1. Check the inputs and prerequisites that do not need the stream, including
+   the version lock plugin. Removal tasks and package files cannot select a
+   stream; those inputs are refused before any change.
+2. Enable the requested stream with `dnf module enable -y <module:stream>`.
+3. Resolve every entry's version and preview the complete installation,
+   including dependencies, against the proposed version rules.
+4. Write the version rules and install all entries in one dnf command.
+
+A refusal at step 3 leaves the requested stream enabled, with no package or
+version-rule change. dnf hides a stream's packages until the stream is
+enabled, so MMX cannot check those versions beforehand. The task asked for
+that stream, and the next run continues from there.
+
+A dryrun enables nothing. When the requested stream is not yet enabled,
+the installation reports `not_checked`: the dryrun cannot resolve the
+versions and dependencies that the stream would provide. Once the stream
+is enabled, a dryrun uses the normal native installation preview. Stream
+commands, version queries, and previews all use the task's repository options.
+
+| Situation on the node | What the task does |
+|---|---|
+| The named stream is enabled. | Nothing for the stream; the installation follows. |
+| No stream is chosen. | Checks prerequisites, enables the requested stream, then checks versions and dependencies before installing. A later refusal leaves the stream enabled; the next run continues from there. A dryrun reports the installation `not_checked`. |
+| Another stream is enabled, or the module is switched off. | Fails and changes nothing, with both stream names and the `dnf module reset` an administrator uses. Switching a stream replaces installed software, such as a PostgreSQL major version under its data; that is a one-time playbook, not a side effect. |
+| A named package is already installed from outside the stream, such as PostgreSQL 13 installed before the task named a stream. | Fails and changes nothing: with the stream enabled, the next upgrade would replace the package with the stream's version. |
+| The node's repositories have no such module or stream. | Fails, asked of dnf rather than decided by the distribution's name. On Enterprise Linux 10, which has no module streams, the message says that other versions are separate package names there, such as `postgresql16-server`. |
+
+## Errors and what they mean
+
+- **The node uses another package manager.** The task fails with a reason
+  that says to give the node task a condition so that it runs only on nodes
+  that use dnf, such as `dnf_package installs with dnf, but this node's
+  package manager is apt (the node fact package_manager); give the node task
+  a condition so that it runs only on nodes that use dnf`.
+- **A name that dnf only provides.** dnf would install `nmap-ncat` for
+  `nc`; MMX fails the task and names the package to write in `packages[].name`.
+- **The version lock plugin is missing (dnf 4).** A task with `version`
+  fails with a message that names the package to install,
+  `python3-dnf-plugin-versionlock`. Install it in an earlier `dnf_package`
+  task.
+- **dnf cannot find a package.** Install its repository in an earlier node
+  task. A dryrun reports `not_checked`, because an earlier task may only
+  preview that repository's installation. A run fails before changing
+  version rules or packages. With `enable_dnf_module_stream`, the requested
+  stream remains enabled; see [module streams](#module-streams).
+- **On dnf 5, a version rule its lock cannot hold.** The task fails before it
+  changes anything, also in a dryrun: `the version rule "1.2*" for nginx
+  cannot be kept on this node. Its dnf is dnf 5, whose version lock has no
+  wildcard`. [dnf 5](#dnf-5) lists the rules that work.
+- **No version matches, or the installed version is newer than every
+  version that matches.** As on
+  [`apt_package`](apt_package.md#errors-and-what-they-mean): the task fails
+  and writes no version rules or packages. A requested module stream stays
+  enabled if the refusal follows its enablement; see [module streams](#module-streams).
+- **An id in `repositories_enabled_only_for_this_task` that the node does
+  not define.** The task fails with the ids the node has.
+- **The node's package sources list no advisories** with
+  `only_security_updates: true`. The task fails before it changes packages,
+  also in a dryrun. The reason explains that the node's package sources list
+  no advisories for its packages, so dnf cannot select security updates;
+  use `upgrade_all_packages_within_their_version_rules: true` without `only_security_updates` there.
+- **`only_security_updates` without the whole-node upgrade.** Writing the field there, even as `false`, is a validation
+  error.
+- **Module stream failures.** Another stream enabled, the module switched
+  off, a package installed from outside the stream, or no such stream: the
+  task fails and changes nothing, as [module streams](#module-streams) says.
+- **A node whose system is an image** (`/run/ostree-booted` exists, as on an
+  image-based system) cannot install packages with dnf. A `dnf_package` task
+  there fails with a message that says so.
+
+## Tested on
+
+**Distributions:** Rocky Linux 9, AlmaLinux 10, Fedora 45.
+
+The suite `server_resources.py` covers pinned package versions, package
+sources, and a whole-node upgrade, and runs on every target distribution in
+the whole catalog. `dnf_package` runs on these, with the dnf version that
+the [test harness](../../docs/changing-mmx/testing.md#current-platform-coverage) records:
+
+| Distribution | dnf |
+|---|---|
+| Rocky Linux 9 | 4.14 |
+| AlmaLinux 10 | 4.20 |
+| Fedora 45 | 5.4.7 |
+
+`only_security_updates` passed `server_resources.py` on both: it
+applied exactly the security selection, from the advisories that their
+package sources list. Go tests cover the failure on a node whose package
+sources list no advisories. Not verified on this build: `upgrade_all_packages_within_their_version_rules: true`
+applied on a dnf node; the suite runs its preview.
+
+[Limits on each distribution](../../docs/reference/limits-on-each-distribution.md) says what is limited for this module on [Fedora 45](../../docs/reference/limits-on-each-distribution.md#fedora-45), and why.
+
+## Why it works this way
+
+- **The preview includes every entry and the proposed version rules.** A
+  package file can satisfy another entry's dependency. Checking the complete
+  transaction before writing rules prevents package and version-rule changes
+  on refusal. A requested stream may already be enabled, as
+  [module streams](#module-streams) explains.
+
+- **Task-only repositories also work with a whole-node upgrade.** dnf's
+  repository switch belongs to one invocation and changes no saved setting;
+  the upgrade needs no separate prohibition.
+- **One list, one transaction.** Dependencies may require several packages
+  at matching versions. Writing all rules first and installing together
+  makes entry order irrelevant.
+- **Every present entry states its version policy.** Presence alone cannot
+  say whether an installed package should upgrade. See the
+  required-settings rule.
+- **Removal checks the package manager's simulation first.** An unnamed
+  removal needs `also_remove_packages_that_depend_on_these: true`, so the
+  task states its wider effect. See
+  [protective choices](../../docs/changing-mmx/design/modules.md#protective-choices-come-in-three-levels).
+- **Package entry mappings are written in the task.** Controller files
+  must be prepared while the project loads. Whole-list and whole-entry
+  references would leave those files unavailable on the node; references
+  in individual fields remain supported.
+- **The result includes dependency changes.** A native transaction can
+  change packages outside the task's list. Reporting those changes makes
+  the full effect visible.
+- **A file entry states its exact version.** Checking the file's name and
+  version before writing any rule catches a mismatched artifact before the
+  transaction changes packages.
+- **Version keywords remove only MMX's rules.** An administrator's rule
+  remains under the administrator's control. Candidate selection keeps
+  administrator rules when MMX removes its own rule.
+
+- **One module for dnf 4 and dnf 5.** The node's `dnf` program is a link to
+  `dnf5` on dnf 5 (a `dnf5` installed beside dnf 4 does not count), and the
+  module branches on that link inside itself, as decision D46 requires for a
+  difference between distributions. No `dnf5_package` module exists, so a
+  playbook for a mixed fleet needs no condition.
+- **MMX writes a version pattern itself, as one line of the version lock
+  plugin's list file.** The
+  plugin's own `add` command stores the versions that match today instead of
+  the pattern. The raw rule has no added architecture suffix, which would
+  change a version-only pattern such as `16.*`.
+- **`state: absent` keeps the packages the named ones needed.** `absent` then
+  means the same as on apt.
+- **A dryrun cannot use a repository that an earlier task would install.**
+  Reporting `not_checked` preserves that uncertainty without installing
+  packages just to preview another task.
+- **A requested stream is enabled before its versions are checked.** dnf
+  hides inactive streams' packages and dependencies. A later refusal leaves
+  the requested stream enabled so the next run can continue; dryrun enables
+  nothing and reports the installation `not_checked`.
+- **A module stream is never switched.** Switching a stream replaces
+  installed software, such as a PostgreSQL major version under its data;
+  that is a one-time playbook, not a side effect.
+- **No package groups (`@name`).** A `shell` task runs `dnf group install`.

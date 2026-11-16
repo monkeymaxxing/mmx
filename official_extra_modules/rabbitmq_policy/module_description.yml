@@ -1,0 +1,77 @@
+summary: Manages one policy of a virtual host of a RabbitMQ server.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The policy's name, such as limit-queue-length. It must not start with a hyphen.
+  virtual_host:
+    type: string
+    required: true
+    description: The virtual host that holds the policy, such as shop. RabbitMQ's default virtual host is named /.
+  state:
+    type: string
+    required: false
+    allowed_values: [present, absent]
+    description: >-
+      present (the default) creates the policy when it is missing and
+      replaces it when it differs. absent deletes the policy and accepts only
+      name and virtual_host.
+  pattern:
+    type: string
+    required: false
+    description: >-
+      A regular expression. The policy applies to the queues or exchanges
+      whose name it matches, such as "^orders\." or ".*". Required for
+      state present.
+  apply_to:
+    type: string
+    required: false
+    allowed_values: [queues, exchanges, all, classic_queues, quorum_queues, streams]
+    description: >-
+      What the policy applies to. Required for state present. RabbitMQ
+      before 3.12 takes only queues, exchanges, and all.
+  definition:
+    type: any
+    required: false
+    description: >-
+      A mapping of RabbitMQ's policy keys to their values, such as
+      max-length: 100000. Required for state present, with at least one key.
+      Write a whole number without a fraction.
+  priority:
+    type: integer
+    required: false
+    description: >-
+      A whole number. When several policies match one queue, RabbitMQ applies
+      the policy with the highest priority. Required for state present.
+outputs:
+  created:
+    type: boolean
+    description: true when the task created the policy, or in a dryrun would create it.
+examples:
+  - description: Let no queue of the virtual host shop hold more than 100000 messages.
+    config: |
+      rabbitmq_policy:
+        name: limit-queue-length
+        virtual_host: shop
+        pattern: ".*"
+        apply_to: queues
+        definition:
+          max-length: 100000
+        priority: 0
+  - description: Give the order queues a time limit for messages, before every other policy.
+    config: |
+      rabbitmq_policy:
+        name: orders-expire
+        virtual_host: shop
+        pattern: "^orders\\."
+        apply_to: queues
+        priority: 10
+        definition:
+          message-ttl: 3600000
+          dead-letter-exchange: expired-orders
+  - description: Delete the policy limit-queue-length of the virtual host shop.
+    config: |
+      rabbitmq_policy:
+        name: limit-queue-length
+        virtual_host: shop
+        state: absent

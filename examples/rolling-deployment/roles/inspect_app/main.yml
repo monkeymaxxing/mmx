@@ -1,0 +1,15 @@
+inputs:
+  release: {type: string, required: true}
+  site: {type: string, required: true}
+
+node_tasks:
+  - id: inspect
+    shell:
+      script: python3 /var/tmp/mmx-demo/demo.py inspect "$RELEASE" "$SITE"
+      dryrun: python3 /var/tmp/mmx-demo/demo.py inspect "$RELEASE" "$SITE"
+      env: {RELEASE: "{{ .inputs.release }}", SITE: "{{ .inputs.site }}"}
+      success_exit_codes: [0, 2]
+      changed_when: false
+
+outputs:
+  update_needed: {equals: ["{{ .node_tasks.inspect.exit_code }}", 2]}

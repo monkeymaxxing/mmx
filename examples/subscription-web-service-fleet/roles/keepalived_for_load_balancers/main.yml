@@ -1,0 +1,70 @@
+# keepalived moves the load balancers' virtual address, which the public
+# names point to, to the other load balancer when nginx stops answering. The
+# distribution's keepalived.
+inputs:
+  network_interface: {type: string, required: true}
+  # Higher wins: the primary load balancer has the higher priority.
+  priority: {type: integer, required: true}
+  virtual_router_id: {type: integer, required: true}
+  # Such as 192.0.2.10/32.
+  virtual_address: {type: string, required: true}
+  # The other load balancers' node names; [] for a single load balancer.
+  peer_nodes: {type: list, required: true}
+  # .inventory.nodes from the playbook, for the addresses.
+  inventory_nodes: {type: mapping, required: true}
+
+node_tasks:
+  - directory: {path: /usr/local/libexec, owner: root, group: root, permissions_mode: "0755"}
+  - directory: {path: /usr/local/libexec/keepalived, owner: root, group: root, permissions_mode: "0755"}
+
+  - task_block:
+      id: keepalived
+      changes:
+        - apt_package:
+            packages:
+              - {name: keepalived, version: newest_when_first_installed}
+              - {name: curl, version: newest_when_first_installed}
+        - file:
+            path: /usr/local/libexec/keepalived/check-nginx
+            content: |
+              #!/bin/sh
+              # Managed by MMX. nginx answers its own status page.
+              exec curl --silent --fail --max-time 2 --output /dev/null http://127.0.0.1:8080/nginx_status
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - file:
+            path: /usr/local/libexec/keepalived/check-manual-failover
+            content: |
+              #!/bin/sh
+              # Managed by MMX. Fails while /etc/keepalived/manual-failover exists.
+              test ! -e /etc/keepalived/manual-failover
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - file:
+            path: /usr/local/libexec/keepalived/log-state-change
+            content: |
+              #!/bin/sh
+              # Managed by MMX. keepalived runs this with: TYPE NAME STATE.
+              logger -t keepalived-state-change "Transition to state '$3' on VRRP instance '$2'."
+            owner: root
+            group: root
+            permissions_mode: "0755"
+        - file:
+            path: /etc/keepalived/keepalived.conf
+            template: files/keepalived.conf.tmpl
+            owner: root
+            group: root
+            permissions_mode: "0644"
+            check_new_file:
+              shell:
+                script: keepalived --config-test --use-file="$NEW_FILE"
+                dryrun: keepalived --config-test --use-file="$NEW_FILE"
+                env: {NEW_FILE: "{{ .new_file.path }}"}
+      activate:
+        - systemd_service:
+            name: keepalived
+            state: running
+            start_at_boot: true
+            refresh: reload

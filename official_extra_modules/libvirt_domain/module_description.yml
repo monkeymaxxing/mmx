@@ -1,0 +1,56 @@
+summary: Manages one libvirt domain, which is a virtual machine, through virsh. It defines the domain from an XML file on the node, starts it or shuts it off, and sets whether libvirt starts it when the node boots.
+inputs:
+  name:
+    type: string
+    required: true
+    description: The domain's name, such as shop-db. It must be the <name> in the XML file. It must not be a number or have the form of a UUID, because virsh takes such a text for the ID or the UUID of a domain.
+  state:
+    type: string
+    required: true
+    allowed_values: [running, stopped, absent]
+    description: running creates the domain or defines it again when a file is supplied, and starts it; it resumes a paused domain. stopped creates or defines the domain in the same way and asks its operating system to shut down. absent removes the definition of a domain that is shut off; the domain's disk image files, the variables of its UEFI firmware, and the state of its emulated TPM stay. absent accepts only name and libvirt_connection_uri.
+  domain_xml_file:
+    type: string
+    required: false
+    description: The absolute path, on the node, of the file that holds the domain's libvirt XML, such as /etc/mmx-libvirt/shop-db.xml. A file task before this task writes it. Required to create a domain. Omitted for an existing domain, its stored definition stays. If the domain is missing and the input is omitted, a dryrun reports not_checked because an earlier node task may create it; a run fails once. absent does not accept it.
+  start_at_boot:
+    type: boolean
+    required: false
+    description: true makes libvirt start the domain when the node boots, and false stops libvirt from doing so (virsh autostart). Omitted, the setting stays as it is; a new domain does not start at boot.
+  wait_for_shutdown_at_most:
+    type: string
+    required: false
+    description: >-
+      How long state stopped waits for the domain's operating system to shut down: a nonnegative duration of whole seconds, such as 30s or 2m. The task waits once; checks repeat each second. The default is 2m.
+  power_off_when_shutdown_takes_longer:
+    type: boolean
+    required: false
+    description: true cuts the domain's power (virsh destroy) when it still runs after wait_for_shutdown_at_most. false, the default, fails the task then and leaves the domain running.
+  libvirt_connection_uri:
+    type: string
+    required: false
+    description: Which libvirt on the node the module manages, as virsh --connect takes it. The default is qemu:///system, the QEMU and KVM domains of the whole node.
+outputs:
+  created:
+    type: boolean
+    description: true when this task created the domain, because libvirt had no domain of this name; in a dryrun, true when a run would create it.
+examples:
+  - description: Create the domain shop-db from the XML file that the file task wrote, start it, and let libvirt start it at every boot of the node.
+    config: |
+      libvirt_domain:
+        name: shop-db
+        state: running
+        domain_xml_file: /etc/mmx-libvirt/shop-db.xml
+        start_at_boot: true
+  - description: Ask the operating system of the domain shop-db to shut down, wait up to five minutes for it, and cut the domain's power when it still runs then.
+    config: |
+      libvirt_domain:
+        name: shop-db
+        state: stopped
+        wait_for_shutdown_at_most: 5m
+        power_off_when_shutdown_takes_longer: true
+  - description: Remove the definition of the domain shop-db, which must be shut off. Its disk image files stay.
+    config: |
+      libvirt_domain:
+        name: shop-db
+        state: absent

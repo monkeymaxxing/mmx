@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Managed by MMX (role solr). A stand-in for the main application's
+     solrconfig.xml; every setting not written here is Solr's default. -->
+<config>
+  <!-- The Lucene version of Solr 9.11, so that the index format and the
+       analyzers behave as this release documents. -->
+  <luceneMatchVersion>9.12</luceneMatchVersion>
+  <!-- schema.xml is a file that the playbook writes, not one that Solr
+       edits through its API. -->
+  <schemaFactory class="ClassicIndexSchemaFactory"/>
+
+  <updateHandler class="solr.DirectUpdateHandler2">
+    <!-- The update log keeps writes that are not yet committed across a
+         restart. -->
+    <updateLog>
+      <str name="dir">${solr.ulog.dir:}</str>
+    </updateLog>
+    <!-- Writes reach the disk every 15 seconds, and searches see them
+         within a second. -->
+    <autoCommit>
+      <maxTime>15000</maxTime>
+      <openSearcher>false</openSearcher>
+    </autoCommit>
+    <autoSoftCommit>
+      <maxTime>1000</maxTime>
+    </autoSoftCommit>
+  </updateHandler>
+
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <lst name="defaults">
+      <!-- A query without a field searches name and body (schema.xml). -->
+      <str name="df">text</str>
+    </lst>
+  </requestHandler>
+
+  <!-- The nightly backup uses the replication handler's backup command. -->
+  <requestHandler name="/replication" class="solr.ReplicationHandler"/>
+</config>

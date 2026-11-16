@@ -1,0 +1,35 @@
+# The account deploy, which owns and runs the applications, with the keys of
+# the deployment tooling.
+inputs:
+  # The same ID on every server, so files copied between servers keep their
+  # owner.
+  uid: {type: integer, required: true}
+
+node_tasks:
+  - group: {name: deploy, gid: "{{ .inputs.uid }}"}
+  - user:
+      name: deploy
+      uid: "{{ .inputs.uid }}"
+      primary_group: deploy
+      shell: /bin/bash
+      create_home_directory: true
+
+  # nginx's account must pass through the home to the applications' public
+  # directories; Ubuntu 24.04 makes new homes 0750.
+  - directory:
+      path: /home/deploy
+      owner: deploy
+      group: deploy
+      permissions_mode: "0755"
+
+  # Exactly these keys: a key removed from files/deploy_public_keys loses
+  # its access on the next run.
+  - authorized_keys:
+      for_user_account: deploy
+      key_directories_on_controller_machine: [files/deploy_public_keys]
+      keys_not_listed: remove
+
+  - line:
+      insert_at_end_of_file: true
+      path: /home/deploy/.profile
+      line: source /etc/bash_prompt

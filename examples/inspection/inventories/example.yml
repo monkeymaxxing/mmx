@@ -1,0 +1,11 @@
+nodes:
+  app01:
+    address: replace-with-first-node
+    ssh_user: root
+    vars:
+      instance: blue
+  app02:
+    address: replace-with-second-node
+    ssh_user: root
+    vars:
+      instance: green

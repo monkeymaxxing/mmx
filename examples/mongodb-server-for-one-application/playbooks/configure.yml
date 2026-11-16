@@ -1,0 +1,92 @@
+# mmx run configure
+fleet_stages:
+  - id: configure
+    nodes: mongodb_servers
+
+    node_tasks:
+      # MongoDB's own package repository. No distribution packages MongoDB,
+      # so the packages come from repo.mongodb.org. The inventory gives the
+      # MongoDB series and the key that signs its packages. The repository
+      # of Debian has the component main, the one of Ubuntu multiverse.
+      - when: {equals: ["{{ .node.distribution.id }}", debian]}
+        apt_repository:
+          name: mongodb-org
+          uris: [https://repo.mongodb.org/apt/debian]
+          suites: ["{{ .node.distribution.codename }}/mongodb-org/{{ .vars.mongodb_series }}"]
+          components: [main]
+          signing_key_url: "{{ .vars.mongodb_signing_key_url }}"
+          signing_key_sha256: "{{ .vars.mongodb_signing_key_sha256 }}"
+      - when: {equals: ["{{ .node.distribution.id }}", ubuntu]}
+        apt_repository:
+          name: mongodb-org
+          uris: [https://repo.mongodb.org/apt/ubuntu]
+          suites: ["{{ .node.distribution.codename }}/mongodb-org/{{ .vars.mongodb_series }}"]
+          components: [multiverse]
+          signing_key_url: "{{ .vars.mongodb_signing_key_url }}"
+          signing_key_sha256: "{{ .vars.mongodb_signing_key_sha256 }}"
+
+      # The Red Hat family: Red Hat Enterprise Linux, Rocky Linux, and
+      # AlmaLinux share one repository for each major version.
+      - when: {equals: ["{{ .node.distribution.family }}", redhat]}
+        dnf_repository:
+          name: mongodb-org
+          description: MongoDB
+          baseurl: ["https://repo.mongodb.org/yum/redhat/{{ .node.distribution.major_version }}/mongodb-org/{{ .vars.mongodb_series }}/$basearch/"]
+          signing_key_url: "{{ .vars.mongodb_signing_key_url }}"
+          signing_key_sha256: "{{ .vars.mongodb_signing_key_sha256 }}"
+
+      # The server, and MongoDB's shell mongosh, which the mongodb_user
+      # tasks below run.
+      - when: {equals: ["{{ .node.package_manager }}", apt]}
+        apt_package: {packages: [{name: mongodb-org-server, version: newest_when_first_installed}, {name: mongodb-mongosh, version: newest_when_first_installed}]}
+      - when: {equals: ["{{ .node.package_manager }}", dnf]}
+        dnf_package: {packages: [{name: mongodb-org-server, version: newest_when_first_installed}, {name: mongodb-mongosh, version: newest_when_first_installed}]}
+
+      # The server's settings, with access control on. The packages start
+      # nothing: the systemd_service task starts the server with this file,
+      # keeps it starting at boot, and restarts it when the file changes.
+      - task_block:
+          id: mongod
+          changes:
+            - file:
+                path: /etc/mongod.conf
+                template: templates/mongod.conf
+                permissions_mode: "0644"
+          activate:
+            - systemd_service:
+                name: mongod
+                state: running
+                start_at_boot: true
+                refresh: restart
+
+      # The server answers on its port a moment after its start.
+      - wait_for:
+          tcp_port_accepts_connections: 27017
+          wait_at_most: 60s
+
+      # The first user of the server: its administrator. While the server
+      # has no user, MongoDB lets a connection from the server itself create
+      # this one user without a login. The task names itself as its login,
+      # so that its later runs can log in.
+      - mongodb_user:
+          name: admin
+          database: admin
+          password: "{{ .secrets.mongodb_admin_password }}"
+          roles:
+            - {role: root, database: admin}
+          roles_not_listed: remove
+          login_user: admin
+          login_password: "{{ .secrets.mongodb_admin_password }}"
+
+      # The application's user. It reads and writes the database shop and
+      # nothing else. MongoDB makes the database when the application
+      # writes its first document.
+      - mongodb_user:
+          name: shop
+          database: shop
+          password: "{{ .secrets.shop_mongodb_password }}"
+          roles:
+            - {role: readWrite, database: shop}
+          roles_not_listed: remove
+          login_user: admin
+          login_password: "{{ .secrets.mongodb_admin_password }}"

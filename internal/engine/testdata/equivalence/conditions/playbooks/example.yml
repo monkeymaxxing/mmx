@@ -1,0 +1,84 @@
+
+
+
+
+
+command_line_vars:
+  release: {type: string, default: "1.4.2"}
+fleet_stages:
+  - id: checks
+    nodes: web
+    when: "{{ .vars.enabled }}"
+
+    node_tasks:
+      - when: true
+        show: always
+
+      - when: false
+        show: never
+
+      - id: big
+        when: {equals: ["{{ .node.cpu_count }}", 4]}
+        show: big node
+
+      - set_vars: {a: "{{ .vars.base }}", tier_label: "{{ .vars.tier }}"}
+
+      - set_vars: {b: {a: "{{ .vars.a }}", region: "{{ .vars.region }}"}}
+
+      - set_vars: {c: "{{ .vars.b }}", a: replaced}
+
+      - show: {a: "{{ .vars.a }}", c: "{{ .vars.c }}"}
+
+      - assert:
+          that: {equals: ["{{ .vars.a }}", replaced]}
+          message: "a is {{ .vars.a }}"
+
+      - assert:
+          that: {not: {equals: ["{{ .node.cpu_count }}", 0]}}
+
+      - set_vars: {cores: "{{ .node.cpu_count }}"}
+
+      - show: "{{ .vars.cores }}"
+
+      - when: {equals: ["{{ .vars.tier_label }}", small]}
+        show: small tier
+
+      - when: {equals: ["{{ .node_tasks.big.status }}", succeeded]}
+        show: after big
+
+      - set_vars:
+          north: {all: [{matches: ["{{ .vars.region }}", "^no"]}, {not: false}]}
+          large: {any: [{equals: ["{{ .node.cpu_count }}", 4]}, {contains: ["{{ .vars.tier }}", arg]}]}
+          plain: {mode: {equals: [1, 1]}}
+
+      - show: {north: "{{ .vars.north }}", plain: "{{ .vars.plain }}"}
+
+      - when: "{{ .vars.north }}"
+        show: north
+
+      - when: "{{ .vars.large }}"
+        show: large
+
+      - id: unused
+        when: false
+        show: unused
+
+      - set_vars:
+          decided: {any: [true, "{{ .node_tasks.unused.value }}"]}
+
+      - show: "{{ .vars.decided }}"
+    outputs:
+      decided: "{{ .vars.decided }}"
+  - id: disabled
+    nodes: web
+    when: {not: "{{ .vars.enabled }}"}
+
+    node_tasks:
+      - show: never shown
+  - id: first_only
+    nodes: web1
+
+    node_tasks:
+      - show: "{{ .vars.port }}"
+
+      - show: "release {{ .vars.release }} in {{ .vars.region }}; web2 port {{ .inventory.nodes.web2.vars.port }}"
