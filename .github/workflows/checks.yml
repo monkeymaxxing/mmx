@@ -28,13 +28,15 @@ jobs:
       - name: Confirm the pinned Go toolchain
         shell: bash
         run: test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" {print $2}' go.mod)"
-      # Each node job in the tests collects the test machine's facts, which
-      # resolves its host name. A GitHub macOS runner's name resolves nowhere,
-      # so every lookup waited for its 5-second timeout.
+      - if: runner.os == 'Linux'
+        run: go test ./...
+      # internal/engine runs only on Linux nodes, and the Linux job tests it.
+      # Its tests start stand-in programs thousands of times, which takes over
+      # 30 minutes on a GitHub macOS runner. The controller package's tests
+      # run node jobs too and take about 22 minutes there.
       - if: runner.os == 'macOS'
-        name: Make the runner's host name resolvable
-        run: echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts
-      - run: go test ./...
+        shell: bash
+        run: go test -timeout 45m $(go list ./... | grep -v '^mmx/internal/engine$')
       - if: runner.os == 'Linux'
         run: go vet ./...
       - if: runner.os == 'Linux'
