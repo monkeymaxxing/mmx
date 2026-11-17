@@ -15,18 +15,19 @@ mmx secrets set database_password
 ```
 
 MMX encrypts the file using its built-in age library. The encrypted file can
-be committed with the project. Set up a private controller password file if
-you want subsequent commands to unlock the vault without prompting:
+be committed with the project. So that later commands, or your coding agent,
+unlock the vault without asking, write the passphrase to a private file
+outside the project, in your own terminal:
 
 ```sh
-export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/example-vault-password"
+mmx secrets write-passphrase-file
+export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/vault-passphrase-private_config"
 mmx dryrun private_config
 mmx run private_config
 ```
 
-The password file contains the vault passphrase on one line and should have
-mode `0600`. For one invocation, use `--vault-password-file PATH`. CI can supply
-that file or set `MMX_VAULT_PASSWORD`. Change the vault passphrase with
+For one invocation, use `--vault-password-file PATH`. CI sets
+`MMX_VAULT_PASSWORD` from its secret storage. Change the vault passphrase with
 `mmx secrets passwd`; noninteractive changes take `--new-vault-password-file`.
 
 To supply the database password directly from the environment, add this

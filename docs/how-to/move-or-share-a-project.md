@@ -42,7 +42,7 @@ needs a copy of each file, or makes a new one.
 | The project: `mmx_project_settings.yml`, `inventories/`, `playbooks/`, roles, `files/`, `one_time_playbooks/`, and the vault `secrets_vault.age` | The project directory | Yes | Has no project. Clone the project. |
 | Saved runs | `.mmx/runs/` in the project | No | `mmx results`, `mmx status`, and `mmx resume` find no run that another controller machine made. |
 | What MMX learned about each node at the first contact | `.mmx/nodes/` in the project | No | The first run sets up MMX on each node again, over SSH. The setup finds MMX of the same release installed and keeps MMX as it is. |
-| The vault passphrase | A file outside the project, such as `~/.config/mmx/shop-vault-passphrase`, or the environment variable `MMX_VAULT_PASSWORD` | No | Each command that opens the vault asks for the passphrase at a terminal, and fails without a terminal. |
+| The vault passphrase | A file outside the project that `mmx secrets write-passphrase-file` writes, such as `~/.config/mmx/vault-passphrase-mmx_example`, or the environment variable `MMX_VAULT_PASSWORD` | No | Each command that opens the vault asks for the passphrase at a terminal, and fails without a terminal. |
 | Your SSH key | `~/.ssh/`, or your SSH agent | No | MMX logs in only to a server that has the public half of one of this controller machine's keys, or that takes a password. |
 | MMX's own SSH keys, which MMX makes only after logging in to a server with a password | `~/.ssh/mmx/` | No | MMX needs the server's password at the first contact, and then makes a new key. |
 | Trusted SSH host keys | `~/.ssh/known_hosts` | No, unless you keep a `known_hosts` file in the project | MMX refuses to connect until the controller machine trusts each server's host key. |
@@ -177,23 +177,22 @@ through a playbook that you run, so the list of keys is in Git too.
    **Check:** the run ends with `Run ...: succeeded`, and `added` lists
    Barbara's key on each server.
 
-7. **Barbara: save the vault passphrase in a file.** Copy the passphrase
-   from the password manager, then:
+7. **Barbara: save the vault passphrase in a file.** In her own terminal:
 
    ```sh
-   mkdir -p ~/.config/mmx
-   (umask 077 && cat > ~/.config/mmx/shop-vault-passphrase)
-   export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/shop-vault-passphrase"
+   mmx secrets write-passphrase-file
+   export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/vault-passphrase-mmx_example"
    ```
 
-   `cat` waits for input: paste the passphrase, press Enter, then Ctrl-D.
-   [Run without a terminal](keep-secrets.md#run-without-a-terminal)
-   explains the file, the `export` line, and how a coding agent, which
-   cannot paste into `cat`, gets the passphrase.
+   MMX asks `Vault passphrase:`: paste the passphrase from the password
+   manager and press Enter. MMX checks that the passphrase opens the vault
+   before it writes the file; a wrong one writes nothing. Add the `export`
+   line to the shell's startup file, such as `~/.zshrc`.
+   [Let your coding agent run mmx](keep-secrets.md#let-your-coding-agent-run-mmx)
+   says how a coding agent uses the file.
 
    **Check:** `mmx secrets list-keys` prints the secret keys, such as
-   `database_password`. `cannot decrypt vault: wrong passphrase or invalid
-   age file` means that the file holds another passphrase.
+   `database_password`.
 
 8. **Barbara: trust each server's SSH host key.** First, you print the
    fingerprint that your computer trusts, for each server. The output has
@@ -416,14 +415,13 @@ resume each stopped or failed run on the old laptop first, or start a new
 3. **New laptop: save the vault passphrase in a file.**
 
    ```sh
-   mkdir -p ~/.config/mmx
-   (umask 077 && cat > ~/.config/mmx/shop-vault-passphrase)
-   export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/shop-vault-passphrase"
+   mmx secrets write-passphrase-file
+   export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/vault-passphrase-mmx_example"
    ```
 
-   Paste the passphrase from your password manager, press Enter, then
-   Ctrl-D. [Run without a terminal](keep-secrets.md#run-without-a-terminal)
-   explains the file and the `export` line.
+   At `Vault passphrase:`, paste the passphrase from your password manager
+   and press Enter. MMX checks that it opens the vault before it writes the
+   file. Add the `export` line to the shell's startup file.
 
    **Check:** `mmx secrets list-keys` prints the secret keys.
 
@@ -537,7 +535,7 @@ resume each stopped or failed run on the old laptop first, or start a new
 8. **Old laptop: delete what MMX and the project left.**
 
    ```sh
-   rm -rf ~/shop ~/.ssh/mmx ~/.config/mmx/shop-vault-passphrase
+   rm -rf ~/shop ~/.ssh/mmx ~/.config/mmx/vault-passphrase-mmx_example
    ```
 
    Also remove the `export MMX_VAULT_PASSWORD_FILE=...` line from the

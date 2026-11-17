@@ -62,35 +62,48 @@ from environment variables, and keep a separate vault for staging.
 
 ## Create the vault and use a secret
 
-1. **Save a new passphrase in a file on your controller machine.**
+1. **Choose the vault passphrase and save it in a file.** Run this
+   yourself, in your own terminal:
 
    ```sh
-   mkdir -p ~/.config/mmx
-   (umask 077 && openssl rand -base64 24 > ~/.config/mmx/shop-vault-passphrase)
-   export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/shop-vault-passphrase"
+   mmx secrets write-passphrase-file
    ```
 
-   `openssl rand` makes a random passphrase, and `umask 077` makes the file
-   readable by you only. The file is outside the project, so the file
-   never goes into Git. Add the `export` line to your shell's startup file,
-   such as `~/.zshrc` or `~/.bashrc`. Then each `mmx` command that needs
-   the vault reads the passphrase from the file and asks nothing. Copy the
-   passphrase from the file into your password manager.
+   MMX asks `New vault passphrase:` and `Confirm new vault passphrase:`,
+   and hides what you type. Make the passphrase new, not a password you use
+   anywhere else, such as a long random one from your password manager's
+   generator, and save it in the password manager. Nobody can open the
+   vault without the passphrase, and MMX cannot recover a lost one. MMX
+   then creates the empty vault and writes the passphrase to a file that
+   only you can read. The file is outside the project, so the file never
+   goes into Git:
 
-   You can type the passphrase instead: leave out the file and the
+   ```text
+   Created the vault secrets_vault.age with this passphrase. The vault holds no secrets yet.
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example.
+   When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-mmx_example
+   ```
+
+   So that each `mmx` command reads the passphrase from the file and asks
+   nothing, run this line, and add it to your shell's startup file, such
+   as `~/.zshrc` or `~/.bashrc`:
+
+   ```sh
+   export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/vault-passphrase-mmx_example"
+   ```
+
+   You can type the passphrase instead: delete the file and leave out the
    `export` line. Then each command that opens the vault at a terminal asks
-   `Vault passphrase:`. A command that creates the vault says that you
-   choose the passphrase now and must keep it, then asks
-   `New vault passphrase:` and `Confirm new vault passphrase:`. `mmx secrets set` with `<` or a pipe cannot
-   ask, so it needs the file or an environment variable. A coding agent
-   needs the file, or the environment variable of
-   [Run without a terminal](#run-without-a-terminal).
+   `Vault passphrase:`. `mmx secrets set` with `<` or a pipe cannot ask, so
+   it needs the file or an environment variable. A coding agent needs the
+   file, as [Let your coding agent run mmx](#let-your-coding-agent-run-mmx)
+   says.
 
-   **Check:** `ls -l ~/.config/mmx/shop-vault-passphrase` shows
-   `-rw-------`, and `echo "$MMX_VAULT_PASSWORD_FILE"` prints the file's
-   path.
+   **Check:** `ls -l ~/.config/mmx/vault-passphrase-mmx_example` shows
+   `-rw-------`, and `head -n 1 secrets_vault.age` prints
+   `age-encryption.org/v1`, the first line of an encrypted age file.
 
-2. **Create the vault with your first secret.**
+2. **Add your first secret.**
 
    ```sh
    mmx secrets set database_password
@@ -102,8 +115,14 @@ from environment variables, and keep a separate vault for staging.
    Value of database_password:
    ```
 
-   Type or paste your database's password, then press Enter. MMX creates
-   the vault, encrypts the value, and prints nothing. The command takes
+   Type or paste your database's password, then press Enter. MMX encrypts
+   the value into the vault and says so, without the value:
+
+   ```text
+   Saved the key database_password in the vault secrets_vault.age. MMX does not show the value.
+   ```
+
+   The command takes
    the value from a file or a pipe too, as
    [Add or change a secret without showing it](#add-or-change-a-secret-without-showing-it)
    shows. A coding agent uses that form.
@@ -112,9 +131,7 @@ from environment variables, and keep a separate vault for staging.
    [`mmx secrets edit`](../reference/secrets.md#mmx-secrets-edit), which
    opens the vault's text in your editor.
 
-   **Check:** `mmx secrets list-keys` prints `database_password`, and
-   `head -n 1 secrets_vault.age` prints `age-encryption.org/v1`, the first
-   line of an encrypted age file.
+   **Check:** `mmx secrets list-keys` prints `database_password`.
 
 3. **Add a secret that MMX makes up.** An application's cookie secret, for
    example, must be random and must then stay the same:
@@ -314,35 +331,37 @@ yourself, and let the agent read the passphrase from a file.
 
    MMX asks `Vault passphrase:` and hides what you type. With no vault
    yet, MMX asks for a new passphrase twice and creates an empty vault.
-   Then MMX prints, for the project `shop`:
+   Then MMX prints, for the project `mmx_example`:
 
    ```text
-   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop.
-   When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example.
+   When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-mmx_example
    ```
 
    The file is outside the project, readable by you only, and never
-   committed. A wrong passphrase writes nothing.
+   committed. A wrong passphrase writes nothing. If you wrote the file in
+   step 1 of [the first route](#create-the-vault-and-use-a-secret), it is
+   already there.
 
 2. **Tell your coding agent the first line.** The agent then runs, for
    example:
 
    ```sh
-   MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop mmx dryrun write_shop_settings
+   MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example mmx dryrun write_shop_settings
    ```
 
    The agent never prints, reads, or copies the file, and never asks for
    the passphrase in the chat.
 
    **Check:** the agent's
-   `MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop mmx secrets list-keys --non-interactive`
+   `MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example mmx secrets list-keys --non-interactive`
    prints the secret keys.
 
 3. **Delete the file when you are done.** Anyone who can read the file can
    open the vault, so remove it when the agent no longer needs it:
 
    ```sh
-   rm ~/.config/mmx/vault-passphrase-shop
+   rm ~/.config/mmx/vault-passphrase-mmx_example
    ```
 
 For a vault of another inventory, add `--inventory NAME`; that vault gets
@@ -535,44 +554,41 @@ playbook needs the key any more.
 `mmx secrets passwd` encrypts the vault again with a new passphrase. The
 secrets in the vault stay the same.
 
-1. **Save the new passphrase in a second file.**
+1. **Change the passphrase.** In your own terminal:
 
    ```sh
-   (umask 077 && openssl rand -base64 24 > ~/.config/mmx/shop-vault-passphrase.new)
+   mmx secrets passwd
    ```
 
-   **Check:** `ls -l ~/.config/mmx/` shows both files with `-rw-------`.
-
-2. **Change the passphrase.**
-
-   ```sh
-   mmx secrets passwd --new-vault-password-file ~/.config/mmx/shop-vault-passphrase.new
-   ```
+   MMX opens the vault with the old passphrase, from
+   `MMX_VAULT_PASSWORD_FILE`, then asks `New vault passphrase:` and
+   `Confirm new vault passphrase:`, and encrypts the vault with the new
+   one. Make the new passphrase new, too, and save it in your password
+   manager:
 
    ```text
    Saved encrypted vault: secrets_vault.age
    ```
 
-   MMX opens the vault with the old passphrase, from
-   `MMX_VAULT_PASSWORD_FILE`, and encrypts the vault with the new one. At
-   a terminal, you can leave out `--new-vault-password-file`: MMX then
-   asks `New vault passphrase:` and `Confirm new vault passphrase:`.
+   Without a terminal, give the new passphrase in a file with
+   `--new-vault-password-file PATH`.
 
    **Check:** the command prints `Saved encrypted vault:` and exits with
    code 0.
 
-3. **Put the new passphrase where the old one was.**
+2. **Put the new passphrase in the passphrase file.**
 
    ```sh
-   mv ~/.config/mmx/shop-vault-passphrase.new ~/.config/mmx/shop-vault-passphrase
+   mmx secrets write-passphrase-file
    ```
 
-   Put the new passphrase in your password manager and in each CI system
-   that has the old one too.
+   Type the new passphrase. MMX checks that it opens the vault, replaces
+   the old file, and prints `Replaced the old ~/.config/mmx/vault-passphrase-mmx_example.`
+   Put the new passphrase in each CI system that has the old one too.
 
    **Check:** `mmx secrets list-keys` prints the secret keys.
 
-4. **Commit the vault.**
+3. **Commit the vault.**
 
    ```sh
    git add secrets_vault.age
@@ -669,36 +685,46 @@ staging needs no production secret.
    **Check:** `mmx validate --inventory staging write_shop_settings` prints
    `Valid: mmx_example`.
 
-2. **Save staging's passphrase in a file of its own.**
+2. **Choose staging's passphrase and save it in a file of its own.** In
+   your own terminal:
 
    ```sh
-   (umask 077 && openssl rand -base64 24 > ~/.config/mmx/shop-staging-vault-passphrase)
+   mmx secrets write-passphrase-file --inventory staging
    ```
 
-   **Check:** `ls -l ~/.config/mmx/shop-staging-vault-passphrase` shows
+   MMX asks for a new passphrase twice, creates the empty vault
+   `inventories/staging_secrets_vault.age`, and writes the passphrase to a
+   file whose name adds the vault's file name:
+
+   ```text
+   Created the vault inventories/staging_secrets_vault.age with this passphrase. The vault holds no secrets yet.
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault.
+   When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault
+   ```
+
+   **Check:** `ls -l ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault` shows
    `-rw-------`.
 
 3. **Add staging's secrets.** `--inventory staging` selects staging's
-   vault, and `--vault-password-file` gives staging's passphrase. The first
-   command creates the vault:
+   vault, and `--vault-password-file` gives staging's passphrase:
 
    ```sh
-   mmx secrets add-random database_password --inventory staging --vault-password-file ~/.config/mmx/shop-staging-vault-passphrase
-   mmx secrets add-random session_cookie_secret --inventory staging --vault-password-file ~/.config/mmx/shop-staging-vault-passphrase
+   mmx secrets add-random database_password --inventory staging --vault-password-file ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault
+   mmx secrets add-random session_cookie_secret --inventory staging --vault-password-file ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault
    ```
 
    ```text
    Added the key database_password to the vault inventories/staging_secrets_vault.age, with a random value of 32 letters and digits. MMX does not show the value.
    ```
 
-   **Check:** `mmx secrets usage --inventory staging --vault-password-file ~/.config/mmx/shop-staging-vault-passphrase`
+   **Check:** `mmx secrets usage --inventory staging --vault-password-file ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault`
    shows `vault inventories/staging_secrets_vault.age` on each secret key,
    and `(none)` after `Referenced but not defined:`.
 
 4. **Run on staging.**
 
    ```sh
-   mmx run write_shop_settings --inventory staging --vault-password-file ~/.config/mmx/shop-staging-vault-passphrase
+   mmx run write_shop_settings --inventory staging --vault-password-file ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault
    ```
 
    `--vault-password-file` wins over the production file in
@@ -765,7 +791,7 @@ gives the rules of travel, saved records, and `mmx resume`.
 | --- | --- |
 | `vault passphrase required; use --vault-password-file, MMX_VAULT_PASSWORD_FILE, or MMX_VAULT_PASSWORD (prompts are disabled)` | MMX could not ask for the passphrase: no terminal, `--non-interactive`, or `--json`. Give a passphrase source, as in [Run without a terminal](#run-without-a-terminal). |
 | `cannot decrypt vault: wrong passphrase or invalid age file` | The passphrase does not open this vault. Check which source MMX used: `--vault-password-file` first, then `MMX_VAULT_PASSWORD_FILE`, then `MMX_VAULT_PASSWORD`. For another inventory's vault, give that vault's passphrase. |
-| `read vault password file /home/you/.config/mmx/shop-vault-passphrase: open /home/you/.config/mmx/shop-vault-passphrase: no such file or directory` | `MMX_VAULT_PASSWORD_FILE` or `--vault-password-file` names a file that is not there. Fix the path. MMX does not then try `MMX_VAULT_PASSWORD` or ask. |
+| `read vault password file /home/you/.config/mmx/vault-passphrase-mmx_example: open /home/you/.config/mmx/vault-passphrase-mmx_example: no such file or directory` | `MMX_VAULT_PASSWORD_FILE` or `--vault-password-file` names a file that is not there. Fix the path. MMX does not then try `MMX_VAULT_PASSWORD` or ask. |
 | `vault is missing required secret mail_token` | A playbook reads a secret key that the vault does not have, often a misspelled name. The run stopped before any server changed, unless the missing key is a node's `ssh_password` or `sudo_password`, which MMX reads when it connects to that node. `mmx secrets usage` lists the key under `Referenced but not defined:` with its file and line. Fix the name, or add the secret. |
 | `secret database_password requires a nonempty environment variable SHOP_DATABASE_PASSWORD` | `secrets_from_env` binds the secret key to an environment variable that is not set or is empty. Set the environment variable. |
 | `the vault already has the key session_cookie_secret; to give it a new random value, add --replace` | `add-random` or `set` refuses to replace a value by accident. Add `--replace` if you want a new value. |

@@ -610,10 +610,11 @@ passphrase sources, in this order:
 3. `MMX_VAULT_PASSWORD`, for CI secret storage.
 4. A hidden interactive prompt.
 
-For example, keep the passphrase in a private file outside the project:
+For example, keep the passphrase in the private file outside the project
+that `mmx secrets write-passphrase-file` writes:
 
 ```sh
-export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/production-vault-password"
+export MMX_VAULT_PASSWORD_FILE="$HOME/.config/mmx/vault-passphrase-shop"
 ```
 
 Each passphrase-source file holds one nonempty passphrase with an optional
