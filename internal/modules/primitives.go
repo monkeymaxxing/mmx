@@ -21,7 +21,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
-	"time"
 	"unicode/utf8"
 
 	"mmx/internal/protocol"
@@ -365,7 +364,7 @@ func (run Runtime) HTTPRequest(ctx context.Context, method, address string, head
 		}
 		transport.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
 	}
-	client := &http.Client{Transport: transport, Timeout: 5 * time.Minute,
+	client := &http.Client{Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	request, err := http.NewRequestWithContext(ctx, method, address, bytes.NewReader([]byte(body)))
 	if err != nil {
