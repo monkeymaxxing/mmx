@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"maps"
 	"math/big"
 	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -56,13 +58,48 @@ func CheckKey(key string) error {
 	return nil
 }
 
-// AddRandomKey sets key in the vault at path to a value of length random
-// letters and digits, as SetKey sets a key: a key the vault does not have
-// is added; an existing key's value is replaced only with replace, which
-// rotates a password. It reports whether it replaced a value. A vault that
-// does not exist is created.
-func AddRandomKey(path, password, key string, length int, replace bool) (replaced bool, err error) {
-	if err := CheckKey(key); err != nil {
+// A key path is a secret's place in the vault: a secret key, then one name
+// for each mapping below it. mmx secrets set mmwatchdog_secret_files
+// smtp-password has the key path [mmwatchdog_secret_files smtp-password],
+// which a template reads as .secrets.mmwatchdog_secret_files and its entry
+// smtp-password. A key path of one word is a top-level secret key.
+
+// CheckKeyPath accepts a key path whose first word passes CheckKey and whose
+// other words are names that a YAML mapping can hold, written in double
+// quotes when they are not plain words.
+func CheckKeyPath(keyPath []string) error {
+	if len(keyPath) == 0 {
+		return fmt.Errorf("a secret key is required, such as database_password")
+	}
+	if err := CheckKey(keyPath[0]); err != nil {
+		return err
+	}
+	for _, name := range keyPath[1:] {
+		switch {
+		case name == "":
+			return fmt.Errorf("an empty name cannot be a name inside the secret key %s; give each name below the secret key as a word that is not empty", keyPath[0])
+		case !utf8.ValidString(name):
+			return fmt.Errorf("a name inside the secret key %s is not UTF-8 text; give each name below the secret key as text", keyPath[0])
+		case slices.Contains([]string{"true", "false", "null"}, strings.ToLower(name)):
+			return fmt.Errorf("the name %s cannot be added: YAML reads %s as a value instead of a name; choose a different name", name, name)
+		}
+	}
+	return nil
+}
+
+// KeyPathText names a key path in prompts and messages: its words, joined
+// by spaces, as the command line gives them.
+func KeyPathText(keyPath []string) string {
+	return strings.Join(keyPath, " ")
+}
+
+// AddRandomKey sets the secret at keyPath in the vault at path to a value
+// of length random letters and digits, as SetKey sets it: a secret the
+// vault does not have is added; an existing secret's value is replaced only
+// with replace, which rotates a password. It reports whether it replaced a
+// value. A vault that does not exist is created.
+func AddRandomKey(path, password string, keyPath []string, length int, replace bool) (replaced bool, err error) {
+	if err := CheckKeyPath(keyPath); err != nil {
 		return false, err
 	}
 	if length < 1 {
@@ -71,29 +108,30 @@ func AddRandomKey(path, password, key string, length int, replace bool) (replace
 	if length > MaxVaultBytes {
 		return false, fmt.Errorf("a value of %d characters does not fit into the vault, which holds at most 4 MiB", length)
 	}
-	return setValue(path, password, key, replace, func() (string, error) { return randomValue(length) },
+	return setValue(path, password, keyPath, replace, func() (string, error) { return randomValue(length) },
 		"to give it a new random value, add --replace")
 }
 
-// SetKey sets key in the vault at path to the value that value returns. A
-// key the vault does not have is added; an existing key's value is replaced
-// only with replace. value is called only after the vault is open and the
-// key may be set, so that a refusal comes before a prompt for the value. A
-// vault that does not exist is created.
-func SetKey(path, password, key string, replace bool, value func() (string, error)) error {
-	if err := CheckKey(key); err != nil {
+// SetKey sets the secret at keyPath in the vault at path to the value that
+// value returns. A secret the vault does not have is added, with the
+// mappings above it that the vault does not have yet; an existing secret's
+// value is replaced only with replace. value is called only after the vault
+// is open and the secret may be set, so that a refusal comes before a prompt
+// for the value. A vault that does not exist is created.
+func SetKey(path, password string, keyPath []string, replace bool, value func() (string, error)) error {
+	if err := CheckKeyPath(keyPath); err != nil {
 		return err
 	}
-	_, err := setValue(path, password, key, replace, value, "to replace its value, add --replace")
+	_, err := setValue(path, password, keyPath, replace, value, "to replace its value, add --replace")
 	return err
 }
 
 // setValue changes the vault's text with withValue and replaces the vault
 // file as Edit replaces it: only after the new text is checked and
-// encrypted, so a failure keeps the file as it was. An existing key without
-// replace is refused, with toReplace saying what to do instead. It reports
-// whether the key existed.
-func setValue(path, password, key string, replace bool, value func() (string, error), toReplace string) (existed bool, err error) {
+// encrypted, so a failure keeps the file as it was. An existing secret
+// without replace is refused, with toReplace saying what to do instead. It
+// reports whether the secret existed.
+func setValue(path, password string, keyPath []string, replace bool, value func() (string, error), toReplace string) (existed bool, err error) {
 	// A project that has no vault yet gets one: its text starts empty.
 	text, err := decrypt(path, password)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -103,125 +141,243 @@ func setValue(path, password, key string, replace bool, value func() (string, er
 	if err != nil {
 		return false, err
 	}
-	_, existed = before[key]
-	if existed && !replace {
-		return true, fmt.Errorf("the vault already has the key %s; %s", key, toReplace)
+	place, err := placeOf(withLineEnd(text), keyPath)
+	if err != nil {
+		return false, err
+	}
+	if place.existed && !replace {
+		return true, fmt.Errorf("the vault already has the key %s; %s", KeyPathText(keyPath), toReplace)
 	}
 	newValue, err := value()
 	if err != nil {
-		return existed, err
+		return place.existed, err
 	}
-	if text, err = withValue(text, before, key, newValue); err != nil {
-		return existed, err
+	if text, err = withValue(text, before, keyPath, newValue); err != nil {
+		return place.existed, err
 	}
-	return existed, Write(path, password, text)
+	return place.existed, Write(path, password, text)
 }
 
-// withValue returns a vault's text, whose decoded values are before, with
-// key set to value. A new key becomes a new last line, after the text's last
-// line. An existing key's lines are replaced where they stand: from the
-// key's line to the line before the next key, without the blank lines and
-// comment lines at column 1 at its end, which belong to the next key or end
-// the vault. Nothing else in the text changes, so the comments and the order
-// of the other keys stay as they were written.
-func withValue(text []byte, before map[string]any, key, value string) ([]byte, error) {
-	entry, err := vaultEntry(key, value)
-	if err != nil {
-		return nil, err
-	}
-	keys, refused := len(before), cannotReplaceInPlace(key)
-	if _, exists := before[key]; exists {
-		if text, err = withReplacedLines(text, key, entry); err != nil {
-			return nil, refused
-		}
-	} else {
-		keys, refused = keys+1, cannotAddALine(key)
-		if len(text) > 0 && !bytes.HasSuffix(text, []byte("\n")) {
-			text = append(bytes.Clone(text), '\n')
-		}
-		text = append(bytes.Clone(text), entry...)
-	}
-	// The new lines must be the one changed key of the same mapping. A vault
-	// whose text is written in another way is left as it is.
-	after, err := decode(text)
-	if err != nil || len(after) != keys || after[key] != value {
-		return nil, refused
-	}
-	for name, written := range before {
-		if name != key && !reflect.DeepEqual(after[name], written) {
-			return nil, refused
-		}
-	}
-	return text, nil
+// vaultPlace is where a secret's lines go in the vault's text, split into
+// lines that each keep their line ending.
+type vaultPlace struct {
+	// lines[first:end] are replaced; first == end inserts before lines[first].
+	first, end int
+	// indent is the number of spaces before the first new line's name.
+	indent int
+	// written are the names that the new lines write, each one level below
+	// the one before: the secret's own name, after the mappings above it
+	// that the vault does not have yet.
+	written []string
+	// existed says that the vault has the secret.
+	existed bool
 }
 
-// vaultEntry returns the lines KEY: value. A value of one line is quoted:
-// letters and digits need no escape, other characters get YAML's escapes,
-// and 32 digits alone would otherwise be a number. A value of several lines,
-// such as a certificate, is a literal block, as a person writes it in the
-// editor, unless YAML can show it only quoted.
-func vaultEntry(key, value string) ([]byte, error) {
-	if !utf8.ValidString(value) {
-		return nil, fmt.Errorf("the value for %s is not UTF-8 text, and the vault holds text; encode other data first, for example with base64", key)
-	}
-	style := yaml.DoubleQuotedStyle
-	if strings.Contains(value, "\n") {
-		style = yaml.LiteralStyle
-	}
-	var entry bytes.Buffer
-	encoder := yaml.NewEncoder(&entry)
-	encoder.SetIndent(2)
-	if err := encoder.Encode(&yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
-		{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-		{Kind: yaml.ScalarNode, Tag: "!!str", Value: value, Style: style},
-	}}); err != nil {
-		return nil, fmt.Errorf("cannot write the value for %s as YAML", key)
-	}
-	if err := encoder.Close(); err != nil {
-		return nil, fmt.Errorf("cannot write the value for %s as YAML", key)
-	}
-	return entry.Bytes(), nil
-}
-
-// withReplacedLines returns text with the lines of key's entry replaced by
-// entry, as withValue describes. It finds the lines from the positions that
-// the YAML parser reports for the top-level keys.
-func withReplacedLines(text []byte, key string, entry []byte) ([]byte, error) {
-	var document yaml.Node
-	if err := yaml.Unmarshal(text, &document); err != nil || len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("the vault's text is not one mapping")
-	}
+// placeOf finds where the secret at keyPath goes in text, which ends with a
+// line ending, from the positions that the YAML parser reports. Each level
+// is a block mapping, one name on each line:
+//   - A secret the vault has: its lines, from its name's line to the line
+//     before the next name of its mapping, or to the end of the mapping,
+//     without the blank lines and comment lines at the end of that range
+//     that are indented no further than the name.
+//   - A top-level secret key the vault does not have: after the text's last
+//     line, with the mappings below it.
+//   - A name that a mapping below the top does not have: after the
+//     mapping's last line, with the indentation of the mapping's names.
+//
+// A level that holds a value, or that is written inside { }, is refused,
+// since a name cannot go into it as a line.
+func placeOf(text []byte, keyPath []string) (vaultPlace, error) {
 	lines := bytes.SplitAfter(text, []byte("\n"))
-	mapping := document.Content[0].Content
-	at := 0 // mapping holds each key, then its value
-	for at < len(mapping) && mapping[at].Value != key {
-		at += 2
+	var document yaml.Node
+	if err := yaml.Unmarshal(text, &document); err != nil {
+		return vaultPlace{}, fmt.Errorf("vault must contain one YAML mapping with unique secret names")
 	}
-	if at >= len(mapping) {
-		return nil, fmt.Errorf("the vault's mapping has no key %s", key)
+	if document.Kind == 0 {
+		return vaultPlace{first: len(lines), end: len(lines), written: keyPath}, nil
 	}
-	// The entry's lines are lines[first:end].
-	first, end := mapping[at].Line-1, len(lines)
-	if at+2 < len(mapping) {
-		end = mapping[at+2].Line - 1
+	mapping := document.Content[0]
+	// The mapping's lines end before lines[limit]; its name is on
+	// lines[nameLine].
+	limit, nameLine, indent := len(lines), -1, 0
+	for depth, name := range keyPath {
+		at := 0 // mapping.Content holds each name, then its value
+		for at < len(mapping.Content) && (mapping.Content[at].ShortTag() != "!!str" || mapping.Content[at].Value != name) {
+			at += 2
+		}
+		if at >= len(mapping.Content) {
+			insert := limit
+			if depth > 0 {
+				insert = withoutTrailingComments(lines, nameLine+1, limit, indent)
+			}
+			return vaultPlace{first: insert, end: insert, indent: indent, written: keyPath[depth:]}, nil
+		}
+		next := limit
+		if at+2 < len(mapping.Content) {
+			next = mapping.Content[at+2].Line - 1
+		}
+		nameLine = mapping.Content[at].Line - 1
+		if depth == len(keyPath)-1 {
+			end := withoutTrailingComments(lines, nameLine+1, next, indent)
+			return vaultPlace{first: nameLine, end: end, indent: indent, written: keyPath[depth:], existed: true}, nil
+		}
+		value := mapping.Content[at+1]
+		holder := KeyPathText(keyPath[:depth+1])
+		if value.Kind != yaml.MappingNode {
+			return vaultPlace{}, fmt.Errorf("the vault's %s holds a value, not names, so %s cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of %s", holder, keyPath[depth+1], holder)
+		}
+		if value.Style&yaml.FlowStyle != 0 || len(value.Content) == 0 {
+			return vaultPlace{}, fmt.Errorf("the vault writes the names of %s inside { }, and MMX adds a name only between names written one per line. Run mmx secrets edit and write the names of %s one per line below it, each indented by two spaces", holder, holder)
+		}
+		mapping, limit, indent = value, next, value.Content[0].Column-1
 	}
-	for end > first+1 {
-		if line := bytes.TrimRight(lines[end-1], " \t\r\n"); len(line) == 0 || line[0] == '#' {
+	panic("unreachable: the loop returns at the last word of the key path")
+}
+
+// withoutTrailingComments returns end, moved up past the blank lines and the
+// comment lines indented by at most indent spaces at the end of
+// lines[from:end]. Those lines belong to what follows.
+func withoutTrailingComments(lines [][]byte, from, end, indent int) int {
+	for end > from {
+		line := bytes.TrimRight(lines[end-1], " \t\r\n")
+		text := bytes.TrimLeft(line, " ")
+		if len(line) == 0 || (text[0] == '#' && len(line)-len(text) <= indent) {
 			end--
 			continue
 		}
 		break
 	}
-	replaced := slices.Concat(lines[:first], [][]byte{entry}, lines[end:])
-	return bytes.Join(replaced, nil), nil
+	return end
 }
 
-func cannotAddALine(key string) error {
-	return fmt.Errorf(`cannot append secret key %s: the vault does not end with separate "key: value" lines, for example because the keys are inside { }. Use mmx secrets edit to add the secret key`, key)
+// withLineEnd returns text with a line ending after its last line.
+func withLineEnd(text []byte) []byte {
+	if len(text) > 0 && !bytes.HasSuffix(text, []byte("\n")) {
+		return append(bytes.Clone(text), '\n')
+	}
+	return text
 }
 
-func cannotReplaceInPlace(key string) error {
-	return fmt.Errorf(`cannot replace the value of secret key %s: the vault is not written as separate "key: value" lines, for example because the keys are inside { }. Use mmx secrets edit to change the secret value`, key)
+// withValue returns a vault's text, whose decoded values are before, with
+// the secret at keyPath set to value, at the place that placeOf finds.
+// Nothing else in the text changes, so the comments and the order of the
+// other names stay as they were written.
+func withValue(text []byte, before map[string]any, keyPath []string, value string) ([]byte, error) {
+	text = withLineEnd(text)
+	place, err := placeOf(text, keyPath)
+	if err != nil {
+		return nil, err
+	}
+	entry, err := vaultEntry(place.written, value, place.indent)
+	if err != nil {
+		return nil, err
+	}
+	refused := cannotAddALine(keyPath)
+	if place.existed {
+		refused = cannotReplaceInPlace(keyPath)
+	}
+	lines := bytes.SplitAfter(text, []byte("\n"))
+	text = bytes.Join(slices.Concat(lines[:place.first], [][]byte{entry}, lines[place.end:]), nil)
+	// The new lines must change only the one secret. A vault whose text is
+	// written in another way is left as it is.
+	after, err := decode(text)
+	want, ok := withDecodedValue(before, keyPath, value)
+	if err != nil || !ok || !reflect.DeepEqual(after, want) {
+		return nil, refused
+	}
+	return text, nil
+}
+
+// withDecodedValue returns a copy of values with the secret at keyPath set
+// to value, adding the mappings above it that values does not have. Only
+// the mappings on the key path are copied. It reports false when a level of
+// the key path is not a mapping of names.
+func withDecodedValue(values map[string]any, keyPath []string, value string) (map[string]any, bool) {
+	root := maps.Clone(values)
+	if root == nil {
+		root = map[string]any{}
+	}
+	mapping := root
+	for _, name := range keyPath[:len(keyPath)-1] {
+		below := map[string]any{}
+		if existing, exists := mapping[name]; exists {
+			names, ok := existing.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			below = maps.Clone(names)
+		}
+		mapping[name], mapping = below, below
+	}
+	mapping[keyPath[len(keyPath)-1]] = value
+	return root, true
+}
+
+// plainName is a name that the vault's text shows without quotes, when YAML
+// reads it as text.
+var plainName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+// vaultEntry returns the lines that write value below the names written,
+// each name one level below the one before, such as
+//
+//	mmwatchdog_secret_files:
+//	  smtp-password: "value"
+//
+// with indent spaces before the first name. A plain name is written
+// without quotes when YAML reads it as text; any other name in double
+// quotes. A value of one line is quoted: letters and digits need no escape,
+// other characters get YAML's escapes, and 32 digits alone would otherwise
+// be a number. A value of several lines, such as a certificate, is a
+// literal block, as a person writes it in the editor, unless YAML can show
+// it only quoted.
+func vaultEntry(written []string, value string, indent int) ([]byte, error) {
+	name := KeyPathText(written)
+	if !utf8.ValidString(value) {
+		return nil, fmt.Errorf("the value for %s is not UTF-8 text, and the vault holds text; encode other data first, for example with base64", name)
+	}
+	style := yaml.DoubleQuotedStyle
+	if strings.Contains(value, "\n") {
+		style = yaml.LiteralStyle
+	}
+	node := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value, Style: style}
+	for i := len(written) - 1; i >= 0; i-- {
+		key := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: written[i]}
+		if !plainName.MatchString(written[i]) {
+			key.Style = yaml.DoubleQuotedStyle
+		}
+		node = &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{key, node}}
+	}
+	var entry bytes.Buffer
+	encoder := yaml.NewEncoder(&entry)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(node); err != nil {
+		return nil, fmt.Errorf("cannot write the value for %s as YAML", name)
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, fmt.Errorf("cannot write the value for %s as YAML", name)
+	}
+	if indent == 0 {
+		return entry.Bytes(), nil
+	}
+	// Each line moves right by the same amount, which keeps a literal
+	// block's text: YAML reads a block's lines relative to their name. An
+	// empty line stays empty.
+	var indented bytes.Buffer
+	for _, line := range bytes.SplitAfter(entry.Bytes(), []byte("\n")) {
+		if len(bytes.TrimRight(line, "\n")) > 0 {
+			indented.WriteString(strings.Repeat(" ", indent))
+		}
+		indented.Write(line)
+	}
+	return indented.Bytes(), nil
+}
+
+func cannotAddALine(keyPath []string) error {
+	return fmt.Errorf(`cannot append secret key %s: the vault does not end with separate "key: value" lines, for example because the keys are inside { }. Use mmx secrets edit to add the secret key`, KeyPathText(keyPath))
+}
+
+func cannotReplaceInPlace(keyPath []string) error {
+	return fmt.Errorf(`cannot replace the value of secret key %s: the vault is not written as separate "key: value" lines, for example because the keys are inside { }. Use mmx secrets edit to change the secret value`, KeyPathText(keyPath))
 }
 
 // Keys returns the vault's top-level keys, sorted.

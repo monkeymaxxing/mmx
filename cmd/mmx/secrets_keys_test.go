@@ -194,8 +194,9 @@ func TestSecretsAddRandomRefusalsKeepTheVault(t *testing.T) {
 		want string
 	}{
 		"the key exists":                   {[]string{"add-random", "database_password", "--vault-password-file", passwordFile}, "the vault already has the key database_password; to give it a new random value, add --replace"},
-		"no key":                           {[]string{"add-random", "--vault-password-file", passwordFile}, "usage: mmx secrets add-random KEY [--length N] [--replace]"},
-		"two keys":                         {[]string{"add-random", "one", "two", "--vault-password-file", passwordFile}, "usage: mmx secrets add-random KEY [--length N] [--replace]"},
+		"no key":                           {[]string{"add-random", "--vault-password-file", passwordFile}, "usage: mmx secrets add-random KEY [NAME ...] [--length N] [--replace]"},
+		"a name inside a key with a value": {[]string{"add-random", "database_password", "smtp-password", "--vault-password-file", passwordFile}, "the vault's database_password holds a value, not names, so smtp-password cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit"},
+		"an empty name":                    {[]string{"add-random", "web_app", "", "--vault-password-file", passwordFile}, "an empty name cannot be a name inside the secret key web_app"},
 		"a key that is no name":            {[]string{"add-random", "9lives", "--vault-password-file", passwordFile}, `"9lives" cannot be a secret key`},
 		"a key that YAML reads":            {[]string{"add-random", "true", "--vault-password-file", passwordFile}, "YAML reads true as a value instead of a name"},
 		"a length of zero":                 {[]string{"add-random", "new_key", "--length", "0", "--vault-password-file", passwordFile}, "--length must be a positive integer, such as --length 48; got 0"},

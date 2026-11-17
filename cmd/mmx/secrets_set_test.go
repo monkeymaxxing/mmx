@@ -120,16 +120,17 @@ func TestSecretsSetRefusalsKeepTheVaultAndShowNoValue(t *testing.T) {
 		args  []string
 		want  string
 	}{
-		"an empty value":                  {"", []string{"set", "api_token", "--vault-password-file", passwordFile}, "mmx: the value for api_token is empty; mmx secrets set needs a value on standard input, such as some_command | mmx secrets set api_token\n"},
-		"only a line ending":              {"\n", []string{"set", "api_token", "--vault-password-file", passwordFile}, "mmx: the value for api_token is empty"},
-		"a value that is not UTF-8 text":  {"sentinel-token-value\xff\n", []string{"set", "api_token", "--vault-password-file", passwordFile}, "mmx: the value for api_token is not UTF-8 text, and the vault holds text; encode other data first, for example with base64\n"},
-		"no key":                          {"sentinel-token-value", []string{"set", "--vault-password-file", passwordFile}, "usage: some_command | mmx secrets set KEY [--replace]"},
-		"two keys":                        {"sentinel-token-value", []string{"set", "one", "two", "--vault-password-file", passwordFile}, "usage: some_command | mmx secrets set KEY [--replace]"},
-		"a key that is no name":           {"sentinel-token-value", []string{"set", "9lives", "--vault-password-file", passwordFile}, `"9lives" cannot be a secret key`},
-		"a wrong passphrase":              {"sentinel-token-value", []string{"set", "api_token", "--vault-password-file", wrong}, "cannot decrypt vault: wrong passphrase or invalid age file"},
-		"no passphrase":                   {"sentinel-token-value", []string{"set", "api_token", "--non-interactive"}, "vault passphrase required; use --vault-password-file"},
-		"an existing key, wrong password": {"sentinel-token-value", []string{"set", "database_password", "--replace", "--vault-password-file", wrong}, "cannot decrypt vault"},
-		"the option of add-random":        {"sentinel-token-value", []string{"set", "api_token", "--length", "5", "--vault-password-file", passwordFile}, "flag provided but not defined: -length"},
+		"an empty value":                   {"", []string{"set", "api_token", "--vault-password-file", passwordFile}, "mmx: the value for api_token is empty; mmx secrets set needs a value on standard input, such as some_command | mmx secrets set api_token\n"},
+		"only a line ending":               {"\n", []string{"set", "api_token", "--vault-password-file", passwordFile}, "mmx: the value for api_token is empty"},
+		"a value that is not UTF-8 text":   {"sentinel-token-value\xff\n", []string{"set", "api_token", "--vault-password-file", passwordFile}, "mmx: the value for api_token is not UTF-8 text, and the vault holds text; encode other data first, for example with base64\n"},
+		"no key":                           {"sentinel-token-value", []string{"set", "--vault-password-file", passwordFile}, "usage: some_command | mmx secrets set KEY [NAME ...] [--replace]"},
+		"a name inside a key with a value": {"sentinel-token-value", []string{"set", "database_password", "smtp-password", "--vault-password-file", passwordFile}, "mmx: the vault's database_password holds a value, not names, so smtp-password cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of database_password\n"},
+		"a name that YAML reads":           {"sentinel-token-value", []string{"set", "web_app", "null", "--vault-password-file", passwordFile}, "the name null cannot be added: YAML reads null as a value instead of a name; choose a different name"},
+		"a key that is no name":            {"sentinel-token-value", []string{"set", "9lives", "--vault-password-file", passwordFile}, `"9lives" cannot be a secret key`},
+		"a wrong passphrase":               {"sentinel-token-value", []string{"set", "api_token", "--vault-password-file", wrong}, "cannot decrypt vault: wrong passphrase or invalid age file"},
+		"no passphrase":                    {"sentinel-token-value", []string{"set", "api_token", "--non-interactive"}, "vault passphrase required; use --vault-password-file"},
+		"an existing key, wrong password":  {"sentinel-token-value", []string{"set", "database_password", "--replace", "--vault-password-file", wrong}, "cannot decrypt vault"},
+		"the option of add-random":         {"sentinel-token-value", []string{"set", "api_token", "--length", "5", "--vault-password-file", passwordFile}, "flag provided but not defined: -length"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			stdout, stderr, code := secretsOutputFromInput(t, tc.input, tc.args...)
@@ -158,5 +159,38 @@ func TestSecretsSetRefusesAKeyThatTheProjectReadsFromTheEnvironment(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(root, "secrets_vault.age")); !os.IsNotExist(err) {
 		t.Fatal("the refused command made a vault", err)
+	}
+}
+
+// Each word after the key is one level inside it. The new name goes into
+// its mapping, list-keys still shows the top-level key, and JSON keeps its
+// shape. Messages name the place as the words joined by spaces.
+func TestSecretsSetSetsANameInsideAKey(t *testing.T) {
+	root, passwordFile := secretsProject(t)
+	vault := filepath.Join(root, "secrets_vault.age")
+	quickVault(t, vault, vaultTestPassphrase, "# The shop\ndatabase_password: sentinel-database-value\nmmwatchdog_secret_files:\n  # Mail\n  smtp-user: sentinel-nested-value\n")
+	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-token-value\n", "set", "mmwatchdog_secret_files", "smtp-password", "--vault-password-file", passwordFile); code != 0 || stdout != "" || stderr != "" {
+		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
+	}
+	// A certificate, two levels down, in a mapping that does not exist yet.
+	const certificate = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU\n-----END CERTIFICATE-----\n"
+	stdout, stderr, code := secretsOutputFromInput(t, certificate+"\n", "set", "mmwatchdog_secret_files", "tls", "ca.pem", "--json", "--vault-password-file", passwordFile)
+	var answer map[string]any
+	if code != 0 || stderr != "" || json.Unmarshal([]byte(stdout), &answer) != nil || !reflect.DeepEqual(answer, map[string]any{"vault": vault, "status": "succeeded"}) {
+		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
+	}
+	values, err := secrets.Read(vault, vaultTestPassphrase)
+	want := map[string]any{"database_password": "sentinel-database-value", "mmwatchdog_secret_files": map[string]any{
+		"smtp-user": "sentinel-nested-value", "smtp-password": "sentinel-token-value", "tls": map[string]any{"ca.pem": certificate}}}
+	if err != nil || !reflect.DeepEqual(values, want) {
+		t.Fatal(len(values), err)
+	}
+	stdout, stderr, code = secretsOutputFromInput(t, "sentinel-changed-value\n", "set", "mmwatchdog_secret_files", "smtp-password", "--vault-password-file", passwordFile)
+	if code != 4 || stdout != "" || stderr != "mmx: the vault already has the key mmwatchdog_secret_files smtp-password; to replace its value, add --replace\n" {
+		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
+	}
+	stdout, stderr, code = secretsOutput(t, "list-keys", "--vault-password-file", passwordFile)
+	if code != 0 || stdout != "database_password\nmmwatchdog_secret_files\n" || stderr != "" {
+		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
 	}
 }

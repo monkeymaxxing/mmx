@@ -15,12 +15,13 @@ import (
 	"mmx/internal/secrets"
 )
 
-const secretsHelp = `mmx secrets edit | passwd | add-random KEY | set KEY | list-keys | diff-keys | usage [KEY]
+const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | list-keys | diff-keys | usage [KEY]
 
 Options: --inventory NAME  --vault PATH (not for usage)  --vault-password-file PATH
 Passphrase change: --new-vault-password-file PATH
 Length of the value that add-random generates: --length N (default 32)
 Value for set: standard input, such as some_command | mmx secrets set KEY
+A name inside a key: one word for each level, such as mmx secrets set mmwatchdog_secret_files smtp-password
 A key the vault already has: set and add-random change its value only with --replace
 Automation: --non-interactive  --json`
 
@@ -38,7 +39,8 @@ type secretsOptions struct {
 	// replace lets set and add-random change the value of a key the vault
 	// already has.
 	replace bool
-	// arguments are the words that are not options, such as add-random's KEY.
+	// arguments are the words that are not options, such as add-random's KEY
+	// and the NAME words inside it.
 	arguments []string
 }
 

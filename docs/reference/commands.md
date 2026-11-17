@@ -902,8 +902,8 @@ subcommand's flags, output, and exit codes.
 | --- | --- |
 | [`mmx secrets edit`](secrets.md#mmx-secrets-edit) | Opens the vault in your editor, and creates the vault if there is none. |
 | [`mmx secrets passwd`](secrets.md#mmx-secrets-passwd) | Changes the vault passphrase. |
-| [`mmx secrets add-random KEY`](secrets.md#mmx-secrets-add-random) | Adds a secret key with a generated value, without showing the value. |
-| [`mmx secrets set KEY`](secrets.md#mmx-secrets-set) | Sets a secret key to the value on standard input, without showing the value. |
+| [`mmx secrets add-random KEY [NAME ...]`](secrets.md#mmx-secrets-add-random) | Adds a secret key, or a [name inside one](secrets.md#a-name-inside-a-secret-key), with a generated value, without showing the value. |
+| [`mmx secrets set KEY [NAME ...]`](secrets.md#mmx-secrets-set) | Sets a secret key, or a [name inside one](secrets.md#a-name-inside-a-secret-key), to the value on standard input, without showing the value. |
 | [`mmx secrets list-keys`](secrets.md#mmx-secrets-list-keys) | Lists the vault's secret keys, never a value. |
 | [`mmx secrets diff-keys`](secrets.md#mmx-secrets-diff-keys) | Shows which secret keys changed since the last Git commit, never a value. |
 | [`mmx secrets usage [KEY]`](secrets.md#mmx-secrets-usage) | Shows where each secret key is used. |
