@@ -11,7 +11,7 @@ inputs:
   data_directory:
     type: string
     required: true
-    description: Where the restored cluster goes, an empty or missing directory. Use the same path as on the server that was backed up, because pg_autoctl writes absolute paths, such as its TLS files, into the configuration that the restore brings back. The data directory of a cluster of Debian's own tools, which pg_lsclusters lists, such as /var/lib/postgresql/18/main, works too; its service then starts the restored cluster. Any other restored cluster starts on its local socket only, whatever address its restored configuration names. MMX records the target of the module's restore in /var/lib/mmx/pgbackrest_restore_targets/, and a later run with the same stanza, recover_to, and read_repository_as_of is unchanged, while one with another target fails.
+    description: Where the restored cluster goes, an empty or missing directory, as an absolute path without ", $, `, \, or a line break. Use the same path as on the server that was backed up, because pg_autoctl writes absolute paths, such as its TLS files, into the configuration that the restore brings back. The data directory of a cluster of Debian's own tools, which pg_lsclusters lists, such as /var/lib/postgresql/18/main, works too; its service then starts the restored cluster. Any other restored cluster starts on its local socket only, whatever address its restored configuration names. MMX records the target of the module's restore in /var/lib/mmx/pgbackrest_restore_targets/, and a later run with the same stanza, recover_to, and read_repository_as_of is unchanged, while one with another target fails.
   postgresql_major_version:
     type: integer
     required: true

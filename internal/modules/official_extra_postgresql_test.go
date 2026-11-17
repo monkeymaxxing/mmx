@@ -2609,6 +2609,7 @@ printf '100\n%s\n1793094948\n5432\n/run/postgresql\n*\n  1 2\nready   \n' "$data
 		{map[string]any{"recover_to": "2026-11-03 13:01:00"}, "pgbackrest_restore.recover_to: must be latest or a time with its time zone, such as 2026-11-03 13:01:00+00"},
 		{map[string]any{"read_repository_as_of": "2026-13-03 13:01:00+00", "repository": 1}, "pgbackrest_restore.read_repository_as_of: must be a time with its time zone, such as 2026-11-03 13:01:00+00"},
 		{map[string]any{"data_directory": "main"}, "pgbackrest_restore.data_directory: must be an absolute path without a slash at its end, such as /var/lib/postgresql/18/main"},
+		{map[string]any{"data_directory": `/srv/pg"$(touch /tmp/x)"`}, "pgbackrest_restore.data_directory: must not hold \", $, `, \\, or a line break, which pg_ctl's shell would read"},
 		{map[string]any{"repository": 0}, "pgbackrest_restore.repository: must be the number of a repository in the configuration file, such as 1"},
 	} {
 		expectStatus(t, node.run("pgbackrest_restore", restoreInputs(empty, configFile, c.changes), true), "failed", "config", c.reason)

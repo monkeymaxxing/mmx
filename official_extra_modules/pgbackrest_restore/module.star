@@ -221,6 +221,11 @@ def check_inputs(inputs):
     directory = inputs["data_directory"]
     if not directory.startswith("/") or directory == "/" or directory.endswith("/"):
         return invalid("data_directory", "must be an absolute path without a slash at its end, such as /var/lib/postgresql/18/main")
+    # pg_ctl start puts the path inside double quotes in a command for
+    # /bin/sh, where these characters would still act.
+    for character in ["\"", "$", "`", "\\", "\n", "\r"]:
+        if character in directory:
+            return invalid("data_directory", "must not hold \", $, `, \\, or a line break, which pg_ctl's shell would read")
     recover_to = inputs["recover_to"]
     if recover_to != "latest" and time_problem(recover_to):
         return invalid("recover_to", "must be latest or " + time_problem(recover_to)[len("must be "):])
