@@ -274,7 +274,9 @@ func (e *Engine) nodeTasks(ctx context.Context, nodeTasks []config.Task, scope v
 		}
 		if e.checking && !e.job.Dryrun {
 			r.Change = "unchanged"
-			if r.Status != "succeeded" {
+			// A check that its when or a shell condition skips is not a
+			// failed check, as in a dryrun.
+			if r.Status != "succeeded" && r.Status != "skipped" {
 				r.Status, r.FailureKind = "failed", "validation"
 				r.Reason = "required validation did not pass: " + r.Reason
 			}

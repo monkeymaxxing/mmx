@@ -191,6 +191,25 @@ func TestDryrunValidateWithoutDryrunCommandReportsNoChangeWhenNothingChanges(t *
 	}
 }
 
+// A validate check whose when is false is skipped and does not fail the
+// node task block, in a run as in a dryrun: a role checks TLS only when TLS
+// is on.
+func TestSkippedValidateCheckDoesNotFailTheBlock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nginx.conf")
+	block := config.Task{TaskBlock: &config.TaskBlock{ID: "nginx", Changes: []config.Task{taskFile(path, "proposed")},
+		Validate: []config.Task{{When: false, Module: "shell", ModuleInputs: &modules.Shell{Script: "exit 1"}}}}}
+	for _, dryrun := range []bool{true, false} {
+		j := job(block)
+		j.Dryrun = dryrun
+		r := (&Engine{RuntimeRoot: filepath.Join(dir, "state")}).Run(context.Background(), j)
+		requireStatus(t, r, "succeeded")
+		if r.Results[1].Status != "skipped" {
+			t.Fatalf("dryrun %v: %+v", dryrun, r.Results)
+		}
+	}
+}
+
 // A run_from_directory that does not exist is a missing prerequisite, as in
 // the OpenWISP deployment: the shell task that loads the initial data runs
 // from the installation directory, which an earlier directory node task
