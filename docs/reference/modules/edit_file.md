@@ -23,6 +23,8 @@ MMX has no module that manages a marked block of lines inside a file.
 - `path` (string; required): absolute; an existing regular file up to 1 MiB, whose owner, group, and permissions are kept
 - `content_filter` (mapping; required): {shell: {script, env}}: the script runs as root, reads the file on standard input, and writes the wanted content to standard output; it must change nothing itself; MMX runs it again on its own output and fails the task when that changes the content again
 - `check_new_file` (mapping; optional): as for file
+- `secret_readable_by_group` (boolean; default `false`): allow the file's group to read the file when the filter's environment holds a secret; the file keeps its mode
+- `dangerously_let_every_account_read_secret` (boolean; default `false`): allow every account on the node to read the file when the filter's environment holds a secret; the file keeps its mode
 
 ## Outputs
 
@@ -68,7 +70,16 @@ through `env`, as for a `shell` node task.
 ## How it works
 
 `content_filter` is a `shell` mapping with `script` and optional `env`. The
-other fields are `path` and `check_new_file`.
+other fields are `path`, `check_new_file`, and the two acknowledgements
+below.
+
+A filter whose `env` holds a secret may write the secret into the file, so
+the node task follows the rule of
+[`file`](file.md#files-that-hold-secrets): the file keeps its mode, so when
+that mode lets the file's group read it, the node task needs
+`secret_readable_by_group: true`, and when every account can read it,
+`dangerously_let_every_account_read_secret: true`. Otherwise the node task
+fails and changes nothing.
 
 Before MMX writes, it runs the filter a second time, on the filter's own
 output. If that changes the content again, the node task fails and nothing is
@@ -98,6 +109,11 @@ describe the new-file check.
 - **The filter exits with a nonzero code:** the node task fails and nothing
   is written.
 - **A missing file** fails the node task in a run. Create the file first.
+- **`edit_file: ... would hold a secret, and the file's mode 0644 lets every
+  account on the node read it`**: the filter's `env` holds a secret. Make
+  the file readable only by its owner first, such as with a `file` node
+  task that sets `permissions_mode: "0600"`, or add the acknowledgement the
+  message names.
 
 ## Tested on
 

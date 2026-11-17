@@ -43,11 +43,34 @@ func (run Runtime) Line(ctx context.Context, l Line, s value.Scope) protocol.Res
 	if err != nil {
 		return protocol.Failed(err)
 	}
-	next, err := EditLine(current, l, s)
+	if s == nil {
+		s = value.Scope{}
+	}
+	lineScope, trace := s.TraceReads() // Only the line decides the file's read permission.
+	next, err := EditLine(current, l, lineScope)
 	if err != nil {
 		return protocol.Failed(err)
 	}
+	if trace.Used {
+		if err := checkSecretInKeptMode("line", l.Path, info.Mode(), l.SecretReadableByGroup, l.DangerouslyLetEveryAccountReadSecret); err != nil {
+			return protocol.ConfigurationError(err)
+		}
+	}
 	return run.fileAt(ctx, File{Path: l.Path, Literal: &next, CheckNewFile: l.CheckNewFile}, s, parent, 0644, nil)
+}
+
+// checkSecretInKeptMode applies file's rule for content that holds a secret
+// to line and edit_file, which keep the existing file's mode: other accounts
+// may read the secret only when the task says so, with the acknowledgement
+// that file asks for.
+func checkSecretInKeptMode(module, path string, mode os.FileMode, secretReadableByGroup, dangerouslyLetEveryAccountReadSecret bool) error {
+	if mode&0004 != 0 && !dangerouslyLetEveryAccountReadSecret {
+		return invalid("dangerously_let_every_account_read_secret", fmt.Sprintf("%s: %s would hold a secret, and the file's mode %04o lets every account on the node read it. Make the file readable only by its owner first, such as with a file task that sets permissions_mode \"0600\", or, if every account should read it, add dangerously_let_every_account_read_secret: true.", module, path, mode.Perm()))
+	}
+	if mode&0004 == 0 && mode&0040 != 0 && !secretReadableByGroup {
+		return invalid("secret_readable_by_group", fmt.Sprintf("%s: %s would hold a secret, and the file's mode %04o lets the file's group read it. If the group should read it, add secret_readable_by_group: true; otherwise make the file readable only by its owner first, such as with a file task that sets permissions_mode \"0600\".", module, path, mode.Perm()))
+	}
+	return nil
 }
 
 // EditLine returns text with l applied: the one selected line replaced by
@@ -167,6 +190,10 @@ type Line struct {
 	InsertBeforeLastLineMatching  string `yaml:"insert_before_last_line_matching,omitempty" json:"insert_before_last_line_matching,omitempty"`
 	InsertAfterFirstLineMatching  string `yaml:"insert_after_first_line_matching,omitempty" json:"insert_after_first_line_matching,omitempty"`
 	InsertAfterLastLineMatching   string `yaml:"insert_after_last_line_matching,omitempty" json:"insert_after_last_line_matching,omitempty"`
+	// The acknowledgements file asks for, for a line that holds a secret in a
+	// file that other accounts can read (checkSecretInKeptMode).
+	SecretReadableByGroup                bool `yaml:"secret_readable_by_group,omitempty" json:"secret_readable_by_group,omitempty"`
+	DangerouslyLetEveryAccountReadSecret bool `yaml:"dangerously_let_every_account_read_secret,omitempty" json:"dangerously_let_every_account_read_secret,omitempty"`
 }
 
 // linePositions are the line settings that place a new line, by field name.
@@ -228,6 +255,8 @@ var lineDescription = Description{
 		{Name: "insert_after_first_line_matching", Notes: "as insert_before_first_line_matching, directly after the first line it matches"},
 		{Name: "insert_after_last_line_matching", Notes: "as insert_before_first_line_matching, directly after the last line it matches"},
 		{Name: "check_new_file", Notes: "as for file"},
+		{Name: "secret_readable_by_group", Default: "false", Notes: "allow the file's group to read a line that holds a secret; the file keeps its mode"},
+		{Name: "dangerously_let_every_account_read_secret", Default: "false", Notes: "allow every account on the node to read a line that holds a secret; the file keeps its mode"},
 		{Name: "state", Values: presenceStates, Default: "present", Notes: "absent removes the selected line and needs exactly one of match or line; it takes no placing setting"},
 	},
 	Example: "- line:\n    path: /etc/ssh/sshd_config\n    match: '^#?PasswordAuthentication\\s'\n    line: PasswordAuthentication no\n    insert_at_end_of_file: true\n",
