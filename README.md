@@ -605,6 +605,10 @@ before moving on. Use one server first, then the rest.
 
 - Before the first dryrun on a new server, tell the person in one line that
   it copies MMX's program to the server, then go on.
+- A dryrun exits with 2 when something would change and with 3 when some
+  work can't be checked yet. Neither is an error, but your screen may show
+  the exit code as one. Before the first dryrun, tell the person that, and
+  report the dryrun by its summary lines, not its exit code.
 - Look up each module with `mmx describe-module NAME` before using it. Use a
   core module when one fits. Use `shell` for a short command.
 - When no module fits and a short `shell` command is not enough, write a
