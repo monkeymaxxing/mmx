@@ -601,8 +601,8 @@ before moving on. Use one server first, then the rest.
 | 5 | The changes are made. | `mmx run PLAYBOOK --limit NODE` ends with no failed node. |
 | 6 | The playbook is repeatable. | Run it again: no node task reports a change, apart from `shell` tasks that run every time. |
 
-- Before the first dryrun on a new server, tell the person that it copies
-  MMX's program to the server, and wait for their yes.
+- Before the first dryrun on a new server, tell the person in one line that
+  it copies MMX's program to the server, then go on.
 - Look up each module with `mmx describe-module NAME` before using it. Use a
   core module when one fits. Use `shell` for a short command.
 - When no module fits and a short `shell` command is not enough, write a
