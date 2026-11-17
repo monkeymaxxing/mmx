@@ -468,7 +468,7 @@ turn, and saving values to files on your controller machine.
 
 ## What a dryrun shows before a value exists
 
-A dryrun changes nothing, so a value that only the run creates is unknown
+A dryrun does not make the playbook's changes, so a value that only the run creates is unknown
 in a dryrun. MMX then reports the work that needs the value as
 `not_checked`, not as false or empty, and names the cause:
 

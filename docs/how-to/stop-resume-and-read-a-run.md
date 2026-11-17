@@ -583,7 +583,7 @@ The exit codes of `mmx results`, `mmx status`, and `mmx stop` are in the
 | `mmx: no matching saved run`, exit code 4 | No saved run fits: the run ID is wrong, MMX deleted the run, or the project has only runs of `mmx run-command`, which a command without a run ID never picks. Check the run ID on the `Saved:` line, or give the run ID of the `mmx run-command` run. |
 | `Selected run ...` names another run than you meant | Without a run ID, MMX picks the latest run, also a dryrun for `mmx results`. Give the run ID. |
 | `Nothing to resume.` after a failed run | `mmx resume` picked a later run that succeeded, and doesn't look further back. Give the failed run's ID, such as `mmx resume b28f4938`. |
-| `mmx: cannot resume a dryrun; start a new mmx run with a playbook name` | A dryrun changes nothing, so it has nothing to finish. Run `mmx run set_up_web_servers`. |
+| `mmx: cannot resume a dryrun; start a new mmx run with a playbook name` | A dryrun only reports what a run would change, so it has nothing to finish. Run `mmx run set_up_web_servers`. |
 | `mmx: run ID 2a33c932 is ambiguous; use the full run ID` | Two saved runs share the short ID. Use the full ID from the `Saved:` line. |
 | `mmx status` says `running` for a node after a stop | The node still finishes its current node task or node task block. Wait, and run `mmx status` again. |
 | `mmx status` exits with code 3 and says `unconfirmed; work may still be running` | MMX can't reach the node. If the server is down for a while, start it and repeat `mmx status`. If the server is gone, see [A server that is gone](#a-server-that-is-gone). |

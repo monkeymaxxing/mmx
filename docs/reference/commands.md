@@ -27,7 +27,7 @@ project.)
 | [`mmx validate [PLAYBOOK]`](#mmx-validate) | Checks the project files. | No |
 | [`mmx nodes [PLAYBOOK]`](#mmx-nodes) | Lists the inventory's nodes and groups; with a playbook, also the nodes each fleet stage selects. | No |
 | [`mmx explain PLAYBOOK`](#mmx-explain) | Shows the work each node would get, with each value and where the value came from. | No |
-| [`mmx dryrun PLAYBOOK`](#mmx-dryrun) | Reports what a run would change, without changing it. Sets MMX up on a node that does not have it yet. | Yes |
+| [`mmx dryrun PLAYBOOK`](#mmx-dryrun) | Reports what a run would change, and changes nothing the playbook describes. On a new node, first installs MMX's program and its HTTPS service. | Yes |
 | [`mmx run PLAYBOOK`](#mmx-run) | Applies the playbook to the nodes it selects. | Yes |
 | [`mmx resume [RUN_ID]`](#mmx-resume) | Finishes the work that a saved run left undone. | Yes |
 | [`mmx status [RUN_ID]`](#mmx-status) | Collects the current results of a saved run from its nodes. | Yes |
@@ -371,8 +371,10 @@ The [`ufw` page](modules/ufw.md) shows how `mmx explain` lists a node task's fir
 ## mmx dryrun
 
 `mmx dryrun PLAYBOOK` connects to each selected node and reports what a
-run would change, without changing it. On a node without MMX, the dryrun
-first sets MMX up: it installs MMX's node program and starts it.
+run would change. A dryrun changes nothing the playbook describes. On a
+node without MMX, the dryrun first sets MMX up: it installs MMX's program
+in `/opt/mmx/bin/` and starts its HTTPS service, `mmx-https-api.service`,
+which listens on TCP port 7443 on every network address.
 
 ```sh
 mmx dryrun set_up_web_servers --limit web01 --diff

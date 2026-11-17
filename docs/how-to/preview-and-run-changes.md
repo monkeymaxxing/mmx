@@ -48,7 +48,7 @@ them, and read what each result and exit code means.
    ```
 
    `mmx dryrun` connects to each selected server and reports what a run
-   would change, without changing it. `--diff` adds each file's
+   would change, and changes nothing the playbook describes. `--diff` adds each file's
    difference:
 
    ```text
@@ -61,8 +61,9 @@ them, and read what each result and exit code means.
      +<h1>Shop</h1>
    ```
 
-   A first dryrun on a server also sets up MMX there, so on that server
-   even a dryrun installs MMX's node program and starts it.
+   A first dryrun on a server also sets up MMX there: it installs MMX's
+   program in `/opt/mmx/bin/` and starts its HTTPS service, which listens
+   on TCP port 7443 on every network address.
 
    **Check:** read each node task's result as
    [What the results mean](#what-the-results-mean) says, and the exit code

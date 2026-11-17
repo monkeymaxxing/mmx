@@ -78,8 +78,10 @@ fix what the tests find:
 
 - **Set up.** One command gives a new server the same setup as the others.
 - **Audit.** `mmx dryrun` checks every server against the description at any
-  time, and changes nothing. If someone changed by hand something that the
-  description covers, the dryrun shows the difference.
+  time, and changes nothing that the description covers. On a new server,
+  the first dryrun also sets MMX up, as [First run](#first-run) says. If
+  someone changed by hand something that the description covers, the
+  dryrun shows the difference.
 - **Change.** You change the description, look at the dryrun, and one
   `mmx run` makes the change on every server that the change applies to.
 - **Track.** You keep the description as files in a Git repository, which is
@@ -170,7 +172,10 @@ mmx dryrun set_up_web_servers --limit web01 --diff
 ```
 
 `--limit web01` picks the node `web01`, and `--diff` shows the changed lines
-of each file. The dryrun changes nothing. Part of its output:
+of each file. A dryrun changes nothing your playbooks describe. On a new
+server, the first dryrun also installs MMX's program (`/opt/mmx/bin/`) and
+its HTTPS service, which listens on TCP port 7443 on every network address.
+Part of the dryrun's output:
 
 ```text
   set_up_nginx / web01 / install_nginx: succeeded, unchanged
@@ -266,7 +271,9 @@ checks the changes. These parts of MMX are made for that:
 - `mmx describe-module NAME` prints a module's whole page, with its inputs,
   examples, and errors, so the agent doesn't have to guess.
 - `mmx dryrun` reports what each node task would change, with file
-  differences, and changes nothing. You or your agent can read the report
+  differences, and changes nothing that the playbooks describe. On a new
+  server, the first dryrun also installs MMX's program and its HTTPS
+  service. You or your agent can read the report
   before `mmx run`. MMX cannot know what a `shell` task would do, so the
   report shows a `shell` task as skipped, with its change unknown, unless
   the task gives its own `dryrun` command.
@@ -288,7 +295,7 @@ a language that reads like Python. The module goes in your project's
 functions that the core modules use. Your module gets these with no extra
 code:
 
-- A dryrun of your module changes nothing.
+- In a dryrun, your module only reports what it would change.
 - A run reports what your module changed, with file differences.
 - `mmx validate` checks each use of your module against the inputs that the
   module declares.
@@ -397,7 +404,7 @@ Run the commands in the project's directory:
 
 ```sh
 mmx validate                     # check the files, without contacting a node
-mmx dryrun set_up_web_servers    # show what would change, without changing anything
+mmx dryrun set_up_web_servers    # show what would change; on a new server, first set MMX up there
 mmx run set_up_web_servers       # make the changes
 mmx run set_up_web_servers       # nothing differs now, so this run changes nothing
 ```
@@ -522,7 +529,8 @@ Before the first dryrun:
 
 **What the first dryrun does to the server.** MMX logs in over SSH and
 installs `mmx-runner`, its node program. It starts `mmx-runner` as the
-systemd service `mmx-https-api.service`, which listens on TCP port 7443.
+systemd service `mmx-https-api.service`, which listens on TCP port 7443 on
+every network address of the server.
 After that, `mmx` connects over HTTPS on port 7443 and proves who it is
 with your SSH key. Over HTTPS, your SSH key alone gives root on the
 server: when the login account uses `sudo`, the server does not ask for
@@ -549,6 +557,9 @@ before moving on. Use one server first, then the rest.
 | 5 | The changes are made. | `mmx run PLAYBOOK --limit NODE` ends with no failed node. |
 | 6 | The playbook is repeatable. | Run it again: no node task reports a change, apart from `shell` tasks that run every time. |
 
+- Before the first dryrun on a new server, tell the person that it
+  installs MMX's program and its HTTPS service on the server (TCP port
+  7443), and wait for their yes.
 - Look up each module with `mmx describe-module NAME` before using it. Use a
   core module when one fits. Use `shell` for a short command.
 - When no module fits and a short `shell` command is not enough, write a

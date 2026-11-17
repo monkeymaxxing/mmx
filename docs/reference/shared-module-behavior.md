@@ -70,7 +70,7 @@ they take on their own pages.
 ## Previewing file changes
 
 `mmx dryrun --diff` shows what each node task would change in each file,
-without changing it:
+without changing the file:
 
 ```sh
 mmx dryrun set_up_web_servers --diff

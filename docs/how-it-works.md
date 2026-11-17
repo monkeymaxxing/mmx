@@ -393,6 +393,7 @@ Then, over SSH, as root or through `sudo`, MMX:
    `mmx-runner` comes from the same MMX release as `mmx`
 2. starts the **node HTTPS API process**, `mmx-runner serve`, as the
    systemd service `mmx-https-api.service`, which listens on TCP port 7443
+   on every network address of the node
 3. reads the node's HTTPS identity, called its **pin**: the SHA-256 of the
    node's HTTPS public key
 4. saves a SHA-256 hash of the machine ID, and the pin, on the controller
