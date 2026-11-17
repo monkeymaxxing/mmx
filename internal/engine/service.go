@@ -223,6 +223,11 @@ func (e *Engine) service(ctx context.Context, sv modules.Service) (result protoc
 		}
 	}
 	if len(actions) == 0 {
+		if state == "stopped" {
+			if err := e.oweNothing(plan, key); err != nil {
+				return protocol.Failed(fmt.Errorf("remove the record of stopped unit %s: %w", name, err))
+			}
+		}
 		return protocol.Success("unchanged")
 	}
 	result = protocol.Success("changed")
@@ -293,6 +298,15 @@ func (e *Engine) service(ctx context.Context, sv modules.Service) (result protoc
 		r.Change = "changed"
 		return r
 	}
+	// A stopped unit loads the files on disk when it next starts, even when
+	// something outside MMX starts it.
+	if state == "stopped" {
+		if err := e.oweNothing(plan, key); err != nil {
+			r := protocol.Failed(fmt.Errorf("remove the record of stopped unit %s: %w", name, err))
+			r.Change = "changed"
+			return r
+		}
+	}
 	if sv.StartAtBoot != nil && ((*sv.StartAtBoot && after.Enabled != "enabled") || (!*sv.StartAtBoot && (after.Enabled == "enabled" || after.Enabled == "enabled-runtime"))) {
 		r := protocol.Failed(fmt.Errorf("service %s did not reach start_at_boot=%t (UnitFileState=%s)", name, *sv.StartAtBoot, after.Enabled))
 		r.Change = "changed"
@@ -335,8 +349,8 @@ func restartNowReason(dryrun, wasRunning bool, unit, marker string) string {
 	return "started " + unit + ", which was not running, with its one restart, and wrote the marker file " + marker
 }
 
-// oweNothing removes the record of a unit that do_not_start_or_stop finds not running,
-// stopped or not there at all. Nothing is owed to such a unit: whenever it
+// oweNothing removes the record of a unit that a stopped task leaves stopped,
+// or that do_not_start_or_stop finds not running, stopped or not there at all. Nothing is owed to such a unit: whenever it
 // starts, it loads the files on disk then.
 func (e *Engine) oweNothing(plan *servicePlan, key string) error {
 	if plan == nil || e.job.Dryrun {

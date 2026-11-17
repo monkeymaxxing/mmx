@@ -1948,3 +1948,23 @@ func TestRestartNowStartsAStoppedUnitAndRetriesAFailedRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A unit that a node task block keeps stopped loads its files only when it
+// starts. Started outside MMX after the block changed its configuration, as
+// for a failover to a standby, it has loaded the new configuration, and the
+// next run neither reloads nor restarts it.
+func TestStoppedServiceStartedOutsideMMXIsNotRefreshed(t *testing.T) {
+	f := newServiceFixture(t)
+	unit := filepath.Join(f.dir, "demo.service")
+	put(t, filepath.Join(unit, "active"), "inactive\n")
+	stopped := f.op("B")
+	stopped.TaskBlock.Activate[0].ModuleInputs = &modules.Service{State: "stopped", Name: "demo", Refresh: "reload"}
+	f.run(t, stopped, "succeeded")
+	f.assert(t, "A", "")
+	// Started outside MMX: a new instance that loaded B.
+	put(t, filepath.Join(unit, "active"), "active\n")
+	put(t, filepath.Join(unit, "instance"), "7\n")
+	put(t, filepath.Join(unit, "loaded"), "B")
+	f.run(t, f.op("B"), "succeeded")
+	f.assert(t, "B", "")
+}
