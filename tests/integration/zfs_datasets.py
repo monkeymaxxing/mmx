@@ -36,23 +36,26 @@ LEFT_BY_ZFS = ['/etc/zfs', '/etc/exports.d', '/var/lib/dkms', '/etc/yum.repos.d/
 # Red Hat family's tasks when OpenZFS's repository zfs-kmod has no build for
 # the node's kernel, and the error that says so.
 WITHOUT_KMOD_BUILD = "\n### When zfs-kmod has no build for the node's kernel\n"
+# The heading over the last task, which loads the kernel module everywhere.
+EVERY_DISTRIBUTION = "\n### Notes for every distribution\n"
 NO_KMOD_BUILD_ERROR = re.compile(r'nothing provides kernel\([^)]*\) = \w+ needed by kmod-zfs-')
 
 
 def set_up_playbook(build_on_the_node=False):
     """A playbook of the node tasks that the zfs_dataset page shows under "Set up", so that the page is what the suite runs.
-    build_on_the_node: the page's tasks for a node whose kernel zfs-kmod has no build for, in place of the last three."""
+    build_on_the_node: the page's tasks for a node whose kernel zfs-kmod has no build for, in place of the last three.
+    Both end with the task under "Notes for every distribution" that loads the kernel module."""
     page = (vm.REPO / 'official_extra_modules/zfs_dataset/README.md').read_text()
     section = page.split('\n## Set up\n', 1)[1].split('\n## ', 1)[0]
     usual, alternative = section.split(WITHOUT_KMOD_BUILD, 1)
-    alternative = alternative.split('\n### ', 1)[0]
+    alternative, notes = alternative.split(EVERY_DISTRIBUTION, 1)
 
     def tasks(text):
         """Each node task of the text's YAML blocks, each ending in a blank line."""
         blocks = [block.split('```', 1)[0] for block in text.split('```yaml\n')[1:]]
         assert blocks and all(block.startswith('- ') for block in blocks), blocks
         return ['- ' + task.rstrip('\n') + '\n\n' for block in blocks for task in ('\n' + block).split('\n- ')[1:]]
-    chosen = tasks(usual)[:-3] + tasks(alternative) if build_on_the_node else tasks(usual)
+    chosen = (tasks(usual)[:-3] + tasks(alternative) if build_on_the_node else tasks(usual)) + tasks(notes)
     indented = ''.join('      ' + line if line.strip() else line for task in chosen for line in task.splitlines(keepends=True))
     return 'fleet_stages:\n  - id: set_up\n    nodes: all\n    node_tasks:\n' + indented
 

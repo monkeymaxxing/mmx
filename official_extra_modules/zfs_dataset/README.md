@@ -89,14 +89,17 @@ two plugins of dnf that the tasks after it need:
 The repository `zfs-kmod` fits only the kernels of the Red Hat minor
 releases, such as 10.2, that OpenZFS has built it for. On a newer minor
 release, the last task above fails with `nothing provides kernel(...)
-needed by kmod-zfs`. Then use the repository `zfs` instead: in place of
-the last three tasks above, these tasks build the kernel module on the
-node, for the kernel that runs, in about three minutes, and build it again
-for each new kernel. The package that builds it, `dkms`, comes from EPEL,
-the Fedora project's extra packages for Enterprise Linux. The package
-`kernel-devel` must match the kernel that runs, and the repositories keep
-only the newest, so update the kernel and reboot first if the node does
-not run the newest one:
+needed by kmod-zfs`. Then, in place of the last three tasks above, these
+tasks build the kernel module on the node, for the kernel that runs, in
+about five minutes, and build it again for each new kernel. They take ZFS
+2.4 from the repository `zfs-2.4`. The repository `zfs` holds ZFS 2.2,
+whose source does not compile for newer kernels such as Rocky Linux 9.9's,
+and its package then installs without a module and without an error. The
+package that builds the module, `dkms`, comes from EPEL, the Fedora
+project's extra packages for Enterprise Linux. The package `kernel-devel`
+must match the kernel that runs, and the repositories keep only the
+newest, so update the kernel and reboot first if the node does not run
+the newest one:
 
 ```yaml
 - when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
@@ -106,7 +109,10 @@ not run the newest one:
   dnf_repository: {existing_repository: zfs-kmod, enabled: false}
 
 - when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
-  dnf_repository: {existing_repository: zfs, enabled: true}
+  dnf_repository: {existing_repository: zfs, enabled: false}
+
+- when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
+  dnf_repository: {existing_repository: zfs-2.4, enabled: true}
 
 - when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
   dnf_package:
@@ -117,8 +123,18 @@ not run the newest one:
 
 ### Notes for every distribution
 
-No service has to be started: a `zfs` command loads the kernel module by
-itself.
+On every distribution, the last task loads the kernel module. A `zfs`
+command would load it by itself, but a module that failed to build on the
+node would only show up then. With this task, the run fails here and says
+so (`Module zfs not found`):
+
+```yaml
+- shell:
+    script: modprobe zfs
+    skip_if_this_path_exists: /sys/module/zfs
+```
+
+No service has to be started.
 
 **Secure Boot.** A node with Secure Boot on loads only a kernel module
 that carries a signature it trusts. Ubuntu signs its ZFS module. On the
@@ -296,15 +312,15 @@ error after the creation.
 
 The suite `tests/integration/zfs_datasets.py` runs the whole test where the
 tasks under [Set up](#set-up) install ZFS in under two minutes, and on
-Debian 13 and AlmaLinux 10 with a build of the kernel module on the node. It runs in a virtual
+Debian 13, Rocky Linux 9.9, and AlmaLinux 10.3 with a build of the kernel module on the node. It runs in a virtual
 machine, with Secure Boot off, on a pool that is a file:
 
 | Distribution | ZFS | Kernel module | The tasks under "Set up" take |
 |---|---|---|---|
 | Ubuntu 24.04 | 2.2.2 | comes with the kernel | about 25 seconds |
 | Ubuntu 26.04 | 2.4.1 | comes with the kernel | about 30 seconds |
-| Rocky Linux 9 | 2.2.11 | prebuilt, from the OpenZFS project's repository `zfs-kmod` | about 90 seconds |
-| AlmaLinux 10.3 | 2.2.11 | built on the node by the package `zfs-dkms`, because `zfs-kmod` has no build for 10.3's kernel | about 5 minutes |
+| Rocky Linux 9.9 | 2.4.4 | built on the node by the package `zfs-dkms` from `zfs-2.4`, because `zfs-kmod` has no build for 9.9's kernel | about 5 minutes |
+| AlmaLinux 10.3 | 2.4.4 | built on the node by the package `zfs-dkms` from `zfs-2.4`, because `zfs-kmod` has no build for 10.3's kernel | about 5 minutes |
 | Debian 13 | 2.3.9 | built on the node by the package `zfs-dkms` | about 5 minutes |
 
 `sharenfs` with an NFS server on the node was tried by hand on Ubuntu
