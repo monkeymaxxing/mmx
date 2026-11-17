@@ -369,7 +369,7 @@ diagnostics are replaced by those of the actual node task:
 | Device deletion failed | systemd_networkd_file: `Cannot remove virtual device <name> declared in <path>: <diagnostic>.` netplan_file: `Cannot remove virtual network device <name> declared by <path>: <diagnostic>.` |
 | Confirmation expired, restore succeeded | `No reachability confirmation arrived over a new SSH connection within 2m. The previous file /etc/netplan/60-eth1.yaml and its running configuration are restored.` |
 | Previous state was absent | `No reachability confirmation arrived over a new HTTPS connection within 2m. The new file /etc/netplan/60-eth1.yaml and its declared virtual devices were removed; the previous configuration is restored.` |
-| Restore still owed | `Cannot change /etc/netplan/60-eth1.yaml: node job <node-job-id> still owes a restore of the file; restore service: mmx-owed-restore-<owed-restore-id>.service.` |
+| Restore still owed | `Cannot change /etc/netplan/60-eth1.yaml: node job <node-job-id> still owes a restore of this file. Restore service: mmx-owed-restore-<owed-restore-id>.service.` |
 | Restore failed | `Restoring /etc/netplan/60-eth1.yaml failed: <tool diagnostic>. The owed restore and saved previous file remain; the previous running configuration is not confirmed restored.` |
 
 For a failed restore, retain both the original failure reason and the

@@ -505,7 +505,10 @@ These rules hold for every reference:
 - Repeat `--var` for each variable: `--var release=1.4.3 --var run_migrations=false`.
   The text after the first `=` is the value.
 - `mmx validate set_up_web_servers` and `mmx nodes set_up_web_servers`
-  accept `--var` and need no value. Without a playbook name, the two
+  accept `--var` and need no value, unless a field that MMX reads on the
+  controller machine before the run, such as a `download` URL or a
+  `template` path, reads the variable: then both commands refuse to run
+  without the value. Without a playbook name, the two
   commands refuse `--var` with `mmx: --var requires a playbook name`.
   `mmx validate` without a playbook name still checks a playbook with a
   command-line variable that has no default, as far as MMX can without the

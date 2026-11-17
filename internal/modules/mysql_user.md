@@ -123,8 +123,10 @@ versions of MySQL or MariaDB.
 
 - **The method.** MMX can compare and set passwords for the authentication
   methods `mysql_native_password` and `caching_sha2_password`. A new
-  account gets the server's own method for new accounts:
-  `mysql_native_password` on MariaDB and `caching_sha2_password` on MySQL.
+  account gets its product's default method for new accounts, whatever the
+  server's `default_authentication_plugin` or `authentication_policy`
+  says: `mysql_native_password` on MariaDB and `caching_sha2_password` on
+  MySQL.
   MMX preserves an existing account's method.
 
   MMX computes the new stored value with the account's method, with the

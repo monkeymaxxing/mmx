@@ -696,8 +696,8 @@ wrong logins (`FAILED_LOGIN_ATTEMPTS`). The result's `failure_kind` is then
 **Time limits.** A connection that is not made within 10 seconds fails. A
 PostgreSQL statement that changes the server waits at most 10 seconds for a
 lock that another session holds. After 10 seconds the server refuses the
-statement with the code `55P03`, nothing of the task's statements stays,
-and MMX tries the task again as its `retry` says.
+statement with the code `55P03`, nothing of that statement or its
+transaction stays, and MMX tries the task again as its `retry` says.
 
 **What a failed PostgreSQL task changed.** A failed `postgresql_role` or
 `postgresql_database` task says in `change` what MMX knows:

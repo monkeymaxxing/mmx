@@ -63,7 +63,11 @@ With `state: present`:
   task and is named with what it holds. With
   `grow_filesystem_with_volume: false` only the volume grows.
 - **An existing volume of that size** is unchanged. The module compares
-  after the rounding. With `all_free_space_when_created`, an existing volume is
+  after the rounding to whole extents. With `lvcreate_options` that stripe
+  the volume, such as `--stripes 3` or a RAID type with several data
+  stripes, LVM rounds the size up to whole stripes, and the module counts
+  that volume as larger on the next run: write a `size` that is a whole
+  number of stripes (extent size times data stripes). With `all_free_space_when_created`, an existing volume is
   unchanged whatever its size.
 - **A larger existing volume fails the task.** The module never shrinks a
   volume, because that destroys the data behind the new end.

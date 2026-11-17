@@ -71,7 +71,7 @@ The node task takes the time limits `time_limit` and `time_limit_per_try`; witho
 
 The example project
 [`examples/postgresql-server-for-one-application`](../../../examples/postgresql-server-for-one-application/)
-is this playbook as a whole project. It works on Debian 12 and 13 and Ubuntu 24.04 and 26.04. Before running the example, set `SHOP_DATABASE_PASSWORD` in the
+is this playbook as a whole project. It works on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10. Before running the example, set `SHOP_DATABASE_PASSWORD` in the
 controller machine's environment.
 
 ```yaml

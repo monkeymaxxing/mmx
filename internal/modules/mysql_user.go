@@ -990,8 +990,9 @@ func (run Runtime) MySQLUser(ctx context.Context, u MySQLUser, scope value.Scope
 		return removed
 	}
 
-	// The password: a new account gets the server's own method for new
-	// accounts, an existing one keeps its method.
+	// The password: a new account gets its product's default method for new
+	// accounts, whatever the server's settings say; an existing one keeps
+	// its method.
 	method, setPassword := before.Method, false
 	switch {
 	case u.Password == nil:

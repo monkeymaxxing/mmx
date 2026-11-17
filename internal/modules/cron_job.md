@@ -90,7 +90,7 @@ writes each `%` as `\%`; write the command as it should reach the shell.
 
 | The reason holds | What the error means, and what to do |
 |---|---|
-| `cron is not installed; install the package cron (Debian and Ubuntu) or cronie (Red Hat family) first` | Install cron in an earlier node task; see [Set up](#set-up). A dryrun reports the node task not checked, because an earlier node task may install cron. A missing `run_as_user_account` account is treated the same way. |
+| `cron is not installed; install the package that provides it in an earlier node task: cron (apt, zypper), cronie (dnf)` | Install cron in an earlier node task; see [Set up](#set-up). A dryrun reports the node task not checked, because an earlier node task may install cron. A missing `run_as_user_account` account is treated the same way. |
 | `a secret cannot go into a cron file, which every account on the node can read; use systemd_scheduled_job, which keeps a secret in a file only root can read` | Every account on the node can read the file. Use [`systemd_scheduled_job`](systemd_scheduled_job.md) for a job that needs a secret. |
 | `cron_job.command must not have a backslash directly before %: cron cannot pass that pair to a command. Write the % without the backslash; MMX escapes every % for cron` | cron has no way to pass that pair to a command. |
 | `refusing to write /etc/cron.d/...: the file exists and lacks the MMX marker line ...` | A file of that name that MMX did not write exists, and the job would overwrite it. Choose another `name`. |

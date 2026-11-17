@@ -99,8 +99,7 @@ and deletes it.
 
 **Distributions:** Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, AlmaLinux 10.
 
-The suite `tests/integration/storage.py` runs in a virtual machine on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10, because swap needs the kernel of the guest itself:
-Debian 12 and 13, Ubuntu 24.04 and 26.04.
+The suite `tests/integration/storage.py` runs in a virtual machine on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10, because swap needs the kernel of the guest itself.
 The [validation record](../../changing-mmx/validation.md) has the latest results.
 
 ## Why it works this way

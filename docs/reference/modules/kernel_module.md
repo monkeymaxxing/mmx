@@ -142,8 +142,7 @@ with options or `state: unloaded`, and a module loaded with other options.
 
 The suite `tests/integration/kernel_settings.py` runs in a virtual machine
 on Debian 12 and 13, Ubuntu 24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10, because kernel modules belong to the
-kernel, which a container shares with its host: Debian 12 and 13, Ubuntu
-24.04 and 26.04, Rocky Linux 9, and AlmaLinux 10. It checks `/proc/modules`
+kernel, which a container shares with its host. It checks `/proc/modules`
 and `/sys/module`, and runs `systemd-modules-load` as the next boot runs it.
 The [validation record](../../changing-mmx/validation.md) has the latest results.
 

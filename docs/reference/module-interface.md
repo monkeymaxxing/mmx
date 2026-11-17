@@ -229,6 +229,9 @@ what the call would change:
 - **A nonzero exit code is no error.** `error` is set when the program
   could not start, ended by a signal, or its output could not be read. The
   script checks `exit_code` itself.
+- **When the program ends, MMX ends every program it left in its process
+  group,** so a command cannot leave a program running in the background.
+  Start a program that must keep running through systemd.
 - **`run_command` runs also in a dryrun,** because MMX cannot see what a
   program does. Use `run_command` only for programs that read, and
   `run_command_that_changes_the_node` for every other program.
@@ -242,6 +245,11 @@ what the call would change:
   certificate, with the authorities in `certificate_authority_file` when
   that file is given. Its `error` names only the host, never the whole URL,
   because a URL can hold a secret.
+- **In a dryrun, a changing primitive sees the node as it is,** not as the
+  script's earlier calls would leave it. A `write_file` into a directory
+  that the script's own `make_directory` would create, or a `remove_path`
+  of a directory that the script would empty first, fails in a dryrun.
+  Guard such a call with `is_dryrun()` and report what would happen.
 - **A file that another node task writes:** in a dryrun, the file on the
   node is still the old one. Ask `earlier_node_task_would_change(path)`,
   and when the answer is `True`, report what follows from a changed file
@@ -251,9 +259,10 @@ what the call would change:
 
 MMX starts an executable once for each try of its node task, as root, as a
 child of the node job worker process. The working directory is a private
-copy of the module's directory on the node. When the node task's time
-limit ends, MMX ends the executable and the processes in the
-executable's process group.
+copy of the module's directory on the node. When the executable ends, or
+the node task's time limit ends, MMX ends the processes left in the
+executable's process group. A program that must keep running is started
+through systemd.
 
 The environment is the one in
 [The environment of a command](shared-module-behavior.md#the-environment-of-a-command),
@@ -456,6 +465,7 @@ For a module of the project's own:
 | Steps of a Starlark script | 10 million for one try of the node task, far more than a module needs |
 | Text that `print` keeps | The first 8 KiB |
 | A file that `read_file` reads, and an `http_request` answer | 1 MiB |
+| `standard_output` and `standard_error` of a command primitive | The first 1 MiB of each; longer output ends with `[MMX output truncated at 1 MiB]` and sets no `error` |
 | A request to an executable | 16 MiB of UTF-8 JSON |
 | A result of an executable | 1 MiB |
 | JSON nesting in a request or result | 64 levels |
