@@ -154,6 +154,11 @@ fleet stages, which run in order: for example, one fleet stage for the
 database servers, then one for the web servers. This playbook has one fleet
 stage, `set_up_nginx`.
 
+`nodes:` names a group from your inventory, such as `web_servers` in
+[The whole project](#the-whole-project). `nodes: all` selects every node of
+the inventory. The inventory that `mmx init` writes has no groups, so there
+use `nodes: all`, or add a group.
+
 Each entry in `node_tasks` is a **node task**, one piece of work on a node.
 `apt_package`, `file`, and `systemd_service` are **modules**: each module
 knows how to do one kind of work. The `task_block` ties the site file to
