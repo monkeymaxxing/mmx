@@ -153,9 +153,10 @@ func (w *fleetStageWalker) trustNodeRecords(outputs map[string]any, origin value
 	return trusted
 }
 
-// ownOrigins replaces a secret's origin that names another fleet stage or
-// node than the node job origin, which sent it, with origin itself: such a
-// secret is unavailable on resume, and nothing reads a file for it.
+// ownOrigins replaces each secret origin that names another fleet stage or
+// node than origin, the node job that sent the value, with origin itself:
+// such a secret is unavailable on resume, and nothing reads a file for it.
+// A record inside a secret's data is never loaded, so it stays as it is.
 func ownOrigins(v any, origin value.NodeOrigin) any {
 	switch x := v.(type) {
 	case *value.Secret:
