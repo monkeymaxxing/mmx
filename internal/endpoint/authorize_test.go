@@ -307,7 +307,18 @@ func TestRefusalsBeforeTheKeyIsProvedAreMarked(t *testing.T) {
 	if err := (Authorizer{}).Authorize(context.Background(), "no_such_mmx_account", key, "127.0.0.1", "127.0.0.1"); !errors.As(err, &before) {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
+	// The key file's parent directories must be ones sshd trusts. On Linux,
+	// t.TempDir() is under /tmp, which every account can write, so the key
+	// file goes in a new directory under the home directory instead.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(home, ".mmx-endpoint-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
 	file := filepath.Join(dir, "authorized_keys")
 	other := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(testSigner(t).PublicKey())))
 	listed := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
