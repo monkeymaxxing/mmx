@@ -449,45 +449,77 @@ yourself.
 ## Install
 
 You can run `mmx` on macOS or Linux. On Windows, run it inside [WSL](https://learn.microsoft.com/windows/wsl/).
-Download the release archive for your machine and its checksum file, check
-the download, and unpack it:
+Paste this block into a terminal. It picks the release archive for your
+machine, checks the download against the release's checksums, and installs
+`mmx` in `~/.local/lib/mmx`, with a link in `~/.local/bin`:
 
 ```sh
+(
+set -eu
 version=0.1.0
-platform=macos-arm64      # or macos-amd64 (Intel Mac), linux-amd64, linux-arm64
+case "$(uname -sm)" in
+  "Darwin arm64")  platform=macos-arm64 ;;
+  "Darwin x86_64") platform=macos-amd64 ;;
+  "Linux x86_64")  platform=linux-amd64 ;;
+  "Linux aarch64") platform=linux-arm64 ;;
+  *) echo "MMX has no release for $(uname -sm)."; exit 1 ;;
+esac
 release=https://github.com/monkeymaxxing/mmx/releases/download/v$version
-
-curl -fLO "$release/mmx-$version-$platform.tar.gz"
-curl -fLO "$release/SHA256SUMS"
-shasum -a 256 --check --ignore-missing SHA256SUMS    # on Linux: sha256sum --check --ignore-missing SHA256SUMS
-
+mkdir -p ~/Downloads/mmx-$version && cd ~/Downloads/mmx-$version
+curl -fsSLO "$release/mmx-$version-$platform.tar.gz"
+curl -fsSLO "$release/SHA256SUMS"
+if command -v sha256sum >/dev/null; then sha256sum --check --ignore-missing SHA256SUMS
+else shasum -a 256 --check --ignore-missing SHA256SUMS; fi
 tar -xzf "mmx-$version-$platform.tar.gz"
 mkdir -p ~/.local/lib ~/.local/bin
+rm -rf ~/.local/lib/mmx
 mv "mmx-$version-$platform" ~/.local/lib/mmx
 ln -sf "$HOME/.local/lib/mmx/mmx" ~/.local/bin/mmx
-mmx version
+~/.local/bin/mmx version
+)
 ```
 
-The checksum finds a damaged download. If you have the
-[GitHub CLI](https://cli.github.com/), this command also proves that MMX's
-own release workflow built the archive:
+The last line prints `mmx 0.1.0 (protocol 1)`.
+
+Then open a new terminal and run `mmx version`.
+
+IF IT SAYS `command not found`, AS ON A NEW MAC, RUN THE LINE FOR YOUR SYSTEM,
+THEN OPEN A NEW TERMINAL:
 
 ```sh
-gh attestation verify "mmx-$version-$platform.tar.gz" --repo monkeymaxxing/mmx
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc     # macOS
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc    # Linux
 ```
 
-On a Mac, download with `curl` as shown. macOS refuses to start a program
-that a web browser downloaded, because the release builds are not signed
-with an Apple developer certificate.
+The archive stays in `~/Downloads/mmx-0.1.0`. The checksum finds a damaged
+download. If you have the [GitHub CLI](https://cli.github.com/), this
+command also proves that MMX's own release workflow built the archive:
+
+```sh
+gh attestation verify ~/Downloads/mmx-0.1.0/mmx-0.1.0-*.tar.gz --repo monkeymaxxing/mmx
+```
+
+**By hand.** The release has one archive per machine:
+`mmx-VERSION-PLATFORM.tar.gz`, with `SHA256SUMS` beside it. `uname -sm`
+tells you the platform: `Darwin arm64` is `macos-arm64`, `Darwin x86_64`
+is `macos-amd64`, `Linux x86_64` is `linux-amd64`, and `Linux aarch64` is
+`linux-arm64`. Unpack the archive, move its folder to `~/.local/lib/mmx`,
+and link `~/.local/lib/mmx/mmx` into a folder on your `PATH`, as the block
+does.
+
+On a Mac, download with `curl`, as the block does. macOS refuses to start a
+program that a web browser downloaded, because the release builds are not
+signed with an Apple developer certificate.
 
 The directory `~/.local/lib/mmx` holds three things: `mmx`, the node program
 `mmx-runner` for AMD64 and for ARM64 servers, and the official extra
 modules. Keep them together, because `mmx` looks for the other two beside
-itself. `~/.local/bin` must be on your `PATH`.
+itself.
 
-**Upgrade.** Unpack the new archive and replace the whole directory
-`~/.local/lib/mmx`, so that `mmx`, the node programs, and the official extra
-modules come from one release. You do nothing on your nodes: the next
+**Upgrade.** Paste the install block again with the new version number on
+its `version=` line. The block replaces the whole directory
+`~/.local/lib/mmx`, so that `mmx`, the node programs, and the official
+extra modules come from one release. You do nothing on your nodes: the next
 command that connects to a node installs the new node program there.
 [Compatibility between releases](docs/changing-mmx/design/README.md#compatibility-between-releases)
 says what may change from one release to the next.

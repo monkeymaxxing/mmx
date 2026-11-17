@@ -29,34 +29,16 @@ your own server's address and account.
 
 ## Steps
 
-1. **Install `mmx`.** Download the release archive for your computer and its
-   checksum file, check the download, and unpack it:
+1. **Install `mmx`.** Paste the install block from
+   [Install](../README.md#install) in the README into a terminal. The block
+   picks the release archive for your computer, checks the download
+   against the release's checksums, and installs `mmx` in
+   `~/.local/lib/mmx`, with a link in `~/.local/bin`.
 
-   ```sh
-   version=0.1.0
-   platform=macos-arm64      # or macos-amd64 (Intel Mac), linux-amd64, linux-arm64
-   release=https://github.com/monkeymaxxing/mmx/releases/download/v$version
-
-   curl -fLO "$release/mmx-$version-$platform.tar.gz"
-   curl -fLO "$release/SHA256SUMS"
-   shasum -a 256 --check --ignore-missing SHA256SUMS    # on Linux: sha256sum --check --ignore-missing SHA256SUMS
-
-   tar -xzf "mmx-$version-$platform.tar.gz"
-   mkdir -p ~/.local/lib ~/.local/bin
-   mv "mmx-$version-$platform" ~/.local/lib/mmx
-   ln -sf "$HOME/.local/lib/mmx/mmx" ~/.local/bin/mmx
-   mmx version
-   ```
-
-   On a Mac, download with `curl` as shown: macOS refuses to start a
-   program that a web browser downloaded, because the release builds are not
-   signed with an Apple developer certificate.
-
-   **Check:** the checksum command prints `OK` after the archive's name, and
-   `mmx version` prints `mmx 0.1.0 (protocol 1)`. If the shell says
-   `mmx: command not found`, add `~/.local/bin` to your `PATH`. Keep `mmx`
-   in `~/.local/lib/mmx` with the other files from the archive, because
-   `mmx` finds its node programs beside itself.
+   **Check:** the block's last line prints `mmx 0.1.0 (protocol 1)`, and in
+   a new terminal, `mmx version` prints the same. If the shell says
+   `mmx: command not found`, add `~/.local/bin` to your `PATH`, as the
+   README's Install section shows.
 
 2. **Trust the server's SSH host key.** Log in once with `ssh`, and answer
    `yes` after you compare the fingerprint with the one your hosting

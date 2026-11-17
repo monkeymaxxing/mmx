@@ -45,8 +45,8 @@ Choose your route:
 
 ## Before you start
 
-- You installed `mmx` as [Get started](../get-started.md#steps) step 1
-  says: the files of the release in `~/.local/lib/mmx`, and the link
+- You installed `mmx` with the block in the README's
+  [Install](../../README.md#install) section: the files of the release in `~/.local/lib/mmx`, and the link
   `~/.local/bin/mmx` to `~/.local/lib/mmx/mmx`. `mmx version` prints the
   release you have, such as `mmx 0.1.0 (protocol 1)`.
 - If a run stopped or failed and you want to finish it with `mmx resume`,
@@ -76,49 +76,41 @@ Choose your route:
    and the edit that it needs in your project. You make the edits in
    step 4.
 
-2. **Download the release archive for your computer and its checksum
-   file, and check the download.** In an empty directory, set the new
-   release and your platform:
+2. **Keep the installed release beside the new one.**
 
    ```sh
-   version=0.1.1
-   platform=macos-arm64      # or macos-amd64 (Intel Mac), linux-amd64, linux-arm64
-   ```
-
-   Then run the `release=` line, the two `curl` lines, and the checksum
-   command from step 1 of [Get started](../get-started.md#steps). Download
-   with `curl`, not a web browser, on a Mac.
-
-   **Check:** the checksum command prints `OK` after the archive's name,
-   such as `mmx-0.1.1-linux-amd64.tar.gz: OK`. If it prints `FAILED`, the
-   download is damaged: download the archive again.
-
-3. **Replace the installed release with the new one, and keep the earlier
-   one beside it.**
-
-   ```sh
-   tar -xzf "mmx-$version-$platform.tar.gz"
    rm -rf ~/.local/lib/mmx-previous
-   mv ~/.local/lib/mmx ~/.local/lib/mmx-previous
-   mv "mmx-$version-$platform" ~/.local/lib/mmx
-   mmx version
+   cp -R ~/.local/lib/mmx ~/.local/lib/mmx-previous
    ```
 
-   - Replace the whole directory, not only `mmx`: `mmx` refuses to work
-     with an `mmx-runner` or official extra modules of another release, and
-     finds both beside itself.
    - `~/.local/lib/mmx-previous` keeps the earlier release, so you can
-     still finish a run that the earlier release started, or go back. The
-     `rm -rf` line removes the release that an upgrade before this one
-     kept there; without it, `mv` would move the directory into the old
-     one instead of renaming it.
+     still finish a run that the earlier release started, or go back.
+   - The `rm -rf` line removes the release that an upgrade before this one
+     kept there; without it, `cp` would copy the directory into the old
+     one.
+
+   **Check:** `~/.local/lib/mmx-previous/mmx version` prints the release
+   you have now.
+
+3. **Install the new release.** Paste the install block from
+   [Install](../../README.md#install) in the README, with the new version
+   number on its `version=` line, such as `version=0.1.1`. The block
+   downloads the archive with `curl`, checks the download against the
+   release's checksums, and replaces the whole directory
+   `~/.local/lib/mmx`.
+
+   - The whole directory is replaced, not only `mmx`: `mmx` refuses to
+     work with an `mmx-runner` or official extra modules of another
+     release, and finds both beside itself.
    - The link `~/.local/bin/mmx` points to `~/.local/lib/mmx/mmx`, so the
      link stays as it is.
 
-   **Check:** `mmx version` prints the new release, such as
+   **Check:** the block's last line prints the new release, such as
    `mmx 0.1.1 (protocol 1)`. `protocol 1` numbers the format of the
    messages between `mmx` and `mmx-runner`; you don't need to compare it,
-   because `mmx` checks the release of each `mmx-runner` itself.
+   because `mmx` checks the release of each `mmx-runner` itself. If the
+   checksum line prints `FAILED`, the download is damaged and the block
+   stops before it changes anything: paste the block again.
 
 4. **Check the project with the new release.** In the project directory:
 
@@ -304,7 +296,7 @@ So upgrade every controller machine that runs the project together:
 - **Teammates:** each teammate does the [steps](#steps) on the teammate's
   own computer.
 - **CI:** a CI job that installs `mmx` at its start names the release,
-  such as `version=0.1.1` as in step 2. Change that line when you upgrade
+  such as `version=0.1.1` as in step 3. Change that line when you upgrade
   your own computer.
   [Run the project from CI](move-or-share-a-project.md#run-the-project-from-ci)
   covers the rest of a CI job.
@@ -358,8 +350,8 @@ such as 2.0.0, may make an incompatible change.
 
 | What you see | What it means and what to do |
 | --- | --- |
-| `mmx: the official extra modules in /home/you/.local/lib/mmx/official_extra_modules were shipped with MMX 0.1.0, but the mmx program is version 0.1.1; reinstall the mmx program and official_extra_modules/ from a single MMX release` | Only `mmx` was replaced, not the whole directory. Do step 3 again with the whole directory from the archive. |
-| `the node runner executable /home/you/.local/lib/mmx/mmx-runner-linux-amd64 reports MMX version 0.1.0, but this mmx program is version 0.1.1. Install mmx together with the mmx-runner files of the same MMX release; a release archive holds both` | The `mmx-runner` files beside `mmx` come from another release. Do step 3 again with the whole directory from the archive. |
+| `mmx: the official extra modules in /home/you/.local/lib/mmx/official_extra_modules were shipped with MMX 0.1.0, but the mmx program is version 0.1.1; reinstall the mmx program and official_extra_modules/ from a single MMX release` | Only `mmx` was replaced, not the whole directory. Do step 3 again: the install block replaces the whole directory. |
+| `the node runner executable /home/you/.local/lib/mmx/mmx-runner-linux-amd64 reports MMX version 0.1.0, but this mmx program is version 0.1.1. Install mmx together with the mmx-runner files of the same MMX release; a release archive holds both` | The `mmx-runner` files beside `mmx` come from another release. Do step 3 again: the install block replaces the whole directory. |
 | `mmx: this playbook run was started by MMX 0.1.0, but this mmx program is version 0.1.1. ...` after `mmx resume` | The run was started by another release, and `mmx resume` changed nothing. See [Finish a run that an earlier release started](#finish-a-run-that-an-earlier-release-started). |
 | `mmx: history cleanup: MMX cannot read this saved run, which another version of MMX may have written: /home/you/shop/.mmx/runs/... (...). History cleanup removes nothing while a saved run cannot be read, because that run may use a cached runner binary. Remove that run directory, then run again.` | The release you now have can't read that saved run, and so removes no expired runs. The command itself goes on. Remove the run directory that the message names, such as with `rm -rf`, if you no longer need that run. To keep it, read it first with the release that wrote it, such as `~/.local/lib/mmx-previous/mmx results` and the run ID. |
 | `automatic setup of the node runner executable from http://203.0.113.40:18473/mmx/mmx-runner-98c1d9...: ... curl: (22) The requested URL returned error: 404` | The server downloads `mmx-runner` from your web server, which does not have the new release's files yet. Copy them there, as [Runner downloads for a large fleet](connect-to-your-servers.md#runner-downloads-for-a-large-fleet) step 1 shows, and run again. |
