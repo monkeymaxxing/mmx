@@ -218,9 +218,6 @@ func output(r *controller.Run, jsonOutput, details bool, p *presentation, err er
 			return 4, e
 		}
 		selectionOutput(out, r, details)
-		if r.Dryrun && hasWorkNotChecked(r) {
-			fmt.Fprintln(out, notCheckedNote)
-		}
 		id := controller.ShortID(r.ID)
 		fmt.Fprintf(out, "Run %s: %s\n%s\nSaved: %s\n", id, r.Status, summary(r), p.runDir(r))
 		if p.mode == "nodes" {
@@ -255,37 +252,6 @@ func output(r *controller.Run, jsonOutput, details bool, p *presentation, err er
 		return 4, err
 	}
 	return runExitCode(r), nil
-}
-
-// notCheckedNote explains, once, the not_checked lines of a dryrun. On a new
-// server most checks cannot run yet, and their lines read like failures.
-const notCheckedNote = "Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails."
-
-// hasWorkNotChecked reports a node task, a loop item, a fleet stage, or a
-// fleet stage loop iteration that a dryrun could not check.
-func hasWorkNotChecked(r *controller.Run) bool {
-	var notChecked func(results []protocol.Result) bool
-	notChecked = func(results []protocol.Result) bool {
-		for _, result := range results {
-			if result.Status == "not_checked" || notChecked(result.Items) {
-				return true
-			}
-		}
-		return false
-	}
-	for _, en := range r.Entries {
-		if en.Response.Status == "not_checked" || notChecked(en.Response.Results) {
-			return true
-		}
-	}
-	for _, sel := range r.Selections {
-		for _, response := range sel.Iterations {
-			if response.Status == "not_checked" {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // selectsNoNodes is why nodes, explain, and a run's output report a fleet

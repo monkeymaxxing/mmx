@@ -311,7 +311,7 @@ func TestHumanShowsRejectedCandidateValidatorOutput(t *testing.T) {
 					t.Errorf("%s (details %v) missing %q in:\n%s", mode, details, want, out.String())
 				}
 			}
-			if strings.Contains(out.String(), "private.conf)") {
+			if strings.Contains(out.String(), "\"servr\" (private.conf)") {
 				t.Errorf("%s (details %v) exposed suppressed or raw text:\n%s", mode, details, out.String())
 			}
 		}

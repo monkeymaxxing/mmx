@@ -278,6 +278,8 @@ fleet_stages:
 `mmx run patch` reports:
 
 ```text
+controller_machine: 1 failed (fleet stage patch_and_reboot).
+web01: 1 node task changed (reboot_when_an_update_asks). 1 unchanged. 0 failed.
 patch_and_reboot / controller_machine: failed
   MMX does not reboot the controller machine, the machine where this mmx command runs. Run the playbook from another machine, or reboot this machine by hand after MMX finishes.
 patch_and_reboot / web01: succeeded

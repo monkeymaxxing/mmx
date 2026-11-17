@@ -1268,6 +1268,7 @@ The first command above, for a `wait_for` node task whose `wait_at_most` is
 ```text
 Selected run 20261016T101500.000000000-3f9a2c71d0e4b815, playbook deploy.
 Output: nodes (change with --output=nodes or --output=summary)
+app02: 1 node task failed (check_ready).
 update_app / app02: failed
   check_ready: wait_for ended after at most 30s: context deadline exceeded; last observation: HTTP status 503; expected 200
   update_app / app02 / check_ready: failed, unchanged — wait_for ended after at most 30s: context deadline exceeded; last observation: HTTP status 503; expected 200

@@ -338,6 +338,7 @@ the page is about writing a module.
    ```
 
    ```text
+   2 nodes [web01, web02]: 3 node tasks unchanged. 0 failed.
    configure_shop / 2 nodes [web01, web02]: succeeded
      configure_shop / 2 nodes [web01, web02] / create_settings_directory: succeeded, unchanged
      configure_shop / 2 nodes [web01, web02] / create_settings_directory: directory "/etc/shop"

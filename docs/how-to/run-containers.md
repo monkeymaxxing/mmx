@@ -342,6 +342,7 @@ Compose create the containers from it. The example runs two services:
    ```
 
    ```text
+   app01: 3 node tasks changed (shop_containers/changes/create_project_directory, shop_containers/changes/write_compose_file, shop_containers/activate/start_containers). 1 unchanged. 0 failed.
    run_shop / app01: succeeded
      run_shop / app01 / shop_containers/changes/create_project_directory: succeeded, changed
      run_shop / app01 / shop_containers/changes/create_project_directory: directory "/opt/shop"
@@ -540,6 +541,7 @@ the shop's job queue.
    ```
 
    ```text
+   app01: 3 node tasks changed (shop_queue/changes/pull_queue_image, shop_queue/changes/write_queue_unit, shop_queue/activate/start_queue). 1 unchanged. 0 failed.
    run_shop_queue / app01: succeeded
      run_shop_queue / app01 / shop_queue/changes/pull_queue_image: succeeded, changed
        {"image_id":"sha256:fbdbaea47b9ae4ecc2082ecdb4e1cea81e32176ffb1dcf643d422ad07427e5d9","previous_image_id":null}

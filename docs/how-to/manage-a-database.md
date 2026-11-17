@@ -163,6 +163,7 @@ another machine, from the application server `app01`.
    On a server without PostgreSQL, the output looks like this:
 
    ```text
+   db01: 1 node task would change (install_postgresql). 4 not checked yet: they usually check what earlier node tasks install or create; mmx run checks them for real. 0 failed.
    set_up_postgresql / db01: succeeded
      set_up_postgresql / db01 / install_postgresql: succeeded, would_change
        [{"name":"perl-modules-5.40","to":"5.40.1-6+deb13u1"},...,{"name":"postgresql-17","to":"17.12-0+deb13u1"},{"name":"postgresql","to":"17+278"},...]
@@ -170,7 +171,6 @@ another machine, from the application server `app01`.
      set_up_postgresql / db01 / wait_for_postgresql: not_checked, unchanged — dial tcp 127.0.0.1:5432: connect: connection refused
      set_up_postgresql / db01 / create_shop_role: not_checked, unknown — postgresql_role: psql is not installed; install the package that provides it in an earlier node task: postgresql-client (apt), postgresql (dnf, zypper), postgresql-libs (pacman). It comes with PostgreSQL's server package; for a server on another machine, install the client alone. The earlier node task install_postgresql would change this node first and may provide what is missing; if the run then succeeds, change nothing.
      set_up_postgresql / db01 / create_shop_database: not_checked, unknown — postgresql_database: psql is not installed; ...
-   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run cc8f6adb: succeeded
    ```
 
@@ -188,6 +188,7 @@ another machine, from the application server `app01`.
    ```
 
    ```text
+   db01: 4 node tasks changed (install_postgresql, start_postgresql, create_shop_role, create_shop_database). 1 unchanged. 0 failed.
    set_up_postgresql / db01: succeeded
      set_up_postgresql / db01 / install_postgresql: succeeded, changed
        [{"name":"perl-modules-5.40","to":"5.40.1-6+deb13u1"},...]
@@ -358,6 +359,7 @@ MySQL. The steps below install MariaDB, which Debian and Ubuntu package.
    ```
 
    ```text
+   db01: 4 node tasks changed (install_mariadb, start_mariadb, create_shop_database, create_shop_account). 0 failed.
    set_up_mariadb / db01: succeeded
      set_up_mariadb / db01 / install_mariadb: succeeded, changed
        [{"name":"galera-4","to":"26.4.23-0+deb13u1"},...]
@@ -518,6 +520,7 @@ Before you start this route:
    ```
 
    ```text
+   app01: 4 node tasks changed (install_postgresql_client, write_database_authority, create_shop_role, create_shop_database). 0 failed.
    create_shop_database / app01: succeeded
      create_shop_database / app01 / install_postgresql_client: succeeded, changed
        [{"name":"perl-modules-5.40","to":"5.40.1-6+deb13u1"},...,{"name":"postgresql-client","to":"17+278"}]

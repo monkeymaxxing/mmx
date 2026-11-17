@@ -362,7 +362,6 @@ turn, and saving values to files on your controller machine.
      configure_load_balancer / lb01 / check_each_app_server[web01]: succeeded, unchanged
      configure_load_balancer / lb01 / check_each_app_server[web02]: succeeded, unchanged
    ...
-   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run 3f766dc5: succeeded
    4 finished
    exit code 3

@@ -120,6 +120,17 @@ them, and read what each result and exit code means.
 
 ## What the results mean
 
+The results start with one line for each server, such as:
+
+```text
+web01: 3 node tasks would change (install_nginx, write_home_page, shop_site/changes/write_site_file). 1 not checked yet: it usually checks what an earlier node task installs or creates; mmx run checks it for real. 2 unchanged. 0 failed.
+```
+
+The line names what would change, or in a run what changed, and counts
+the rest. A count of zero is left out, except the failed count. The
+[commands reference](../reference/commands.md#standard-output-and-standard-error)
+lists every part. The lines below it show each node task.
+
 Each node task gets a status and a change, such as `succeeded,
 would_change`.
 
@@ -148,8 +159,8 @@ set_up_nginx / web01 / shop_site/changes/write_site_file: not_checked, unknown â
 
 If the run then succeeds, the playbook is right as it is.
 
-A dryrun with `not_checked` work also prints one line before its outcome,
-`Run ...: succeeded`, that says why such work is normal on a new server.
+The server's summary line counts such node tasks as `not checked yet`,
+and says why such work is normal on a new server.
 A `shell` check whose program is not installed yet says
 `shell command exited with code 127: bash could not find a command in it, usually because its program is not installed yet`.
 

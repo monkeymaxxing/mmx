@@ -147,6 +147,7 @@ mark the one-time playbook as completed when no server needs the work.
    ```
 
    ```text
+   web01: 1 node task changed (move_uploads). 0 failed.
    move_uploads_to_files_directory / web01: succeeded
      move_uploads_to_files_directory / web01 / move_uploads: succeeded, changed
    Run fec80ec8: succeeded
@@ -298,6 +299,9 @@ others, as any run can. In this example, `web02` has a file in the way of
 the move, and `web03` is switched off:
 
 ```text
+web01: 1 node task skipped. 0 failed.
+web02: 1 node task failed (move_uploads).
+web03: 1 failed (fleet stage move_uploads_to_files_directory).
 move_uploads_to_files_directory / web01: succeeded
 move_uploads_to_files_directory / web02: failed
   move_uploads: exit status 1

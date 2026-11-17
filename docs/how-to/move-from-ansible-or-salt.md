@@ -391,6 +391,8 @@ Debian 13 servers.
    ```text
    203.0.113.12: setting up MMX through verified SSH
    203.0.113.11: setting up MMX through verified SSH
+   web01: 1 node task would change (install_nginx). 1 may change (shop_site/activate/reload_nginx). 2 not checked yet: they usually check what earlier node tasks install or create; mmx run checks them for real. 0 failed.
+   web02: 1 node task would change (install_nginx). 1 may change (shop_site/activate/reload_nginx). 2 not checked yet: they usually check what earlier node tasks install or create; mmx run checks them for real. 0 failed.
    ...
      set_up_nginx / web01 / install_nginx: succeeded, would_change
        [{"name":"nginx-common","to":"1.26.3-3+deb13u10"},{"name":"nginx","to":"1.26.3-3+deb13u10"}]
@@ -398,7 +400,6 @@ Debian 13 servers.
      set_up_nginx / web01 / shop_site/activate/reload_nginx: skipped, unknown — service state can be checked after the node task block's proposed changes are applied
      set_up_nginx / web01 / shop_site/verify/check_shop_site: not_checked, unchanged — Get "http://127.0.0.1:8080/": dial tcp 127.0.0.1:8080: connect: connection refused
    ...
-   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run 76f63216: succeeded
    2 finished
    Saved: /home/you/shop/.mmx/runs/20261115T073157.780081110-76f63216ed591b19

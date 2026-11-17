@@ -130,6 +130,8 @@ func (p *presentation) human(w io.Writer, r *controller.Run, details bool) error
 	// Text from nodes reaches a terminal here; see terminalSafe.
 	w = terminalSafe(w)
 	grouped := p.mode == "summary"
+	// A plain summary for each server comes first; the detail lines follow.
+	summarizeServers(w, r, grouped)
 	// Group entry outcomes too, so a common connection failure or unstarted
 	// fleet stage remains one visible outcome rather than thousands of repeated lines.
 	type entryGroup struct {

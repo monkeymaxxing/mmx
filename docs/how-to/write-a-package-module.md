@@ -219,11 +219,11 @@ MMX's own package modules.
    `not_checked` with your reason, and the exit code is 3:
 
    ```text
+   test01: 1 node task may change (nginx/activate/start_nginx). 1 not checked yet: it usually checks what an earlier node task installs or creates; mmx run checks it for real. 0 failed.
    install_nginx / test01: succeeded
      install_nginx / test01 / nginx/changes/install_nginx_package: not_checked, unknown — mytool_package: the program mytool is not installed; mytool_package works only on a node whose distribution is mydistro; give the node task a condition on the node fact distribution.id
      install_nginx / test01 / nginx/activate/start_nginx: skipped, unknown — service state can be checked after the node task block's proposed changes are applied
      install_nginx / test01 / nginx: succeeded, unknown
-   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run 55abc510: succeeded
    1 finished
    ```
@@ -233,6 +233,7 @@ MMX's own package modules.
    exit code is 1:
 
    ```text
+   test01: 1 node task failed (nginx/changes/install_nginx_package).
    install_nginx / test01: failed
      nginx: nginx/changes/install_nginx_package: mytool_package: the program mytool is not installed; mytool_package works only on a node whose distribution is mydistro; give the node task a condition on the node fact distribution.id
      install_nginx / test01 / nginx/changes/install_nginx_package: failed, unchanged — mytool_package: the program mytool is not installed; mytool_package works only on a node whose distribution is mydistro; give the node task a condition on the node fact distribution.id
@@ -413,6 +414,7 @@ MMX's own package modules.
     Arch Linux node:
 
     ```text
+    test01: 2 node tasks changed (nginx/changes/install_nginx_package, nginx/activate/start_nginx). 0 failed.
     install_nginx / test01: succeeded
       install_nginx / test01 / nginx/changes/install_nginx_package: succeeded, changed — installed mailcap 2.1.54-3, nginx 1.30.6-3; upgraded dbus from 1.16.2-2 to 1.16.4-1, libp11-kit from 0.26.5-1 to 0.26.6-1, p11-kit from 0.26.5-1 to 0.26.6-1, python-jsonpatch from 1.45-1 to 1.46-1, python-jsonpointer from 3.8-1 to 3.12-1
         changed_packages: [{"from":"1.16.2-2","name":"dbus","to":"1.16.4-1"},{"from":"0.26.5-1","name":"libp11-kit","to":"0.26.6-1"},{"name":"mailcap","to":"2.1.54-3"},{"name":"nginx","to":"1.30.6-3"},{"from":"0.26.5-1","name":"p11-kit","to":"0.26.6-1"},{"from":"1.45-1","name":"python-jsonpatch","to":"1.46-1"},{"from":"3.8-1","name":"python-jsonpointer","to":"3.12-1"}]

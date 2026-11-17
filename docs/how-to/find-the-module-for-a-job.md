@@ -164,6 +164,7 @@ project uses.
    ```
 
    ```text
+   2 nodes [web01, web02]: 1 node task unchanged. 0 failed.
    set_time_zone / 2 nodes [web01, web02]: succeeded
      set_time_zone / 2 nodes [web01, web02] / use_utc: succeeded, unchanged
    Run 5687c476: succeeded

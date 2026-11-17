@@ -337,6 +337,7 @@ stage.
    keeps every node task of the node task block `shop_site`:
 
    ```text
+   web02: 2 node tasks changed (shop_site/changes/write_site_file, shop_site/activate/reload_nginx). 1 unchanged. 0 failed.
    set_up_nginx / web02: succeeded
      set_up_nginx / web02: facts collected at 2026-11-15T05:30:41.196029006Z
      set_up_nginx / web02 / shop_site/changes/write_site_file: succeeded, changed

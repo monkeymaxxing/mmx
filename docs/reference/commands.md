@@ -386,6 +386,7 @@ runs go to standard error, as [Output](#output) shows. The first dryrun
 of the starter project prints these results:
 
 ```text
+web01: 1 node task would change (create_example_file). 0 failed.
 welcome / web01: succeeded
   welcome / web01 / create_example_file: succeeded, would_change
   welcome / web01 / create_example_file: would create "/etc/mmx-example"
@@ -1008,6 +1009,7 @@ Progress: 1 running
 `run.out`, the results:
 
 ```text
+web01: 5 node tasks changed (install_nginx, create_site_directory, write_home_page, shop_site/changes/write_site_file, shop_site/activate/reload_nginx). 1 unchanged. 0 failed.
 set_up_nginx / web01: succeeded
   set_up_nginx / web01 / install_nginx: succeeded, changed
     [{"name":"nginx-common","to":"1.26.3-3+deb13u10"},{"name":"nginx","to":"1.26.3-3+deb13u10"}]
@@ -1028,6 +1030,17 @@ Run 2ef17ec3: succeeded
 1 finished
 Saved: /home/you/shop/.mmx/runs/20261115T083232.111676617-2ef17ec3ca73fefe
 ```
+
+The results start with one summary line for each server: the node tasks
+that changed, or in a dryrun would change, by name, and then how many
+node tasks may change, were not checked yet, were unchanged, skipped, not
+finished, and failed. A count of zero is left out, except the failed
+count. A list of more than five names ends with `and N more`. A fleet
+stage that failed or did not finish outside its node tasks, such as on a
+server that MMX could not reach, is named as `fleet stage NAME`. With
+`--output=summary`, servers with the same summary share one line, such
+as `2 nodes [web01, web02]: 2 node tasks unchanged. 0 failed.` The lines
+for each fleet stage and node task follow. `--json` has no summary lines.
 
 These lines go to standard error:
 

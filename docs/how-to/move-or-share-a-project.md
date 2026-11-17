@@ -251,6 +251,8 @@ through a playbook that you run, so the list of keys is in Git too.
    Progress: 2 not started
    203.0.113.12: setting up MMX through verified SSH
    203.0.113.11: setting up MMX through verified SSH
+   web01: 2 node tasks unchanged. 0 failed.
+   web02: 2 node tasks unchanged. 0 failed.
    write_shop_settings / web01: succeeded
    write_shop_settings / web02: succeeded
      write_shop_settings / web01 / create_settings_directory: succeeded, unchanged
@@ -334,6 +336,8 @@ Project: mmx_example   Playbook: write_shop_settings
 Inventory: example (2 nodes)   Selected: 2 nodes
 Output: nodes (change with --output=nodes or --output=summary)
 Progress: 2 not started
+web01: 1 failed (fleet stage write_shop_settings).
+web02: 2 node tasks unchanged. 0 failed.
 write_shop_settings / web01: failed
   HTTPS 409: node busy with job 4282e260406da847c71b551731af4833f817b7d49ef58d549bbdd2426220dc3e, started by sam@sams-laptop
 write_shop_settings / web02: succeeded
@@ -462,6 +466,7 @@ resume each stopped or failed run on the old laptop first, or start a new
    Inventory: example (2 nodes)   Selected: 2 nodes
    Output: summary (change with --output=nodes or --output=summary)
    Progress: 2 not started
+   2 nodes [web01, web02]: 2 node tasks unchanged. 0 failed.
    write_shop_settings / 2 nodes [web01, web02]: succeeded
      write_shop_settings / 2 nodes [web01, web02] / create_settings_directory: succeeded, unchanged
      write_shop_settings / 2 nodes [web01, web02] / create_settings_directory: directory "/etc/shop"
@@ -576,6 +581,7 @@ Output: summary (change with --output=nodes or --output=summary)
 Progress: 2 not started
 203.0.113.12: setting up MMX through verified SSH
 203.0.113.11: setting up MMX through verified SSH
+2 nodes [web01, web02]: 2 node tasks unchanged. 0 failed.
 write_shop_settings / 2 nodes [web01, web02]: succeeded
   write_shop_settings / 2 nodes [web01, web02] / create_settings_directory: succeeded, unchanged
   write_shop_settings / 2 nodes [web01, web02] / create_settings_directory: directory "/etc/shop"

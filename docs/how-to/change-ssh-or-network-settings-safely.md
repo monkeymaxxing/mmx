@@ -157,6 +157,7 @@ may use another tool than the distribution's installer.
    ```
 
    ```text
+   web01: 1 node task changed (main_network_card). 0 failed.
    network_settings / web01: succeeded
      network_settings / web01 / main_network_card: succeeded, changed
      network_settings / web01 / main_network_card: updated "/etc/systemd/network/10-cloud-init-eth0.network"
@@ -198,6 +199,7 @@ may use another tool than the distribution's installer.
    ```
 
    ```text
+   web01: 1 node task failed (main_network_card).
    network_settings / web01: failed
      main_network_card: No reachability confirmation arrived over a new HTTPS connection or a new SSH connection within 2m. The previous file /etc/systemd/network/10-cloud-init-eth0.network and its running configuration are restored.
      network_settings / web01 / main_network_card: failed, changed — No reachability confirmation arrived over a new HTTPS connection or a new SSH connection within 2m. The previous file /etc/systemd/network/10-cloud-init-eth0.network and its running configuration are restored.
@@ -375,6 +377,9 @@ old port, check new connections, and close the old port only then.
    ```
 
    ```text
+   web01: 2 node tasks would change (sshd_settings/changes/write_sshd_settings, sshd_settings/activate/reload_sshd). 1 not checked yet: it usually checks what an earlier node task installs or creates; mmx run checks it for real. 1 unchanged. 2 skipped. 0 failed.
+   web02: 4 node tasks would change (sshd_settings/changes/write_sshd_settings, sshd_settings/activate/regenerate_ssh_socket_ports, sshd_settings/activate/restart_ssh_socket, sshd_settings/activate/reload_sshd). 1 not checked yet: it usually checks what an earlier node task installs or creates; mmx run checks it for real. 1 unchanged. 0 failed.
+   ...
      ssh_settings / web02 / sshd_settings/changes/write_sshd_settings: succeeded, would_change
        check_new_file: succeeded
      ssh_settings / web02 / sshd_settings/changes/write_sshd_settings: would create "/etc/ssh/sshd_config.d/10-shop.conf"
@@ -385,7 +390,6 @@ old port, check new connections, and close the old port only then.
      ssh_settings / web02 / sshd_settings/activate/reload_sshd: succeeded, would_change — tracked input /etc/ssh/sshd_config.d/10-shop.conf changed after the service last started or reloaded
      ssh_settings / web02 / sshd_settings/verify/check_new_port: not_checked, unchanged — dial tcp 127.0.0.1:2222: connect: connection refused
      ssh_settings / web02 / sshd_settings: succeeded, would_change
-   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run bdced5d8: succeeded
    exit code 3
    ```

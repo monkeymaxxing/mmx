@@ -278,6 +278,7 @@ says what happens when that source fails.
    which keeps a CI log short:
 
    ```text
+   2 nodes [web01, web02]: 2 node tasks unchanged. 0 failed.
    write_shop_settings / 2 nodes [web01, web02]: succeeded
      write_shop_settings / 2 nodes [web01, web02] / create_settings_directory: succeeded, unchanged
      write_shop_settings / 2 nodes [web01, web02] / create_settings_directory: directory "/etc/shop"

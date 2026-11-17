@@ -266,6 +266,7 @@ Output: nodes (change with --output=nodes or --output=summary)
 Progress: 1 not started
 Progress: 1 running
   welcome / web01: connecting
+web01: 1 node task would change (create_example_file). 0 failed.
 welcome / web01: succeeded
   welcome / web01 / create_example_file: succeeded, would_change
   welcome / web01 / create_example_file: would create "/etc/mmx-example"

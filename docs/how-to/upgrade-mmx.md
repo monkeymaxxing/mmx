@@ -146,6 +146,8 @@ Choose your route:
    203.0.113.12: setting up MMX through verified SSH
    Progress: 1 finished · 1 running
      set_up_nginx / web02: running
+   web01: 2 node tasks unchanged. 0 failed.
+   web02: 2 node tasks unchanged. 0 failed.
    set_up_nginx / web01: succeeded
    set_up_nginx / web02: succeeded
      set_up_nginx / web01 / install_nginx: succeeded, unchanged

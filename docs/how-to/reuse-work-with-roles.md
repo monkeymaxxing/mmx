@@ -202,6 +202,7 @@ your numbers may differ from the numbers on this page.
    names each node task with the role call's ID first:
 
    ```text
+   web01: 6 node tasks unchanged. 0 failed.
    set_up_nginx / web01: succeeded
      set_up_nginx / web01 / shop_website/install_nginx: succeeded, unchanged
      set_up_nginx / web01 / shop_website/create_site_directory: succeeded, unchanged
