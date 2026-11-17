@@ -152,7 +152,10 @@ if [ "$name" = port ]; then echo 5432; else echo "$value"; fi`,
 	// ss prints the listening sockets of the file listening, as ss -ltnH
 	// printed them on the test nodes.
 	"ss": `cat "$STUBS/listening"`,
-	"mv": `exec /bin/mv "$@"`,
+	// The module passes GNU mv's -T; the BSD mv of a controller machine
+	// running the tests has no -T, and the stub's paths are no links.
+	"mv": `[ "$(uname)" = Linux ] || [ "$2" != -T ] || { a=$1; shift 2; set -- "$a" "$@"; }
+exec /bin/mv "$@"`,
 	"rm": `for last in "$@"; do :; done
 exec /bin/rm -r "$last"`,
 	"install": `for last in "$@"; do :; done
@@ -796,7 +799,7 @@ func TestOfficialExtraPgAutoFailoverNode(t *testing.T) {
 	replaced := "replaced trust in " + hba + " with peer (local all all, local replication all) and scram-sha-256 (host all all 127.0.0.1/32, " +
 		"host all all ::1/128, host replication all 127.0.0.1/32, host replication all ::1/128); reloaded PostgreSQL in " + data
 	install := "install -o postgres -g postgres -m 0600 /dev/stdin /var/lib/postgresql/.pgpass.mmx-new"
-	move := "mv -f /var/lib/postgresql/.pgpass.mmx-new /var/lib/postgresql/.pgpass"
+	move := "mv -f -T /var/lib/postgresql/.pgpass.mmx-new /var/lib/postgresql/.pgpass"
 	wrote := "wrote the logins of autoctl_node and pgautofailover_replicator into the password file /var/lib/postgresql/.pgpass"
 
 	preview := node.run("pg_auto_failover_node", inputs, true)

@@ -902,7 +902,9 @@ def keep_the_password_file(home, inputs, reasons):
     written = run_command_that_changes_the_node(["install", "-o", ACCOUNT, "-g", ACCOUNT, "-m", "0600", "/dev/stdin", new], standard_input = wanted)
     if written.error or written.exit_code != 0:
         return True, failed("writing the password file " + new + ": " + message_of(written))
-    moved = run_command_that_changes_the_node(["mv", "-f", new, path])
+    # -T: postgres owns the home, and a .pgpass that it made a link to a
+    # directory must not make root move the file into that directory.
+    moved = run_command_that_changes_the_node(["mv", "-f", "-T", new, path])
     if moved.error or moved.exit_code != 0:
         return True, failed("renaming " + new + " to " + path + ": " + message_of(moved))
     reasons.append(did("wrote", "write", "the logins of autoctl_node and pgautofailover_replicator into the password file " + path))
