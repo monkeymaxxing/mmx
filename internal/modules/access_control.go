@@ -179,7 +179,10 @@ func (run Runtime) FileAccessControlList(ctx context.Context, a FileAccessContro
 		}
 	}()
 	change := "unknown"
-	recursive := []string{}
+	// -P: setfacl follows no symbolic link, not even one swapped in at path
+	// after the check above by an account that can write its directory; it
+	// skips the link, and the check after the change fails the task.
+	recursive := []string{"-P"}
 	if a.AlsoApplyToEverythingInside {
 		// setfacl skips symbolic links below path, as the inspection does.
 		recursive = append(recursive, "-R")

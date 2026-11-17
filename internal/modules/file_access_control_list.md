@@ -79,7 +79,9 @@ entries stays unchanged.
   created inside later inherit. `also_apply_to_everything_inside` and
   `also_use_for_new_files_inside` are for directories only.
 - MMX refuses a symbolic link at the path, and it never follows a symbolic
-  link inside a directory.
+  link inside a directory. `setfacl` runs with `-P`, so a link that another
+  account puts at the path while the node task runs is not followed either:
+  the node task fails.
 - Dryrun and results list the entries in `value.added`, `value.updated`,
   and `value.removed`, such as `user_account promtail: r-x`, and with
   `also_apply_to_everything_inside` the number of paths that change in

@@ -354,3 +354,45 @@ func TestFailedFileAccessControlListReportsOnlyWhatItDid(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+// An account that can write the directory above path may swap path for a
+// symbolic link after the task checked it. setfacl then must not follow the
+// link and change the access control list of the file it points to.
+func TestFileAccessControlListDoesNotFollowASwappedInLink(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("access control lists are read on Linux nodes")
+	}
+	real, err := exec.LookPath("setfacl")
+	if err != nil {
+		t.Skip("setfacl is not installed")
+	}
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path, outside := filepath.Join(dir, "uploads"), filepath.Join(t.TempDir(), "shadow")
+	for _, p := range []string{path, outside} {
+		if err := os.WriteFile(p, nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command(real, "-m", "u:"+me.Uid+":r--", outside).CombinedOutput(); err != nil {
+		t.Skip("the test directory's file system does not take access control lists:", string(out))
+	}
+	if err := exec.Command(real, "-b", outside).Run(); err != nil {
+		t.Fatal(err)
+	}
+	// The swap happens between the task's check and setfacl's change.
+	shim := t.TempDir()
+	quoteShell := func(s string) string { return "'" + s + "'" }
+	writeStandInProgram(t, filepath.Join(shim, "setfacl"), "#!/bin/sh\nif [ ! -L "+quoteShell(path)+" ]; then mv "+quoteShell(path)+" "+quoteShell(path+".moved")+" && ln -s "+quoteShell(outside)+" "+quoteShell(path)+"; fi\nexec "+real+" \"$@\"\n")
+	t.Setenv("PATH", shim+string(os.PathListSeparator)+os.Getenv("PATH"))
+	r := (Runtime{}).FileAccessControlList(context.Background(), FileAccessControlList{Path: path, Entries: []AccessControlEntry{{UserAccount: me.Username, Permissions: "rwx"}}, EntriesNotListed: "keep"})
+	if entries, err := readACL(outside, aclAccess); err != nil || len(entries) != 0 {
+		t.Fatalf("setfacl followed the link: %v %v; task %+v", entries, err, r)
+	}
+	if r.Status != "failed" {
+		t.Fatalf("%+v", r)
+	}
+}
