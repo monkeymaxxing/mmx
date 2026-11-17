@@ -153,11 +153,11 @@ The example account is `deploy` on `web02`, with a login password and a
    ```
 
    ```text
-   Progress: 1 running
-     welcome / web02: connecting
    SSH password for deploy@203.0.113.12:22:
    sudo password for deploy@203.0.113.12:22:
    203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web02 --inventory example removes it
+   Progress: 1 running
+     welcome / web02: connecting
    203.0.113.12: establishing ordinary SSH key access; private key: /home/you/.ssh/mmx/c4566d72437fccc6921b14be1a0d1da5082acc193af229b34a2518d8299a619c
    ```
 
