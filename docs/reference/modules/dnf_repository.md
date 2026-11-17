@@ -56,7 +56,7 @@ On the node, the task writes:
 - `signing_key_url` (string; optional): HTTPS URL of the signing key, fetched and verified on the controller like download
 - `signing_key_sha256` (string; optional): the key's SHA-256 in hex; with signing_key_url, exactly one of signing_key_sha256 or dangerously_skip_checksum
 - `dangerously_skip_checksum` (boolean; default `false`): true in place of signing_key_sha256: the key is trusted as it arrives
-- `username` (string; optional): with password: the login for a private repository, written into the repository file, which is then root-only 0600
+- `username` (string; optional): with password: the login for a private repository, written into the repository file, which is then root-only 0600; every address must then start with https://
 - `password` (string; optional): with username; must be a whole-value secret reference, or in a role one whole reference to an input declared secret: true
 
 ## Outputs
@@ -150,7 +150,10 @@ together, and `password` must be one whole reference to a secret, or, inside
 a role, to a role input declared `secret: true`. The login is
 written into the repository file, which is then root-owned `0600`;
 otherwise the file is `0644`. A web address that contains a login is
-rejected.
+rejected. dnf sends the login to every address of the repository, so with a
+login each address in `baseurl`, `metalink`, or `mirrorlist` must start
+with `https://`; an address over plain `http://` would let anyone on the
+network path read the password.
 
 ### Remove a repository
 
@@ -195,6 +198,10 @@ and source sections, is one task for each section, or the whole file as a
   `dnf-plugins-core` is needed (on dnf 5, `dnf5-plugins`). Install it in an earlier `dnf_package` task.
 - **A web address that contains a login** is rejected. Give the login in
   `username` and `password`.
+- **`dnf_repository.baseurl[0] http://mirror.internal/vendor does not start
+  with https://`**: the task has a login, and dnf would send it unencrypted.
+  Serve the repository over HTTPS and use its `https://` address, or leave
+  out `username` and `password`.
 
 ## Tested on
 

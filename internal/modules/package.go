@@ -478,6 +478,15 @@ func (d DnfRepository) Repository() Repository {
 
 // ValidateRepository checks a repository task's field combinations. It runs
 // when the project loads and again on the node.
+// baseURLs names each baseurl address by its field, such as baseurl[0].
+func baseURLs(addresses []string) [][2]string {
+	out := make([][2]string, len(addresses))
+	for i, address := range addresses {
+		out[i] = [2]string{fmt.Sprintf("baseurl[%d]", i), address}
+	}
+	return out
+}
+
 func ValidateRepository(r Repository) error {
 	m := r.Module()
 	if r.Manager != "apt" && r.Manager != "dnf" {
@@ -530,6 +539,16 @@ func ValidateRepository(r Repository) error {
 		}
 		if r.Priority != nil && (*r.Priority < 1 || *r.Priority > 99) {
 			return invalid("priority", "dnf_repository.priority must be from 1 to 99")
+		}
+		// dnf sends the login to every address of the repository; over
+		// anything but https anyone on the network path could read it. A
+		// reference is checked once its value is known.
+		if r.Username != "" {
+			for _, address := range append([][2]string{{"metalink", r.Metalink}, {"mirrorlist", r.Mirrorlist}}, baseURLs(r.BaseURL)...) {
+				if address[1] != "" && !Dynamic(address[1]) && !strings.HasPrefix(strings.ToLower(address[1]), "https://") {
+					return invalid(address[0], fmt.Sprintf("dnf_repository.%s %s does not start with https://, and dnf would send username and password to it unencrypted; use an https:// address, or leave out username and password", address[0], address[1]))
+				}
+			}
 		}
 	}
 	if keys != 1 {
@@ -628,7 +647,7 @@ var dnfRepositoryDescription = Description{
 		{Name: "signing_key_url", Notes: "HTTPS URL of the signing key, fetched and verified on the controller like download"},
 		{Name: "signing_key_sha256", Notes: "the key's SHA-256 in hex; with signing_key_url, exactly one of signing_key_sha256 or dangerously_skip_checksum"},
 		{Name: "dangerously_skip_checksum", Default: "false", Notes: "true in place of signing_key_sha256: the key is trusted as it arrives"},
-		{Name: "username", Notes: "with password: the login for a private repository, written into the repository file, which is then root-only 0600"},
+		{Name: "username", Notes: "with password: the login for a private repository, written into the repository file, which is then root-only 0600; every address must then start with https://"},
 		{Name: "password", Notes: "with username; must be a whole-value secret reference, or in a role one whole reference to an input declared secret: true"},
 	},
 	Example: "- dnf_repository:\n    name: docker-ce-stable\n    description: Docker CE Stable\n    baseurl: [\"https://download.docker.com/linux/rhel/$releasever/$basearch/stable\"]\n    signing_key_url: https://download.docker.com/linux/rhel/gpg\n    signing_key_sha256: \"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n",

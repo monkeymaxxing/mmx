@@ -1439,3 +1439,27 @@ func TestDNFFiveLockTextReplacesTheEmptyArrayDnfWrites(t *testing.T) {
 		t.Fatalf("%q", gone)
 	}
 }
+
+// dnf sends a repository login to every address of the repository, so a
+// login goes only to https:// addresses; an address that a reference fills
+// is checked once known. Without a login, any address stays as it is.
+func TestDNFRepositoryLoginNeedsHTTPS(t *testing.T) {
+	r := Repository{Manager: "dnf", Name: "vendor", Description: "Vendor", BaseURL: []string{"http://mirror.internal/vendor"}, SigningKeySource: "vendor.asc", Username: "u", Password: "{{ .secrets.p }}"}
+	if err := ValidateRepository(r); err == nil || !strings.Contains(err.Error(), "dnf_repository.baseurl[0] http://mirror.internal/vendor does not start with https://") {
+		t.Fatal(err)
+	}
+	r.BaseURL = []string{"{{ .vars.mirror }}"}
+	if err := ValidateRepository(r); err != nil {
+		t.Fatal("a reference was refused before its value is known:", err)
+	}
+	for _, address := range []string{"https://mirror.internal/vendor", "HTTPS://mirror.internal/vendor"} {
+		r.BaseURL = []string{address}
+		if err := ValidateRepository(r); err != nil {
+			t.Fatal(address, err)
+		}
+	}
+	r.BaseURL, r.Username, r.Password = []string{"http://mirror.internal/vendor"}, "", ""
+	if err := ValidateRepository(r); err != nil {
+		t.Fatal(err)
+	}
+}
