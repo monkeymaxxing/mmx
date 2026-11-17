@@ -175,7 +175,7 @@ describes.
    web03: removed /var/lib/mmx
    web03: removed /run/mmx
    controller machine: removed /home/you/shop/.mmx/nodes/4f8ced544f49ef9fde7f5b898721012f8666a722e1d34a232f5395710b99234f.json
-   MMX did not change the inventory or the playbooks. Take web03 out of the inventory, its groups, and the playbooks; until then, a run that selects web03 sets MMX up on it again.
+   To stop managing web03 with MMX, also take web03 out of the inventory, its groups, and the playbooks. MMX did not change those files, so until then, a run that selects web03 sets MMX up on it again.
    ```
 
    When MMX had added a key to `deploy`'s `authorized_keys`, the output
@@ -188,7 +188,7 @@ describes.
 
    ```text
    Nothing of MMX is left on web03 or on the controller machine.
-   MMX did not change the inventory or the playbooks. Take web03 out of the inventory, its groups, and the playbooks; until then, a run that selects web03 sets MMX up on it again.
+   To stop managing web03 with MMX, also take web03 out of the inventory, its groups, and the playbooks. MMX did not change those files, so until then, a run that selects web03 sets MMX up on it again.
    ```
 
    On `web03`, `ls -d /opt/mmx /var/lib/mmx /run/mmx /etc/mmx` prints

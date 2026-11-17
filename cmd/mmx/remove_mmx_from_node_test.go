@@ -33,3 +33,12 @@ func TestRemoveMMXFromNodeNamesTheNodeArgument(t *testing.T) {
 		t.Fatal(code, err)
 	}
 }
+
+// The last line starts from the reader's goal, to stop managing the node,
+// so it does not read as an order to delete the server.
+func TestRemoveMMXFromNodeEndsWithTheStepToStopManagingTheNode(t *testing.T) {
+	const want = "To stop managing app01 with MMX, also take app01 out of the inventory, its groups, and the playbooks. MMX did not change those files, so until then, a run that selects app01 sets MMX up on it again."
+	if got := stopManagingTheNode("app01"); got != want {
+		t.Fatalf("got %q", got)
+	}
+}

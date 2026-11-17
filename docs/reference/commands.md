@@ -683,10 +683,11 @@ mmx remove-mmx-from-node web03
 - It refuses while a node job runs on the node, or while an owed restore
   waits there: a record on the node that puts a network configuration
   back unless MMX confirms in time that it can still reach the node.
-- It prints one line for each thing it removed, then reminds you to take
-  the node out of the inventory, its groups, and the playbooks. It
-  changes neither the inventory nor the playbooks, so a run that still
-  selects the node sets MMX up on it again.
+- It prints one line for each thing it removed, then says that to stop
+  managing the node with MMX, you also take the node out of the
+  inventory, its groups, and the playbooks. It changes neither the
+  inventory nor the playbooks, so a run that still selects the node sets
+  MMX up on it again.
 - A name that the inventory doesn't have is refused, with exit code 4:
   `mmx: remove-mmx-from-node: no node named "web09" in inventory example`.
 - It doesn't accept `--json`:

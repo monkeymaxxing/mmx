@@ -32,6 +32,12 @@ func removeMMXFromNode(ctx context.Context, c controller.Controller, p config.Pr
 	if len(removed) == 0 {
 		fmt.Printf("Nothing of MMX is left on %s or on the controller machine.\n", name)
 	}
-	fmt.Printf("MMX did not change the inventory or the playbooks. Take %s out of the inventory, its groups, and the playbooks; until then, a run that selects %s sets MMX up on it again.\n", name, name)
+	fmt.Println(stopManagingTheNode(name))
 	return 0, nil
+}
+
+// stopManagingTheNode is the last line of remove-mmx-from-node: the step
+// that the command leaves to the reader, starting from the reader's goal.
+func stopManagingTheNode(name string) string {
+	return fmt.Sprintf("To stop managing %s with MMX, also take %s out of the inventory, its groups, and the playbooks. MMX did not change those files, so until then, a run that selects %s sets MMX up on it again.", name, name, name)
 }
