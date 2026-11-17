@@ -186,6 +186,53 @@ func TestFileTextPreview(t *testing.T) {
 	}
 }
 
+// A file that other accounts can read by its mode is still private when a
+// directory above it does not let them pass, such as a 0700 home directory.
+func TestFileTextPreviewHidesAFileBelowAPrivateDirectory(t *testing.T) {
+	t.Parallel()
+	base := traversableTempDir(t)
+	for _, tt := range []struct {
+		mode  os.FileMode
+		shown bool
+	}{{0755, true}, {0711, true}, {0750, false}, {0700, false}} {
+		directory := filepath.Join(base, tt.mode.String())
+		if err := os.Mkdir(directory, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(directory, tt.mode); err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range []string{filepath.Join(directory, "app.conf"), filepath.Join(directory, "not-yet", "app.conf")} {
+			change := &protocol.FileChange{Path: path, Before: &protocol.FileState{Mode: "0644"}, After: &protocol.FileState{Mode: "0644"}}
+			(Runtime{}).textDiff(change, []byte("password=old\n"), []byte("password=new\n"))
+			if (change.Diff != "") != tt.shown || tt.shown == strings.Contains(change.DiffOmitted, "private") {
+				t.Fatal(tt.mode, path, change)
+			}
+		}
+	}
+}
+
+// traversableTempDir is a temporary directory that every account can pass
+// through, as a node's /etc is. t.TempDir is private (0700), and a 0644 file
+// below a private directory shows no difference text.
+func traversableTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "mmx-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	// Some systems give a new file its directory's group, as /tmp's wheel
+	// on macOS: keep this process's group, as t.TempDir does.
+	if err := os.Chown(dir, -1, os.Getegid()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func fileAsset(t *testing.T, data []byte) *assets.Ref {
 	t.Helper()
 	source := filepath.Join(t.TempDir(), "source")

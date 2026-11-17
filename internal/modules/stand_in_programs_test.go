@@ -176,7 +176,7 @@ func putProgramsFirst(t *testing.T, directory string) {
 // appends its call to $dir/calls.
 func standInPrograms(t *testing.T, programs map[string]string) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := traversableTempDir(t)
 	for name, script := range programs {
 		text := "dir=" + dir + "\necho \"" + name + "${*:+ $*}\" >> \"$dir/calls\"\n" + script + "\n"
 		writeStandInProgram(t, filepath.Join(dir, name), text)

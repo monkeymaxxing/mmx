@@ -2,8 +2,11 @@ package modules
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -37,13 +40,25 @@ func fileChange(path string, before os.FileInfo, metadata fileMetadata, size int
 
 // One context hunk is sufficient for ordinary configuration previews. Bound both
 // work and retained output; large/binary inputs keep the structured summary.
+// A node file is private when its mode or a directory above it keeps other
+// accounts out.
 func (run Runtime) textDiff(change *protocol.FileChange, old, next []byte) {
-	if (change.Before != nil && !worldReadable(change.Before)) || !worldReadable(change.After) {
-		change.DiffOmitted = "contents hidden for a private file"
-		change.FullDiffOmitted = change.DiffOmitted
+	if privateMode(change) || !othersCanTraverseTo(change.Path) {
+		hidePrivateText(change)
 		return
 	}
 	run.shownTextDiff(change, old, next)
+}
+
+// privateMode reports a file that other accounts could not read before the
+// change, or cannot read after it, by its mode.
+func privateMode(change *protocol.FileChange) bool {
+	return (change.Before != nil && !worldReadable(change.Before)) || !worldReadable(change.After)
+}
+
+func hidePrivateText(change *protocol.FileChange) {
+	change.DiffOmitted = "contents hidden for a private file"
+	change.FullDiffOmitted = change.DiffOmitted
 }
 
 // shownTextDiff fills the difference of old and next, texts that may be
@@ -165,8 +180,36 @@ func worldReadable(s *protocol.FileState) bool {
 	return err == nil && mode&0004 != 0
 }
 
+// othersCanTraverseTo reports whether other accounts can pass through every
+// existing directory above path (the execute bit for others). A file below
+// one that they cannot pass, such as a 0644 file in a 0700 home directory, is
+// private whatever its own mode. A directory that does not exist yet holds no
+// earlier text; one that cannot be inspected counts as private.
+func othersCanTraverseTo(path string) bool {
+	for directory := filepath.Dir(path); ; directory = filepath.Dir(directory) {
+		info, err := os.Stat(directory)
+		switch {
+		case err == nil && info.Mode().Perm()&0001 == 0:
+			return false
+		case err != nil && !errors.Is(err, fs.ErrNotExist):
+			return false
+		}
+		if directory == filepath.Dir(directory) {
+			return true
+		}
+	}
+}
+
 // TextDiff fills a file change's text difference preview as a file task's
 // result shows it, without storing a full difference. The controller process
 // uses it for the files save_on_controller_machine writes on the controller
-// machine.
-func TextDiff(change *protocol.FileChange, old, next []byte) { Runtime{}.textDiff(change, old, next) }
+// machine. Only the file's mode makes such a file private: the project
+// usually sits in a private home directory, and the files hold the fleet's
+// outputs, which the run shows anyway.
+func TextDiff(change *protocol.FileChange, old, next []byte) {
+	if privateMode(change) {
+		hidePrivateText(change)
+		return
+	}
+	Runtime{}.shownTextDiff(change, old, next)
+}

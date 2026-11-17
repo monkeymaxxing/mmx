@@ -20,7 +20,7 @@ func filter(script string) *ContentFilter {
 // and an unchanged rerun.
 func TestEditFileInstallsTheFilteredText(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "fstab")
+	path := filepath.Join(traversableTempDir(t), "fstab")
 	original := "UUID=1 / ext4 defaults 0 1\n/swap.img none swap sw 0 0\n"
 	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
 		t.Fatal(err)

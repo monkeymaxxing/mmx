@@ -40,7 +40,7 @@ done`
 
 func newKernelFixture(t *testing.T) kernelFixture {
 	t.Helper()
-	dir := t.TempDir()
+	dir := traversableTempDir(t)
 	f := kernelFixture{dir}
 	for _, d := range []string{"proc/sys/kernel", "sys/module", "etc/sysctl.d", "usr/lib/sysctl.d", "etc/modules-load.d", "etc/modprobe.d", "lib/modules/6.1.0-test", "available", "in_use", "blocked", "bin"} {
 		if err := os.MkdirAll(filepath.Join(dir, d), 0755); err != nil {

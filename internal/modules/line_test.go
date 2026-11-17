@@ -130,7 +130,7 @@ func TestLinePlacementFailureChangesNothing(t *testing.T) {
 // validation, and an atomic replacement that keeps the file's metadata.
 func TestLineInstallsThroughTheFileInstaller(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "sshd_config")
+	path := filepath.Join(traversableTempDir(t), "sshd_config")
 	put := func(text string) {
 		if err := os.WriteFile(path, []byte(text), 0644); err != nil {
 			t.Fatal(err)

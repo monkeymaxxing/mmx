@@ -57,7 +57,7 @@ func TestStarlarkModuleDryrunRunAndRerun(t *testing.T) {
 	ctx := context.Background()
 	module := starlarkModule(t, starlarkGreeting, starlarkGreetingDescription)
 	owner, group := currentAccount(t)
-	path := filepath.Join(t.TempDir(), "greeting.txt")
+	path := filepath.Join(traversableTempDir(t), "greeting.txt")
 	inputs := map[string]any{"path": path, "person": "Barbara", "owner": owner, "group": group}
 	dryrun := Runtime{Dryrun: true, BeforeMutation: func(string) error { t.Fatal("a dryrun of a script reached the mutation boundary"); return nil }}
 

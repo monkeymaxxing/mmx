@@ -50,7 +50,7 @@ type storageFixture struct{ dir string }
 
 func newStorageFixture(t *testing.T) storageFixture {
 	t.Helper()
-	dir := t.TempDir()
+	dir := traversableTempDir(t)
 	f := storageFixture{dir}
 	if err := os.Mkdir(filepath.Join(dir, "signatures"), 0700); err != nil {
 		t.Fatal(err)

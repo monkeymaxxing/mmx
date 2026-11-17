@@ -26,7 +26,7 @@ func cronFixture(t *testing.T) CronJob {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
+	dir := traversableTempDir(t)
 	directory, bin := filepath.Join(dir, "cron.d"), filepath.Join(dir, "bin")
 	for _, d := range []string{directory, bin} {
 		if err := os.Mkdir(d, 0755); err != nil {

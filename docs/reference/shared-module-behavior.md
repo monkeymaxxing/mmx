@@ -105,7 +105,7 @@ the text is left out:
 
 | The preview says | When |
 | --- | --- |
-| `contents hidden for a private file` | Other accounts could not read the file before the change, or cannot read the file after it: the mode has no read bit for others, as with `"0640"` or `"0600"`. |
+| `contents hidden for a private file` | Other accounts could not read the file before the change, or cannot read the file after it: the mode has no read bit for others, as with `"0640"` or `"0600"`, or a directory above the file does not let others pass (no execute bit for others), as with a `0700` home directory or a `0750` key directory. |
 | `contents suppressed for a task using secrets` | The node task reads a secret ([secrets in output](secrets.md)). |
 | `contents read through content_from_node_paths are not shown; compare the sha256 values` | A `file` node task builds the file from other files on the node, such as a private key. The preview shows the SHA-256 of the old and the new content. |
 | `binary contents omitted` | The file is not text. The sizes stay. |

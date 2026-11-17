@@ -39,7 +39,7 @@ type zypperRepositoryNode struct {
 
 func newZypperRepositoryNode(t *testing.T) *zypperRepositoryNode {
 	t.Helper()
-	n := &zypperRepositoryNode{t: t, repositories: t.TempDir(), keys: t.TempDir()}
+	n := &zypperRepositoryNode{t: t, repositories: traversableTempDir(t), keys: traversableTempDir(t)}
 	n.calls = stubTools(t, map[string]string{
 		"gpg": `
 cat > "$STUBS/gpg-input"

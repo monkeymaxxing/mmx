@@ -115,7 +115,7 @@ func (f quadletFixture) dryrun(t *testing.T) Runtime {
 func newQuadletFixture(t *testing.T) quadletFixture {
 	t.Helper()
 	dir := podmanFixture(t, map[string]string{"podman": fakePodman, "systemctl": fakeQuadletSystemctl, "podman-system-generator": fakeQuadletGenerator})
-	quadlets := filepath.Join(t.TempDir(), "containers", "systemd")
+	quadlets := filepath.Join(traversableTempDir(t), "containers", "systemd")
 	if err := os.Mkdir(filepath.Dir(quadlets), 0755); err != nil {
 		t.Fatal(err)
 	}

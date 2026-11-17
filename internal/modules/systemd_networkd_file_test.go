@@ -20,7 +20,7 @@ import (
 
 func networkdFixture(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.EvalSymlinks(t.TempDir())
+	root, err := filepath.EvalSymlinks(traversableTempDir(t))
 	if err != nil {
 		t.Fatal(err)
 	}

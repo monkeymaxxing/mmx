@@ -1180,11 +1180,15 @@ suppressed before display or saving.
 File dryruns show the path, action, metadata changes, and link targets.
 `--diff` adds text differences to run, dryrun, resume, status, and results output.
 Secret-consuming tasks, removals, binary files, and files not world-readable
-before or after the change show no contents. Previews stop at 16 KiB or 200
+before or after the change show no contents. A file is world-readable when
+its mode has the read bit for others and every existing directory above it
+has the execute bit for others: a `0644` file in a `0700` directory is
+private. A file that `save_on_controller_machine` writes counts only its own
+mode, since a project usually sits in a private home directory. Previews stop at 16 KiB or 200
 lines, and files over 64 KiB get no preview; truncation is stated.
 
-Diff suppression uses the current task's secret reads and the file's read
-permissions. MMX cannot know whether existing world-readable bytes once held
+Diff suppression uses the current task's secret reads and the read
+permissions of the file and the directories above it. MMX cannot know whether existing world-readable bytes once held
 a secret. A task that no longer reads secrets can show existing
 world-readable file contents in a diff. Keep secret files private rather
 than relying on the files' content history.
