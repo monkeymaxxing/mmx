@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -31,6 +32,10 @@ type SaveOnControllerMachine struct {
 	// ProjectRoot is where a relative path starts. The run saves it, so a
 	// resume writes to the same place.
 	ProjectRoot string `yaml:"-" json:"project_root"`
+	// ProjectLoopVariables are the loop variables around the entry whose
+	// items come from the project, so path may use them freely; other loop
+	// items may come from nodes.
+	ProjectLoopVariables []string `yaml:"-" json:"project_loop_variables,omitempty"`
 }
 
 // ControllerMachineFileField names entry i of save_on_controller_machine.
@@ -55,6 +60,7 @@ func prepareControllerMachineFiles(s *FleetStage, p Project, inv Inventory, base
 		field := ControllerMachineFileField(i)
 		fail := func(err error) error { return s.Sources.Error(field, err) }
 		e.ProjectRoot = base
+		e.ProjectLoopVariables = slices.Sorted(maps.Keys(d[projectLoopItems]))
 		if e.Path == "" {
 			return fail(modules.Invalid("path", "path is required: where on the controller machine to write the file"))
 		}
@@ -122,18 +128,19 @@ func ControllerMachinePath(root, path string) (string, error) {
 
 // writtenInTheProject names the scope variables whose values come from the
 // project and the inventory. A path's other values, fleet stage outputs and
-// loop items, may come from a node.
+// loop items, may come from a node, except the items of a loop that
+// ProjectLoopVariables lists.
 var writtenInTheProject = map[string]bool{"vars": true, "inventory": true, "node": true}
 
 // NodeValuesStayInOneFileName refuses a path in which a value that may come
 // from a node does more than fill part of one file name: a node that answers
 // ../playbooks/deploy or /home/someone/.profile must not choose where the
 // controller machine writes.
-func NodeValuesStayInOneFileName(path, rendered string, scope value.Scope) error {
+func NodeValuesStayInOneFileName(e SaveOnControllerMachine, rendered string, scope value.Scope) error {
 	fromNode := false
-	for _, m := range value.Reference.FindAllStringSubmatch(value.WithoutLiterals(path), -1) {
+	for _, m := range value.Reference.FindAllStringSubmatch(value.WithoutLiterals(e.Path), -1) {
 		parts, err := value.Path(m[1])
-		if err != nil || len(parts) == 0 || writtenInTheProject[parts[0].Name] {
+		if err != nil || len(parts) == 0 || writtenInTheProject[parts[0].Name] || slices.Contains(e.ProjectLoopVariables, parts[0].Name) {
 			continue
 		}
 		fromNode = true

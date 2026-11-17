@@ -130,29 +130,6 @@ func TestReadingPrimitives(t *testing.T) {
 	}
 }
 
-// A primitive refuses a path with a .. part, so a module input such as
-// another node's output cannot climb out of the directory a module names.
-func TestPrimitivesRefuseAPathThatClimbsOut(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	dir := t.TempDir()
-	run := Runtime{BeforeMutation: func(string) error { t.Fatal("a refused path reached the mutation boundary"); return nil }}
-	owner, group := currentAccount(t)
-	climbing := filepath.Join(dir, "sites") + "/../escaped"
-	for _, refusal := range []string{
-		run.ReadFile(climbing).Error,
-		run.InspectPath(climbing).Error,
-		run.WriteFile(ctx, climbing, "x", owner, group, "0644").Error,
-		run.MakeDirectory(ctx, climbing, owner, group, "0755").Error,
-		run.MakeLink(ctx, climbing, "/tmp").Error,
-		run.RemovePath(ctx, climbing).Error,
-	} {
-		if !strings.Contains(refusal, ".. parts") {
-			t.Fatal(refusal)
-		}
-	}
-}
-
 // A request that only reads is sent in a dryrun; one that changes something
 // is not. No redirect is followed, and no error holds the address.
 func TestHTTPRequestPrimitive(t *testing.T) {

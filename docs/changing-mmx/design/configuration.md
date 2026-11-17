@@ -1363,7 +1363,7 @@ After the run, the project holds `server_details/web01.txt`,
 
 | Field | Meaning |
 |---|---|
-| `path` | Where to write. A relative path resolves from the project root and cannot leave it. A value in the path from a fleet stage output or a loop item may come from a node, so the value fills part of one file name: the value cannot contain `/` or a NUL byte, and a path holding such a value cannot have a `.` or `..` part. Variables, the inventory, and `.node.name` come from the project and have no such limit. |
+| `path` | Where to write. A relative path resolves from the project root and cannot leave it. A value in the path from a fleet stage output, or the item of a loop over outputs, may come from a node, so the value fills part of one file name: the value cannot contain `/` or a NUL byte, and a path holding such a value cannot have a `.` or `..` part. Variables, the inventory, `.node.name`, and the items of a loop over a written list, variables, or the inventory come from the project and have no such limit. |
 | `permissions_mode` | The file's permissions, required. |
 | `secret_readable_by_group` | Acknowledges group read access. Required as `true` when a secret file allows group reading but not public reading. Missing acknowledgement is an error; see the [read-bit rule](../../reference/modules/file.md#files-that-hold-secrets). |
 | `dangerously_let_every_account_read_secret` | Acknowledges read access for every account. Required as `true` when a secret file allows public reading, and covers group reading too. Missing acknowledgement is an error; see the [read-bit rule](../../reference/modules/file.md#files-that-hold-secrets). |

@@ -208,7 +208,7 @@ func prepareForEachNode(s *FleetStage, p Project, inv Inventory, base string, d 
 		return err
 	}
 	local := copyDeclarations(d)
-	local[s.As] = nil
+	declareLoopItems(local, s.As, nil) // node names from the inventory
 	// The loop's when is checked for each loop node and reads that node as
 	// .node: its name, and its facts, which the node reports just before.
 	condition := copyDeclarations(local)
@@ -317,7 +317,7 @@ func prepareFleetStages(fleetStages []FleetStage, p Project, inv Inventory, base
 				return s.Sources.Error("", explainUndeclaredVariable(err, p, inv, "", variablesOfNoSingleNode))
 			}
 			local := copyDeclarations(d)
-			local[s.As] = nil
+			declareLoopItems(local, s.As, s.Loop)
 			if err := checkPredicate(s.When, local); err != nil {
 				return s.Sources.Error("when", explainUndeclaredVariable(err, p, inv, "", variablesOfNoSingleNode))
 			}

@@ -170,28 +170,20 @@ var (
 	Rule           = rule
 )
 
-// withoutParentPart reports a path with no .. part. A value in a path, such
-// as another node's output, may then add directories below the place the
-// project writes, but never climb out of it: MMX cleans a resolved path, so
-// /srv/sites/{{ .outputs.list.web1.site }} with ../../etc would name /etc.
-func withoutParentPart(s string) bool {
-	return !slices.Contains(strings.Split(s, "/"), "..")
-}
-
 var (
-	absolute = rule("path must be absolute without null bytes or .. parts", func(s string) bool {
-		return filepath.IsAbs(s) && !strings.ContainsRune(s, 0) && withoutParentPart(s)
+	absolute = rule("path must be absolute without null bytes", func(s string) bool {
+		return filepath.IsAbs(s) && !strings.ContainsRune(s, 0)
 	})
 	// A directory MMX deletes from or deletes is never / or a top-level
 	// directory such as /srv.
-	deletablePath = rule("a directory that MMX deletes from or deletes must be an absolute path at least two levels deep, such as /srv/app, without .. parts", func(s string) bool {
-		return filepath.IsAbs(s) && !strings.ContainsRune(s, 0) && withoutParentPart(s) && strings.Count(filepath.Clean(s), "/") >= 2
+	deletablePath = rule("a directory that MMX deletes from or deletes must be an absolute path at least two levels deep, such as /srv/app", func(s string) bool {
+		return filepath.IsAbs(s) && !strings.ContainsRune(s, 0) && strings.Count(filepath.Clean(s), "/") >= 2
 	})
 	entryName = rule("must name a direct child of the directory; the name must not be empty, . or .., or contain /", func(s string) bool {
 		return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, "/\x00")
 	})
-	accountPath = rule("account path must be absolute without colons, newlines, or .. parts", func(s string) bool {
-		return filepath.IsAbs(s) && !strings.ContainsAny(s, ":\x00\n\r") && withoutParentPart(s)
+	accountPath = rule("account path must be absolute without colons or newlines", func(s string) bool {
+		return filepath.IsAbs(s) && !strings.ContainsAny(s, ":\x00\n\r")
 	})
 	linkTarget      = rule("symlink target must be non-empty without null bytes", func(s string) bool { return s != "" && !strings.ContainsRune(s, 0) })
 	accountNameRule = rule("invalid account name", accountName.MatchString)

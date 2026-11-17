@@ -198,10 +198,10 @@ func TestArgumentRulesRunBeforeTheNode(t *testing.T) {
 		{"unit: 'bad name'", "systemd_service: {name: '{{ .vars.unit }}', state: running}", "systemd_service.name", "invalid service name"},
 		// A value, such as another node's output, cannot climb out of the
 		// directory a path names.
-		{"site: ../../etc/cron.d", "file: {path: '/srv/sites/{{ .vars.site }}/index', permissions_mode: '0644', content: x}", "file.path", "without null bytes or .. parts"},
-		{"site: ../..", "directory: {path: '/srv/sites/{{ .vars.site }}', state: absent}", "directory.path", "without .. parts"},
-		{"site: ../../etc", "delete_old_files: {directory: '/srv/sites/{{ .vars.site }}', name_patterns: ['*.gz'], older_than: 7d, include_subdirectories: false}", "delete_old_files.directory", "without .. parts"},
-		{"site: ../../root", "user: {create_home_directory: true, name: app, home: '/srv/{{ .vars.site }}'}", "user.home", "newlines, or .. parts"},
+		{"site: ../../etc/cron.d", "file: {path: '/srv/sites/{{ .vars.site }}/index', permissions_mode: '0644', content: x}", "file.path", `.vars.site is "../../etc/cron.d", which has a .. part`},
+		{"site: ../../etc/app", "directory: {path: '/srv/sites/{{ .vars.site }}', state: absent}", "directory.path", "which has a .. part"},
+		{"site: ../../etc/app", "delete_old_files: {directory: '/srv/sites/{{ .vars.site }}', name_patterns: ['*.gz'], older_than: 7d, include_subdirectories: false}", "delete_old_files.directory", "which has a .. part"},
+		{"site: ../../root", "user: {create_home_directory: true, name: app, home: '/srv/{{ .vars.site }}'}", "user.home", "which has a .. part"},
 	} {
 		path := fixture(t, "vars: {"+tc.vars+"}\nfleet_stages: [{id: setup, nodes: all, node_tasks: [{"+tc.task+"}]}]\n")
 		_, _, err := Load(path, "example", "", nil)
@@ -971,5 +971,22 @@ func TestDuplicateServicePathNamesBothNodeTasksAndTheirSources(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("missing %q in %v", want, err)
 		}
+	}
+}
+
+// On a node, another node's output fills a path but cannot climb out of the
+// directory the project writes around it. A .. that the project writes
+// itself keeps working, cleaned as before.
+func TestAnOutputInANodePathCannotClimbOut(t *testing.T) {
+	outputs := value.Scope{"outputs": map[string]any{"list_sites": map[string]any{"web1": map[string]any{"site": "../../etc/cron.d"}}}}
+	steered := Task{Module: "directory", ModuleInputs: &modules.Directory{Path: "/srv/sites/{{ .outputs.list_sites.web1.site }}"}}
+	if _, err := ResolveArguments(steered, outputs); err == nil || !strings.Contains(err.Error(), "directory.path") || !strings.Contains(err.Error(), "which has a .. part") {
+		t.Fatal(err)
+	}
+	written := Task{Module: "directory", ModuleInputs: &modules.Directory{Path: "/srv/sites/../shared/{{ .outputs.list_sites.web1.name }}"}}
+	named := value.Scope{"outputs": map[string]any{"list_sites": map[string]any{"web1": map[string]any{"name": "north/static"}}}}
+	resolved, err := ResolveArguments(written, named)
+	if err != nil || InputsOf[modules.Directory](resolved).Path != "/srv/shared/north/static" {
+		t.Fatal(InputsOf[modules.Directory](resolved), err)
 	}
 }

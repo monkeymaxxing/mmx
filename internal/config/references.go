@@ -18,6 +18,31 @@ type declarations map[string]map[string]bool
 // declared secret: true. The dot keeps it apart from every reference root.
 const secretRoleInputs = "inputs.declared_secret"
 
+// projectLoopItems is the declarations key that lists the loop variables
+// whose items come from the project: a written list, variables, the
+// inventory, or a for_each_node loop's node names. A loop over fleet stage
+// outputs is not listed: its items come from nodes.
+const projectLoopItems = "loop_items.from_the_project"
+
+// declareLoopItems declares a loop's as variable in d, and lists it in
+// projectLoopItems when every reference in loop reads the project.
+func declareLoopItems(d declarations, as string, loop any) {
+	d[as] = nil
+	for _, ref := range References(loop) {
+		parts, err := value.Path(ref)
+		if err != nil || len(parts) == 0 {
+			return
+		}
+		if root := parts[0].Name; root != "vars" && root != "inventory" && !d[projectLoopItems][root] {
+			return
+		}
+	}
+	if d[projectLoopItems] == nil {
+		d[projectLoopItems] = map[string]bool{}
+	}
+	d[projectLoopItems][as] = true
+}
+
 // readsASecretRoleInput says whether a value reads an input that the
 // enclosing role declares secret: true.
 func readsASecretRoleInput(v any, d declarations) bool {

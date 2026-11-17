@@ -586,8 +586,11 @@ Only a node's own managed key is read per node.
   secret is refused during loading when `secretOutputs` identifies the output
   as secret.
 - A value in a `save_on_controller_machine` path that may come from a node,
-  any reference whose root is not `vars`, `inventory`, or `node`, fills part
-  of one file name. `config.NodeValuesStayInOneFileName` refuses such a value
+  any reference whose root is not `vars`, `inventory`, `node`, or a loop
+  variable that `ProjectLoopVariables` lists (`declareLoopItems` lists a
+  loop whose every reference reads `vars`, `inventory`, or such a loop
+  variable, and every `for_each_node` loop), fills part of one file name.
+  A run saved without the list trusts no loop item. `config.NodeValuesStayInOneFileName` refuses such a value
   with `/` or a NUL byte, and a rendered path with a `.` or `..` part, both
   where the run writes the file and where `mmx explain` shows it.
   The
@@ -631,13 +634,13 @@ module's resource implementation runs. Then `InspectArguments` checks private
 values.
 Resource implementations receive resolved identifiers and never resolve or
 check public identifiers again.
-`ResolveArguments` cleans a resolved path, so a path rule checks the value
-before cleaning: the node path rules (`absolute`, `deletablePath`,
-`accountPath`, and the module-specific path rules) refuse a `..` part
-(`withoutParentPart`), and the primitives that Starlark modules call refuse
-one too (`primitivePathRefusal`). A value from another node, such as an
-output, then adds directories below the path a project writes but never
-climbs out of it. Resource implementations resolve only private
+`ResolveArguments` cleans a resolved path, so `filledValueWithParentPart`
+refuses a public identifier into which any reference fills text with a `..`
+part: vars, role inputs, and loop items can all carry an output. A value
+from another node then adds directories below the path a project writes but
+never climbs out of it. A `..` written in the project's text stays. Modules
+written in Starlark or as executables get their inputs as data and check a
+path they build from an input themselves. Resource implementations resolve only private
 values (content, templates, environment, module inputs) through the scope.
 
 `Validate*` functions, called from each

@@ -280,6 +280,28 @@ func TestSaveOnControllerMachineRefusesANodeValueThatLeavesItsFileName(t *testin
 	}
 }
 
+// A loop item from the project, such as a directory path in vars, may name
+// directories in a path; an item that may come from a node fills one file
+// name only.
+func TestSaveOnControllerMachineTrustsOnlyLoopItemsFromTheProject(t *testing.T) {
+	for _, fromProject := range []bool{true, false} {
+		root := t.TempDir()
+		entry := config.SaveOnControllerMachine{Output: "report", Path: "{{ .site }}/{{ .node.name }}.txt", PermissionsMode: "0644", ProjectRoot: root}
+		if fromProject {
+			entry.ProjectLoopVariables = []string{"site"}
+		}
+		c, r := fleet(t, config.FleetStage{ID: "each", Loop: []any{"reports/north"}, As: "site", Key: "{{ .site }}", FleetStages: []config.FleetStage{
+			{ID: "collect", Nodes: "a", Outputs: map[string]any{"report": "report"}, SaveOnControllerMachine: []config.SaveOnControllerMachine{entry}},
+		}})
+		runLocally(&c, map[string]int{}, nil)
+		execute(t, c, r, false)
+		_, err := os.Stat(filepath.Join(root, "reports/north/a.txt"))
+		if fromProject != (err == nil) || fromProject != (r.Status == "succeeded") {
+			t.Fatal(fromProject, r.Status, err, r.Selections["each"].Iterations)
+		}
+	}
+}
+
 // A fleet stage that --only-fleet-stages leaves out runs nowhere, so it saves
 // no file on the controller machine; a kept one saves its files.
 func TestOnlyFleetStagesSavesOnlyTheKeptFleetStagesFiles(t *testing.T) {

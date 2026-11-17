@@ -54,7 +54,7 @@ func TestSELinuxConfiguration(t *testing.T) {
 		}
 	}
 	// Resolved paths are clean, and references take their rules.
-	task := Task{Module: "selinux_file_context", ModuleInputs: &modules.SELinuxFileContext{Path: "/srv/./web/", SELinuxType: "{{ .vars.label_type }}"}}
+	task := Task{Module: "selinux_file_context", ModuleInputs: &modules.SELinuxFileContext{Path: "/srv/www/../web/", SELinuxType: "{{ .vars.label_type }}"}}
 	resolved, err := ResolveArguments(task, value.Scope{"vars": map[string]any{"label_type": "httpd_sys_content_t"}})
 	if err != nil || InputsOf[modules.SELinuxFileContext](resolved).Path != "/srv/web" || InputsOf[modules.SELinuxFileContext](resolved).SELinuxType != "httpd_sys_content_t" || InputsOf[modules.SELinuxFileContext](task).SELinuxType != "{{ .vars.label_type }}" {
 		t.Fatal(InputsOf[modules.SELinuxFileContext](resolved), err)

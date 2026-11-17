@@ -494,6 +494,47 @@ func identifierSecretError(t Task, arg taskArgument, s value.Scope) error {
 	return argumentError(t, arg.field, arg.raw, s, err)
 }
 
+// filledValueWithParentPart refuses a public identifier, such as a path,
+// into which a reference fills text with a .. part. MMX cleans a resolved
+// path, so /srv/sites/{{ .outputs.list.web1.site }} with ../../etc would name
+// /etc: another node would choose where this node writes. Every reference
+// counts, since vars, role inputs, and loop items can all carry an output
+// (set_vars, inputs, loop). A .. written in the project's own text stays.
+func filledValueWithParentPart(t Task, arg taskArgument, s value.Scope) error {
+	for _, ref := range References(arg.raw) {
+		read, err := s.ResolveWithoutMarkingATrace("{{ " + ref + " }}")
+		if err != nil {
+			continue
+		}
+		if text, found := textWithParentPart(value.Plain(read)); found {
+			return argumentError(t, arg.field, "{{ "+ref+" }}", s, fmt.Errorf("%s is %q, which has a .. part; a value filled into a path cannot climb out of the directory written around it", ref, text))
+		}
+	}
+	return nil
+}
+
+// textWithParentPart finds a text in v, or in v's lists and mappings, with a
+// .. part between slashes.
+func textWithParentPart(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, slices.Contains(strings.Split(x, "/"), "..")
+	case []any:
+		for _, item := range x {
+			if text, found := textWithParentPart(item); found {
+				return text, true
+			}
+		}
+	case map[string]any:
+		for _, item := range x {
+			if text, found := textWithParentPart(item); found {
+				return text, true
+			}
+		}
+	}
+	return "", false
+}
+
 // resolveArgument resolves one argument in s and applies its rule. A login
 // that the module hands only to its tool is resolved as the module resolves
 // it, without a mark in s's trace, so that the check of its rule does not
@@ -517,6 +558,11 @@ func resolveArgument(t Task, arg taskArgument, s value.Scope) (any, error) {
 	}
 	if err != nil {
 		return nil, argumentError(t, arg.field, arg.raw, s, err)
+	}
+	if arg.target != nil {
+		if err := filledValueWithParentPart(t, arg, s); err != nil {
+			return nil, err
+		}
 	}
 	return v, nil
 }

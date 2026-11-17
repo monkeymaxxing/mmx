@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -159,6 +161,38 @@ func TestOutputHoldsNoSecretConfiguration(t *testing.T) {
 		_, _, err := Load(fixture(t, playbook), "example", "", nil)
 		if err == nil || !strings.Contains(err.Error(), "output_holds_no_secret") || !strings.Contains(err.Error(), "output_is_secret") {
 			t.Fatalf("contradictory command output declarations accepted: %v", err)
+		}
+	}
+}
+
+// A loop over a written list or over variables has items from the project;
+// a loop over fleet stage outputs, directly or through another such loop,
+// has items from nodes.
+func TestSaveOnControllerMachineKnowsWhichLoopItemsComeFromTheProject(t *testing.T) {
+	save := "    save_on_controller_machine: [{output: report, path: '{{ .%s }}/{{ .node.name }}', permissions_mode: \"0644\"}]\n"
+	for _, tt := range []struct {
+		loop, inner string
+		want        []string
+	}{
+		{"[reports/north, reports/south]", "[x]", []string{"part", "site"}},
+		{"'{{ .vars.sites }}'", "[x]", []string{"part", "site"}},
+		{"'{{ .outputs.list.web1.sites }}'", "[x]", []string{"part"}},
+		{"[a]", "'{{ .outputs.list.web1.parts }}'", []string{"site"}},
+		// Items of a loop over another loop's node items come from nodes too.
+		{"'{{ .outputs.list }}'", "'{{ .site.value.parts }}'", nil},
+	} {
+		path := fixture(t, "vars: {sites: [reports/north]}\nfleet_stages:\n- id: list\n  nodes: web1\n  node_tasks: [{show: hi}]\n  outputs: {sites: [x], parts: [y]}\n"+
+			"- id: each_site\n  loop: "+tt.loop+"\n  as: site\n  key: '{{ .site }}'\n  fleet_stages:\n"+
+			"  - id: each_part\n    loop: "+tt.inner+"\n    as: part\n    key: '{{ .part }}'\n    fleet_stages:\n"+
+			"    - id: collect\n      nodes: web1\n      node_tasks: [{show: hi}]\n      outputs: {report: hi}\n"+
+			strings.ReplaceAll(fmt.Sprintf(save, "part"), "    save", "      save"))
+		p, _, err := Load(path, "example", "", nil)
+		if err != nil {
+			t.Fatal(tt.loop, err)
+		}
+		got := p.FleetStages[1].FleetStages[0].FleetStages[0].SaveOnControllerMachine[0].ProjectLoopVariables
+		if !slices.Equal(got, tt.want) {
+			t.Fatal(tt.loop, tt.inner, got)
 		}
 	}
 }

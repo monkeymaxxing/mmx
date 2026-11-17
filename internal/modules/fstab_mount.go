@@ -697,8 +697,8 @@ var (
 	fstabWord   = regexp.MustCompile(`^[A-Za-z0-9_.+-]+$`)
 	mountOption = regexp.MustCompile(`^[^\s,#]+$`)
 	// A mount point is never / itself.
-	mountPointRule = rule("mount_point must be an absolute path other than /, without null bytes, line breaks, or .. parts", func(s string) bool {
-		return filepath.IsAbs(s) && filepath.Clean(s) != "/" && !strings.ContainsAny(s, "\x00\n") && withoutParentPart(s)
+	mountPointRule = rule("mount_point must be an absolute path other than /, without null bytes or line breaks", func(s string) bool {
+		return filepath.IsAbs(s) && filepath.Clean(s) != "/" && !strings.ContainsAny(s, "\x00\n")
 	})
 	mountSourceRule = rule("mount_source must be one line of text without null bytes", func(s string) bool {
 		return s != "" && !strings.ContainsAny(s, "\x00\n\r")
