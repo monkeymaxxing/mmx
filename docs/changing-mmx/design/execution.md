@@ -51,8 +51,12 @@ identity. Bootstrap installs the node runner executable from the controller
 process's MMX release. `run` and `run-command` then configure the node HTTPS
 API process and check that direct HTTPS works. Before that setup on a node
 without the unit `mmx-https-api.service`, the controller process prints one
-line that names the unit, TCP port 7443 on every network address, and the
-`mmx remove-mmx-from-node` command for the node.
+line that names the unit and TCP port 7443 on every network address. The
+line says, in two plain sentences, that only SSH keys that can already log
+in to the node can use the service, and that `connection: ssh_only` on the
+node with the node's `mmx remove-mmx-from-node` command leaves no port. A
+person who sees a new open port first wants to know who can use it and how
+to avoid it.
 Bootstrap runs as part of the requested command, with visible progress and
 no separate preparation step. Repeated commands reuse a correct installation
 and finish interrupted setup.

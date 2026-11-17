@@ -217,7 +217,7 @@ trusts.
    This first run sets up MMX's HTTPS service on the controller machine
    over SSH, so MMX asks for the `sudo` password once more and prints a
    line such as
-   `127.0.0.1: setting up MMX's HTTPS service on controller_machine (mmx-https-api.service, TCP port 7443 on every network address); ...`.
+   `127.0.0.1: setting up MMX's HTTPS service on controller_machine (mmx-https-api.service, TCP port 7443 on every network address). ...`.
    Later runs and dryruns print no `setting up` line for `127.0.0.1` and
    ask for no password, because they reach the controller machine over
    HTTPS on port 7443. `mmx results --json` shows `"connection_used": "https"` for

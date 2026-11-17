@@ -572,10 +572,13 @@ it works over SSH.
 systemd service `mmx-https-api.service`, which listens on TCP port 7443 on
 every network address of the server. Before it does, it prints one line
 that names the service, the port, and the command that removes MMX again:
-`mmx remove-mmx-from-node NODE`. After that, `mmx` connects over HTTPS on
-port 7443 and proves who it is with your SSH key, for runs and dryruns
-alike. Over HTTPS, your SSH key alone gives root on the server: when the
-login account uses `sudo`, the server does not ask for the `sudo` password.
+`mmx remove-mmx-from-node NODE`. Only your own SSH keys, the keys that can
+already log in to the server, can use the port. To have no port at all,
+set `connection: ssh_only` on the node in the inventory. After that first
+run, `mmx` connects over HTTPS on port 7443 and proves who it is with your
+SSH key, for runs and dryruns alike. Over HTTPS, your SSH key alone gives
+root on the server: when the login account uses `sudo`, the server does not
+ask for the `sudo` password.
 
 Until that first run, each dryrun works over SSH. Over SSH, a dryrun of
 many servers is slower than over HTTPS, and a server whose `sudo` asks for
@@ -583,8 +586,7 @@ a password asks once for each dryrun.
 
 MMX never opens a firewall port itself. If port 7443 is closed between the
 controller machine and the server, MMX uses SSH for that server and says so
-in its output. To use SSH on purpose, set `connection: ssh_only` on the node
-in the inventory. The [connection guide](docs/how-to/connect-to-your-servers.md)
+in its output. The [connection guide](docs/how-to/connect-to-your-servers.md)
 covers passwords, SSH options, and jump hosts.
 
 ## For coding agents

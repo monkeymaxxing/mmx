@@ -134,8 +134,10 @@ def playbook_args(command, name="configure"):
 def https_setup_notice(node, inventory):
     """The line mmx prints when a run sets up MMX's HTTPS service on a node
     that has none. A dryrun there uses SSH and prints nothing of it."""
-    return (f"setting up MMX's HTTPS service on {node} (mmx-https-api.service, TCP port 7443 on every network address); "
-            f"mmx remove-mmx-from-node {node} --inventory {inventory} removes it")
+    return (f"setting up MMX's HTTPS service on {node} (mmx-https-api.service, TCP port 7443 on every network address). "
+            f"Only SSH keys that can already log in to {node} can use the service. "
+            f"For no port, set connection: ssh_only on {node} in the inventory and run "
+            f"mmx remove-mmx-from-node {node} --inventory {inventory}")
 
 
 def success_codes(command):

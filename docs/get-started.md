@@ -168,7 +168,7 @@ your own server's address and account.
    so before it changes anything:
 
    ```text
-   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web01 can use the service. For no port, set connection: ssh_only on web01 in the inventory and run mmx remove-mmx-from-node web01 --inventory example
    ```
 
    **Check:** the task says `succeeded, changed` and `created

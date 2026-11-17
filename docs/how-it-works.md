@@ -281,7 +281,7 @@ make. The first `mmx run` then prints one more line before its first
 change:
 
 ```text
-203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web01 can use the service. For no port, set connection: ssh_only on web01 in the inventory and run mmx remove-mmx-from-node web01 --inventory example
 ```
 
 ### Why a dryrun cannot check some work
@@ -398,8 +398,10 @@ Then, over SSH, as root or through `sudo`, MMX installs `mmx-runner` in
 same MMX release as `mmx`. A dryrun stops there: it starts no service and
 opens no port, and it does its work over SSH. The first `mmx run`, or
 `mmx run-command`, on the node goes on. First it prints one line that
-names the service, the port, and `mmx remove-mmx-from-node`, which removes
-MMX again. Then it:
+names the service and the port, says that only SSH keys that can already
+log in to the node can use the service, and says how to have no port:
+`connection: ssh_only` on the node, and `mmx remove-mmx-from-node`, which
+removes MMX again. Then it:
 
 1. starts the **node HTTPS API process**, `mmx-runner serve`, as the
    systemd service `mmx-https-api.service`, which listens on TCP port 7443

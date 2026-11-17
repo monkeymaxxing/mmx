@@ -672,7 +672,10 @@ func (c Controller) connect(ctx context.Context, run *Run, name string, expected
 		if run.Inventory.Name != "" {
 			remove += " --inventory " + run.Inventory.Name
 		}
-		notify("setting up MMX's HTTPS service on " + name + " (" + endpoint.HTTPSAPIUnit + ", TCP port 7443 on every network address); " + remove + " removes it")
+		// Two plain sentences say who can use the port and how to have none.
+		notify("setting up MMX's HTTPS service on " + name + " (" + endpoint.HTTPSAPIUnit + ", TCP port 7443 on every network address). " +
+			"Only SSH keys that can already log in to " + name + " can use the service. " +
+			"For no port, set connection: ssh_only on " + name + " in the inventory and run " + remove)
 	case stale != "":
 		notify("saved node HTTPS API identity is out of date (" + stale + "); setting up MMX again through verified SSH")
 	default:

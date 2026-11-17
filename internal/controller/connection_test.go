@@ -1227,7 +1227,7 @@ func TestDryrunUsesSSHOnANodeWithoutTheHTTPSService(t *testing.T) {
 				t.Fatal("a dryrun changed the saved identity", savedErr)
 			}
 			got := strings.Join(*notices, "\n")
-			want := "a: setting up MMX's HTTPS service on a (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node a --inventory production removes it"
+			want := "a: setting up MMX's HTTPS service on a (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to a can use the service. For no port, set connection: ssh_only on a in the inventory and run mmx remove-mmx-from-node a --inventory production"
 			if (tt.check == "not-found\n-\n" && !tt.dryrun) != strings.Contains(got, want) {
 				t.Fatal(got)
 			}

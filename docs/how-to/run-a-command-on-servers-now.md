@@ -72,10 +72,10 @@ write a playbook instead.
    Inventory: example (4 nodes)   Selected: 4 nodes
    Output: nodes (change with --output=nodes or --output=summary)
    Progress: 4 not started
-   203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web02 --inventory example removes it
-   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
-   203.0.113.21: setting up MMX's HTTPS service on db01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node db01 --inventory example removes it
-   203.0.113.13: setting up MMX's HTTPS service on web03 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web03 --inventory example removes it
+   203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web02 can use the service. For no port, set connection: ssh_only on web02 in the inventory and run mmx remove-mmx-from-node web02 --inventory example
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web01 can use the service. For no port, set connection: ssh_only on web01 in the inventory and run mmx remove-mmx-from-node web01 --inventory example
+   203.0.113.21: setting up MMX's HTTPS service on db01 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to db01 can use the service. For no port, set connection: ssh_only on db01 in the inventory and run mmx remove-mmx-from-node db01 --inventory example
+   203.0.113.13: setting up MMX's HTTPS service on web03 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web03 can use the service. For no port, set connection: ssh_only on web03 in the inventory and run mmx remove-mmx-from-node web03 --inventory example
    ...
    run-command / db01: succeeded
    run-command / web01: succeeded

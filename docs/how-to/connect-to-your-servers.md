@@ -104,7 +104,7 @@ Put in your own servers' addresses and accounts.
    then runs the playbook. It says so before it changes anything:
 
    ```text
-   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web01 can use the service. For no port, set connection: ssh_only on web01 in the inventory and run mmx remove-mmx-from-node web01 --inventory example
    ```
 
    A dryrun before this run works over SSH and starts no service.
@@ -155,7 +155,7 @@ The example account is `deploy` on `web02`, with a login password and a
    ```text
    SSH password for deploy@203.0.113.12:22:
    sudo password for deploy@203.0.113.12:22:
-   203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web02 --inventory example removes it
+   203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web02 can use the service. For no port, set connection: ssh_only on web02 in the inventory and run mmx remove-mmx-from-node web02 --inventory example
    Progress: 1 running
      welcome / web02: connecting
    203.0.113.12: establishing ordinary SSH key access; private key: /home/you/.ssh/mmx/c4566d72437fccc6921b14be1a0d1da5082acc193af229b34a2518d8299a619c
@@ -407,7 +407,7 @@ the new key.
    machine, and says so:
 
    ```text
-   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address). Only SSH keys that can already log in to web01 can use the service. For no port, set connection: ssh_only on web01 in the inventory and run mmx remove-mmx-from-node web01 --inventory example
    Progress: 1 running
      welcome / web01: connecting
    203.0.113.11: node address now reaches a different machine with a trusted SSH host key; saved node identity updated
