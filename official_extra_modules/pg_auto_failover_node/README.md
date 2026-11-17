@@ -132,6 +132,11 @@ are. The file reaches `install` through its standard input, so neither the
 passwords nor the file's other lines are in a command line or the result;
 `install` writes it beside the old one as `.pgpass.mmx-new`, and `mv`
 renames it into place.
+When the task changes the replication password in the file, it first
+writes the empty file `~postgres/.pgpass.mmx-replication-password-not-set-yet`
+and removes it once the primary has set the password, or once the node
+turns out not to be the primary: a try that fails in between leaves the
+file, and the next try still sets the password.
 On the primary, the replication password reaches `psql`'s `\password`
 through standard input. The `psql` command sends the server only a
 SCRAM-SHA-256 password verifier, the hashed form stored by PostgreSQL.

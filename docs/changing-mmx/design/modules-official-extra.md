@@ -1194,7 +1194,9 @@ What every task of the three shares:
   - when `pgautofailover_replicator` has no password,
   - when the task created the node,
   - when `~postgres/.pgpass` held a different replication password before
-    the task.
+    the task, or an earlier try left
+    `~postgres/.pgpass.mmx-replication-password-not-set-yet` after
+    writing a new one and failing before the primary set it.
 
   No login can compare the task's replication password on the primary:
   pg_autoctl lets `pgautofailover_replicator` in only from the remaining

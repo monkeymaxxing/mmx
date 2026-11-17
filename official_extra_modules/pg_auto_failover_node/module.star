@@ -777,6 +777,12 @@ REPORT_WAIT_SECONDS = 120
 # their database and role: autoctl_node reaches the monitor, and
 # pgautofailover_replicator copies from the primary. The replicator's line
 # names every database (*): a replica's connection names none.
+# A file beside ~/.pgpass that says the file holds a replication password
+# that the primary may not have set yet: a try that wrote the new password
+# into the file and failed before setting it leaves the file, so the next try
+# still sets it.
+REPLICATION_PASSWORD_NOT_SET_YET = "/.pgpass.mmx-replication-password-not-set-yet"
+
 PGPASS_LOGINS = [("pg_auto_failover", "autoctl_node", "autoctl_node_password"), ("*", "pgautofailover_replicator", "replication_password")]
 
 def check_inputs(inputs):
@@ -877,6 +883,16 @@ def keep_the_password_file(home, inputs, reasons):
             return True, failed("reading " + path + ": " + read.error)
         content = read.content
     wanted, replicator_differed = wanted_password_file(content, inputs)
+    marker = home + REPLICATION_PASSWORD_NOT_SET_YET
+    pending = inspect_path(marker)
+    if pending.error:
+        return True, failed("inspecting " + marker + ": " + pending.error)
+    if pending.exists:
+        replicator_differed = True
+    elif replicator_differed and ":pgautofailover_replicator:" in content:
+        marked = write_file(marker, "", owner = "root", group = "root", permissions_mode = "0600")
+        if marked.error:
+            return True, failed("writing " + marker + ": " + marked.error)
     if found.exists and content == wanted and found.owner == ACCOUNT and found.group == ACCOUNT and found.permissions_mode == "0600":
         return replicator_differed, None
     new = path + ".mmx-new"
@@ -1098,6 +1114,10 @@ def run_node_task(inputs):
         failure = make_the_replication_password_work(binaries, inputs, created or replicator_differed, reasons)
         if failure:
             return failed_after_creation(failure, created)
+    # Only the primary sets the password; PostgreSQL copies it to the others.
+    failure = forget_that_the_replication_password_is_not_set(home)
+    if failure:
+        return failed_after_creation(failure, created)
 
     for setting_name, key, wanted, text in [
         ("candidate-priority", "candidate_priority", inputs["candidate_priority"], str(inputs["candidate_priority"])),
@@ -1163,6 +1183,20 @@ def run_node_task(inputs):
     if reasons:
         result["reason"] = "; ".join(reasons)
     return result
+
+def forget_that_the_replication_password_is_not_set(home):
+    """Removes the file REPLICATION_PASSWORD_NOT_SET_YET once the primary has
+    set the replication password, or the node is not the primary. Returns
+    the failed result or None."""
+    marker = home + REPLICATION_PASSWORD_NOT_SET_YET
+    found = inspect_path(marker)
+    if found.error:
+        return failed("inspecting " + marker + ": " + found.error)
+    if found.exists:
+        removed = remove_path(marker)
+        if removed.error:
+            return failed("removing " + marker + ": " + removed.error)
+    return None
 
 def make_the_replication_password_work(binaries, inputs, unknown, reasons):
     """Sets the password of pgautofailover_replicator on the primary, so that

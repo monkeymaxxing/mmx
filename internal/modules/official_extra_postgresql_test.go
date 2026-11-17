@@ -848,6 +848,30 @@ func TestOfficialExtraPgAutoFailoverNode(t *testing.T) {
 	r := reportedByTheEngine(Runtime{}.Starlark(testContext(t), "pg_auto_failover_node", node.module("pg_auto_failover_node"), inputs, scope), scope)
 	r.Reason = node.real(r.Reason)
 	expectResult(t, r, "succeeded", "changed", wrote+"; set the password of pgautofailover_replicator on the primary db01")
+
+	// A try that writes a new replication password into the file and fails
+	// before the primary sets it: the next try still sets it.
+	scope, _ = taskScope(map[string]string{"autoctl_node_password": autoctlPasswordForTests, "replication_password": "Sentinel newer"})
+	stateStub := filepath.Join(node.stubs, "state.json")
+	if err := os.Rename(stateStub, stateStub+".away"); err != nil {
+		t.Fatal(err)
+	}
+	r = reportedByTheEngine(Runtime{}.Starlark(testContext(t), "pg_auto_failover_node", node.module("pg_auto_failover_node"), inputs, scope), scope)
+	if r.Status != "failed" {
+		t.Fatalf("%+v", r)
+	}
+	if err := os.Rename(stateStub+".away", stateStub); err != nil {
+		t.Fatal(err)
+	}
+	r = reportedByTheEngine(Runtime{}.Starlark(testContext(t), "pg_auto_failover_node", node.module("pg_auto_failover_node"), inputs, scope), scope)
+	r.Reason = node.real(r.Reason)
+	expectResult(t, r, "succeeded", "changed", "set the password of pgautofailover_replicator on the primary db01")
+	if got := node.read(filepath.Join(node.stubs, "psql_input")); !strings.Contains(got, "\\password pgautofailover_replicator\nSentinel newer\nSentinel newer") {
+		t.Errorf("psql read %q", got)
+	}
+	if _, err := os.Stat(passwordFile + ".mmx-replication-password-not-set-yet"); !os.IsNotExist(err) {
+		t.Errorf("the file that says the password is not set yet is left: %v", err)
+	}
 	// The file holds the new password again for the steps below.
 	node.calls()
 
