@@ -376,8 +376,10 @@ The following rules do not count:
 - routed and outgoing rules, because routed and outgoing rules never admit
   traffic to the node's own sshd.
 
-A `deny` or `reject` rule naming the SSH port follows the same source and
-interface checks. A matching blocking rule before every counted allowance
+A `deny` or `reject` rule naming the SSH port, or naming no port at all
+(such as `{action: deny, incoming_interface: eth0}`), follows the same
+source and interface checks: a blocking rule without a port blocks every
+port. A matching blocking rule before every counted allowance
 blocks the change. An omitted source or interface imposes no restriction on
 that part of the check. The error names the SSH source address or explains
 why MMX cannot know the source, and gives an example incoming rule to add.

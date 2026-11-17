@@ -677,6 +677,12 @@ func TestUFWSafeguardAdmitsOnlyTheControllerConnection(t *testing.T) {
 		{"deny matching interface", "10.20.0.1", "127.0.0.1", []ufwRule{{action: "deny", target: onLoopback}, allow}, "before any rule that would allow SSH"},
 		{"deny other interface", "10.20.0.1", "192.0.2.99", []ufwRule{{action: "deny", target: onLoopback}, allow}, ""},
 		{"deny matching interface excludes source", "10.20.0.2", "127.0.0.1", []ufwRule{{action: "reject", target: onLoopback}, allow}, ""},
+		// A deny or reject without a port covers every port, sshd's too.
+		{"deny matching interface without a port", "10.20.0.1", "127.0.0.1", []ufwRule{{action: "deny", target: "in on " + loopback + " proto tcp"}, allow}, "before any rule that would allow SSH"},
+		{"reject from the controller without a port", "10.20.0.1", "", []ufwRule{{action: "reject", target: "from 10.20.0.0/24"}, allow}, "before any rule that would allow SSH"},
+		{"deny other interface without a port", "10.20.0.1", "192.0.2.99", []ufwRule{{action: "deny", target: "in on " + loopback}, allow}, ""},
+		{"deny other source without a port", "10.20.0.1", "", []ufwRule{{action: "deny", target: "from 10.20.9.0/24"}, allow}, ""},
+		{"deny UDP from the controller without a port", "10.20.0.1", "", []ufwRule{{action: "deny", target: "from 10.20.0.1 proto udp"}, allow}, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := (Runtime{ControllerConnection: ControllerConnection{Kind: protocol.ConnectionSSH, SourceAddress: test.source}}).ufwSafeguard(context.Background(), ufwPlan{}, ufwState{active: true, incoming: "deny", rules: test.rules}, test.nodeAddress)

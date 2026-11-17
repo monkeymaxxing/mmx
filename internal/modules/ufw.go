@@ -618,7 +618,8 @@ func (run Runtime) ufwSafeguard(ctx context.Context, p ufwPlan, s ufwState, node
 	mismatch := ""
 	for _, r := range ufwResultingRules(p, s) {
 		for _, port := range ports {
-			if !ufwTCPPort(r.target, port) {
+			blocking := r.action == "deny" || r.action == "reject"
+			if !ufwTCPPort(r.target, port) && !(blocking && ufwEveryTCPPort(r.target)) {
 				continue
 			}
 			if reason := run.ufwSSHRuleMismatch(r, nodeInventoryAddress, port); reason != "" {
@@ -816,6 +817,23 @@ func sshdPorts(ctx context.Context) ([]int, error) {
 		return nil, fmt.Errorf("sshd -T reports no listening port")
 	}
 	return ports, nil
+}
+
+// ufwEveryTCPPort reports whether an incoming rule target names no port and
+// no protocol other than TCP, such as "in on eth0" or "from 10.0.0.0/8 proto
+// tcp": the rule covers every TCP port. Only a deny or reject counts this way;
+// an allowance must name sshd's port.
+func ufwEveryTCPPort(target string) bool {
+	fields := strings.Fields(target)
+	if len(fields) == 0 || fields[0] != "in" && fields[0] != "from" {
+		return false // the short form "22/tcp" always names a port
+	}
+	for i, field := range fields {
+		if field == "port" || field == "proto" && i+1 < len(fields) && fields[i+1] != "tcp" {
+			return false
+		}
+	}
+	return true
 }
 
 // ufwTCPPort reports whether a rule target in the forms Target writes names
