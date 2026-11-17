@@ -103,8 +103,14 @@ sed -i '/^%VERSION%/{{n;s/.*/{version}/}}' /var/lib/pacman/local/{package}-{vers
         assert installed()[package] == version
 
     assert remote('command -v pacman') == '/usr/bin/pacman'
+    # An earlier suite on this guest may have left some of the suite's
+    # packages: vm.py's test installs nginx on a node without apt.
+    suite_packages = {'nginx', 'nginx-mod-stream', 'mailcap', 'tree'}
+    left_by_earlier_suites = sorted(suite_packages & set(installed()))
+    if left_by_earlier_suites:
+        remote('systemctl disable --now nginx 2>/dev/null || true\npacman -Rns --noconfirm ' + ' '.join(left_by_earlier_suites))
     packages_before = set(installed())
-    assert not {'nginx', 'nginx-mod-stream', 'mailcap', 'tree'} & packages_before, 'the guest already has a package of the suite'
+    assert not suite_packages & packages_before, 'the guest still has a package of the suite'
     try:
         # A missing package: the dryrun previews the transaction and changes
         # nothing; the run installs it with a full system upgrade. The
