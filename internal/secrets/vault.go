@@ -77,6 +77,15 @@ func passwordFile(path string, warn io.Writer) (string, error) {
 	}
 	return password, nil
 }
+
+// newVaultPassphrasePrompt asks for the passphrase of a vault that does not
+// exist yet. The person chooses it now, and a lost one cannot be recovered.
+const newVaultPassphrasePrompt = "You are creating a new vault. Choose its passphrase now, and keep it safe, such as in a password manager.\n" +
+	"Nobody can open the vault without the passphrase, and MMX cannot recover a lost one.\n" +
+	"New vault passphrase: "
+
+// Password returns the vault passphrase; confirm is for a new vault, whose
+// passphrase the prompt asks for twice.
 func (s *Store) Password(confirm bool) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -104,10 +113,14 @@ func (s *Store) Password(confirm bool) (string, error) {
 			if !s.Interactive || s.Prompt == nil {
 				return "", fmt.Errorf("vault passphrase required; use --vault-password-file, MMX_VAULT_PASSWORD_FILE, or MMX_VAULT_PASSWORD (prompts are disabled)")
 			}
-			password, err = s.Prompt("Vault passphrase: ")
+			label := "Vault passphrase: "
+			if confirm {
+				label = newVaultPassphrasePrompt
+			}
+			password, err = s.Prompt(label)
 			if err == nil && confirm {
 				var again string
-				again, err = s.Prompt("Confirm vault passphrase: ")
+				again, err = s.Prompt("Confirm new vault passphrase: ")
 				if err == nil && password != again {
 					err = fmt.Errorf("vault passphrases do not match")
 				}

@@ -76,8 +76,9 @@ from environment variables, and keep a separate vault for staging.
 
    You can type the passphrase instead: leave out the file and the
    `export` line. Then each command that opens the vault at a terminal asks
-   `Vault passphrase:`, and a command that creates the vault also asks
-   `Confirm vault passphrase:`. `mmx secrets set` with `<` or a pipe cannot
+   `Vault passphrase:`. A command that creates the vault says that you
+   choose the passphrase now and must keep it, then asks
+   `New vault passphrase:` and `Confirm new vault passphrase:`. `mmx secrets set` with `<` or a pipe cannot
    ask, so it needs the file or an environment variable. A coding agent
    needs the file, or the environment variable of
    [Run without a terminal](#run-without-a-terminal).

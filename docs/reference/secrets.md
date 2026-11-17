@@ -122,8 +122,10 @@ set:
   command has neither `--non-interactive` nor `--json`. Otherwise a missing
   source fails the command with
   `vault passphrase required; use --vault-password-file, MMX_VAULT_PASSWORD_FILE, or MMX_VAULT_PASSWORD (prompts are disabled)`.
-  A command that creates a vault from the prompt asks a second time,
-  `Confirm vault passphrase:`.
+  A command that creates a vault from the prompt first says that you
+  choose the passphrase now, and keep it, such as in a password manager,
+  because MMX cannot recover a lost one. It then asks
+  `New vault passphrase:` and `Confirm new vault passphrase:`.
 - **Which commands unlock.** Commands that do work on nodes, such as
   `mmx run`, `mmx dryrun`, `mmx resume`, and `mmx run-command`, unlock the
   vault once for each command, and only when the work reads a secret from

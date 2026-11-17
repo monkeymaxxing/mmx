@@ -159,9 +159,16 @@ func TestPasswordSourcesAndNoFallback(t *testing.T) {
 		t.Fatal(v, err)
 	}
 	os.Unsetenv("MMX_VAULT_PASSWORD")
-	v, err = (&Store{Interactive: true, Prompt: s.Prompt}).Password(true)
+	var labels []string
+	v, err = (&Store{Interactive: true, Prompt: func(label string) (string, error) { labels = append(labels, label); return s.Prompt(label) }}).Password(true)
 	if err != nil || v != "prompted" || prompted != 2 {
 		t.Fatal(v, err, prompted)
+	}
+	// A new vault's prompt says that the person chooses the passphrase now
+	// and must keep it.
+	if len(labels) != 2 || labels[0] != "You are creating a new vault. Choose its passphrase now, and keep it safe, such as in a password manager.\nNobody can open the vault without the passphrase, and MMX cannot recover a lost one.\nNew vault passphrase: " ||
+		labels[1] != "Confirm new vault passphrase: " {
+		t.Fatalf("new vault prompts: %q", labels)
 	}
 	if _, err = (&Store{}).Password(false); err == nil || !strings.Contains(err.Error(), "--vault-password-file") {
 		t.Fatal(err)
