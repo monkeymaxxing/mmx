@@ -327,7 +327,9 @@ done''').stdout
         self.setup_listeners()
         for mode in ('ssh_only', 'https_with_ssh_fallback'):
             with self.case('accepted-' + ('ssh' if mode == 'ssh_only' else 'https'), mode):
-                self.project()
+                # Arming the restore and activating the change can take several seconds on a
+                # loaded test server; 8 s left the confirmation too little time twice.
+                self.project(duration='20s')
                 result = self.command('run')
                 response = result['entries'][0]['response']
                 self.require(response['status'] == 'succeeded' and response['results'][-1]['change'] == 'changed',

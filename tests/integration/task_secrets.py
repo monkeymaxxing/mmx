@@ -487,11 +487,12 @@ def secret_key_commands(workspace, mmx, env, remote, scan, mark, secret_values):
          'Git commit, and usage name keys and places, never a value')
 
     # mmx secrets set takes a value from a pipe, without its final line ending, and replaces a key only with
-    # --replace; the next run delivers the new value. It prints nothing.
+    # --replace; the next run delivers the new value. It names the key and the vault it saved, never the value.
     secret_values.extend(['fixture-set-from-a-pipe', 'fixture-set-at-the-prompt'])
     assert secrets('set', 'session_cookie_secret', value='fixture-set-from-a-pipe\n', expected=4) == '', shown[-1]
     assert 'the vault already has the key session_cookie_secret; to replace its value, add --replace' in shown[-1], shown[-1]
-    assert secrets('set', 'session_cookie_secret', '--replace', value='fixture-set-from-a-pipe\n') == '' and shown[-1] == '', shown[-1]
+    saved = 'Saved the key session_cookie_secret in the vault secrets_vault.age. MMX does not show the value.\n'
+    assert secrets('set', 'session_cookie_secret', '--replace', value='fixture-set-from-a-pipe\n') == saved and shown[-1] == saved, shown[-1]
     result = subprocess.run([str(mmx), 'run', 'cookie', '--json'], cwd=workspace, env=env, capture_output=True, text=True, timeout=180)
     shown.append(result.stdout + result.stderr)
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
