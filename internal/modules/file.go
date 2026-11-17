@@ -619,7 +619,7 @@ var fileDescription = Description{
 		{Name: "content", Notes: "inline text; one of content, template, source, or content_from_node_paths"},
 		{Name: "template", Notes: "local Go template, relative to the project root, or to the role's directory inside a role; one of content, template, source, or content_from_node_paths"},
 		{Name: "source", Notes: "local file copied byte for byte, relative to the project root, or to the role's directory inside a role; one of content, template, source, or content_from_node_paths"},
-		{Name: "content_from_node_paths", Notes: "absolute paths on the node; the new content is their bytes in the listed order; links are followed and each must be a regular file; previews show SHA-256 values, never the text; a missing path is not checked in dryrun"},
+		{Name: "content_from_node_paths", Notes: "absolute paths on the node; the new content is their bytes in the listed order; a link at the end of a path is followed only when root owns the link, and each must be a regular file; previews show SHA-256 values, never the text; a missing path is not checked in dryrun"},
 		{Name: "owner", Type: "account name or integer", Notes: "an account name, or a numeric ID written without quotes"},
 		{Name: "group", Type: "group name or integer", Notes: "a group name, or a numeric ID written without quotes"},
 		{Name: "permissions_mode", Notes: `quoted octal, as chmod writes it, such as "0644"; may read a reference; required with content, template, source, or content_from_node_paths; optional for metadata only`},

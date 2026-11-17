@@ -39,7 +39,7 @@ file writable only by root.
 - `content` (string; optional): inline text; one of content, template, source, or content_from_node_paths
 - `template` (string; optional): local Go template, relative to the project root, or to the role's directory inside a role; one of content, template, source, or content_from_node_paths
 - `source` (string; optional): local file copied byte for byte, relative to the project root, or to the role's directory inside a role; one of content, template, source, or content_from_node_paths
-- `content_from_node_paths` (list of strings; optional): absolute paths on the node; the new content is their bytes in the listed order; links are followed and each must be a regular file; previews show SHA-256 values, never the text; a missing path is not checked in dryrun
+- `content_from_node_paths` (list of strings; optional): absolute paths on the node; the new content is their bytes in the listed order; a link at the end of a path is followed only when root owns the link, and each must be a regular file; previews show SHA-256 values, never the text; a missing path is not checked in dryrun
 - `owner` (account name or integer; optional): an account name, or a numeric ID written without quotes
 - `group` (group name or integer; optional): a group name, or a numeric ID written without quotes
 - `permissions_mode` (string; optional): quoted octal, as chmod writes it, such as "0644"; may read a reference; required with content, template, source, or content_from_node_paths; optional for metadata only
@@ -176,8 +176,10 @@ one path copies the named file's bytes unchanged:
     permissions_mode: "0600"
 ```
 
-Each path is absolute. MMX follows links, as certbot's `live` directory
-uses, and each path must end at a regular file. Otherwise this is an ordinary
+Each path is absolute. MMX follows a link at the end of a path only when
+root owns the link, as certbot's `live` links are, and each path must end at
+a regular file. A link that another account owns fails the node task: that
+account could point the link at a file only root may read. Otherwise this is an ordinary
 `file` node task: MMX compares, runs `check_new_file`, installs atomically, and
 sets the metadata. In a node task block, the destination is a tracked input,
 so a renewed certificate reloads or restarts the block's service on the next

@@ -96,3 +96,49 @@ func TestReadFileRefusesMissingLargeAndSpecialFiles(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+// read_file and content_from_node_paths read as root. An account that can
+// write the directory of the path could put a link there to a file only
+// root may read, so a link at the end of the path is followed only when root
+// owns it, as the links of the system's own packages are.
+func TestNodeFileReadsFollowOnlyLinksThatRootOwns(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("every link a test makes as root belongs to root")
+	}
+	dir := t.TempDir()
+	private := filepath.Join(t.TempDir(), "shadow")
+	if err := os.WriteFile(private, []byte("root:secret-hash\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "token")
+	if err := os.Symlink(private, link); err != nil {
+		t.Fatal(err)
+	}
+	r := (Runtime{}).readFileTask(context.Background(), readFile(link, false))
+	if r.Status != "failed" || !strings.Contains(r.Reason, "symbolic link that account ID") || strings.Contains(r.Reason, "secret-hash") || r.Content != nil {
+		t.Fatalf("%+v", r)
+	}
+	target := filepath.Join(dir, "site.pem")
+	f := File{Path: target, Mode: "0644", ContentFromNodePaths: []string{link}}
+	if r := (Runtime{}).File(context.Background(), f, value.Scope{}); r.Status != "failed" || !strings.Contains(r.Reason, "symbolic link that account ID") {
+		t.Fatalf("%+v", r)
+	}
+	if _, err := os.Stat(target); err == nil {
+		t.Fatal("the file was written from the link's target")
+	}
+	// The file itself, and a link that root owns, are read.
+	if r := (Runtime{}).readFileTask(context.Background(), readFile(private, false)); r.Status != "succeeded" || r.Content != "root:secret-hash\n" {
+		t.Fatalf("%+v", r)
+	}
+	for _, system := range []string{"/etc/os-release", "/etc/localtime"} {
+		info, err := os.Lstat(system)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		if content, err := ReadNodeFile(system); err != nil || content == nil {
+			t.Fatalf("%s: %v", system, err)
+		}
+		return
+	}
+	t.Log("no root-owned system link to read on this machine")
+}

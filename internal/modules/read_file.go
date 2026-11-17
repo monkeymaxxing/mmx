@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"syscall"
 	"unicode/utf8"
@@ -38,12 +39,12 @@ func (run Runtime) readFileTask(ctx context.Context, r ReadFile) protocol.Result
 }
 
 // ReadNodeFile returns the content of the regular file at path, following
-// links, up to ReadFileLimit: a string when it is UTF-8 text, otherwise
-// value.Binary. For a missing file, errors.Is(err, os.ErrNotExist) holds. The
-// read_file module and a resume that reads a read_file secret again both use it.
+// links that root owns (openNodeFile), up to ReadFileLimit: a string when it
+// is UTF-8 text, otherwise value.Binary. For a missing file,
+// errors.Is(err, os.ErrNotExist) holds. The read_file module and a resume
+// that reads a read_file secret again both use it.
 func ReadNodeFile(path string) (any, error) {
-	// O_NONBLOCK: opening a named pipe must not wait for a writer.
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := openNodeFile(path)
 	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 		return nil, fmt.Errorf("%w: %s", os.ErrNotExist, path)
 	}
@@ -75,6 +76,39 @@ func ReadNodeFile(path string) (any, error) {
 	return string(b), nil
 }
 
+// openNodeFile opens the file at path for reading, as root. A symbolic link
+// at the end of path, and at the end of each link's target in turn, is
+// followed only when root owns the link: an account that can write the
+// directory could otherwise put a link there to a file only root may read,
+// such as /etc/shadow, and get that file's text through the task. Links that
+// the system's own packages make, such as /etc/os-release and certbot's
+// live/ links, belong to root. A link in a directory above the file is
+// followed as the kernel follows it.
+func openNodeFile(path string) (*os.File, error) {
+	current := path
+	for range 40 {
+		// O_NONBLOCK: opening a named pipe must not wait for a writer.
+		file, err := os.OpenFile(current, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
+		if !errors.Is(err, syscall.ELOOP) {
+			return file, err
+		}
+		owner, target, isLink, linkErr := symbolicLink(current)
+		switch {
+		case linkErr != nil:
+			return nil, linkErr
+		case !isLink:
+			continue // replaced since the open: open it again
+		case owner != 0:
+			return nil, fmt.Errorf("%s is a symbolic link that account ID %d owns; MMX reads a file through a link only when root owns the link, so that another account cannot point it at a file such as /etc/shadow. Give the path of the file itself, or let root own the link", current, owner)
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(current), target)
+		}
+		current = target
+	}
+	return nil, fmt.Errorf("%s: too many levels of symbolic links", path)
+}
+
 // ReadFile reads one file on the node so that a later node task, or through a
 // fleet stage output another node, can use its content.
 type ReadFile struct {
@@ -102,7 +136,7 @@ var readFileDescription = Description{
 	Name: "read_file", Topic: TopicFilesAndLinks, Schema: reflect.TypeOf(ReadFile{}),
 	Summary: "reads one file on the node, so a later node task or, through a fleet stage output, another node can use its content",
 	Fields: []Field{
-		{Name: "path", Required: true, Notes: "absolute path of a regular file up to 1 MiB; links are followed"},
+		{Name: "path", Required: true, Notes: "absolute path of a regular file up to 1 MiB; a link at the end of the path is followed only when root owns the link"},
 		{Name: "content_is_secret", Required: true, Notes: "true when the file holds a secret, such as a token or a key: the content is never printed or saved, an output made from it is secret too, and mmx resume reads the file again from this node when later work needs it; false otherwise"},
 	},
 	Example: "- id: join_token\n  read_file:\n    path: /var/lib/rancher/k3s/server/token\n    content_is_secret: true\n",

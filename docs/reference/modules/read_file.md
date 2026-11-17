@@ -10,7 +10,7 @@ MMX has no separate `fetch` module.
 
 ## Inputs
 
-- `path` (string; required): absolute path of a regular file up to 1 MiB; links are followed
+- `path` (string; required): absolute path of a regular file up to 1 MiB; a link at the end of the path is followed only when root owns the link
 - `content_is_secret` (boolean; required): true when the file holds a secret, such as a token or a key: the content is never printed or saved, an output made from it is secret too, and mmx resume reads the file again from this node when later work needs it; false otherwise
 
 ## Outputs
@@ -66,8 +66,14 @@ handles the secret content.
 `read_file` changes nothing and reports unchanged, so it also runs during
 `mmx dryrun`.
 
-- `path` is an absolute path of a regular file of at most 1 MiB. Links are
-  followed. A directory, a device, or a larger file fails the node task.
+- `path` is an absolute path of a regular file of at most 1 MiB. A
+  directory, a device, or a larger file fails the node task.
+- A symbolic link at the end of `path` is followed only when root owns
+  the link, as the links of the system's own packages are, such as
+  `/etc/os-release` and certbot's `live/` links. A link that another
+  account owns fails the node task: that account could point the link at
+  a file only root may read, such as `/etc/shadow`. Give the path of the
+  file itself.
 - A missing file fails the node task. During dryrun, the `read_file` node
   task reports `not_checked`, because an earlier node task of the run may
   still create the missing file.

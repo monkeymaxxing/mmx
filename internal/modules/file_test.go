@@ -219,8 +219,9 @@ func TestFileKeepsExistingContent(t *testing.T) {
 	}
 }
 
-// content_from_node_paths joins files on the node, following links. Results
-// show SHA-256 values instead of the text, which may be a private key.
+// content_from_node_paths joins files on the node. Results show SHA-256
+// values instead of the text, which may be a private key. Links are in
+// TestNodeFileReadsFollowOnlyLinksThatRootOwns.
 func TestFileContentFromNodePaths(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -231,15 +232,12 @@ func TestFileContentFromNodePaths(t *testing.T) {
 	}
 	put("fullchain.pem", "CERTIFICATE\n")
 	put("privkey.pem", "PRIVATE KEY\n")
-	if err := os.Symlink("privkey.pem", filepath.Join(dir, "key-link.pem")); err != nil {
-		t.Fatal(err)
-	}
 	path := filepath.Join(dir, "site.pem")
 	put("site.pem", "old\n")
 	if err := os.Chmod(path, 0644); err != nil {
 		t.Fatal(err)
 	}
-	f := File{Path: path, Mode: "0644", ContentFromNodePaths: []string{filepath.Join(dir, "fullchain.pem"), filepath.Join(dir, "key-link.pem")}}
+	f := File{Path: path, Mode: "0644", ContentFromNodePaths: []string{filepath.Join(dir, "fullchain.pem"), filepath.Join(dir, "privkey.pem")}}
 	preview := (Runtime{Dryrun: true}).File(context.Background(), f, value.Scope{})
 	c := preview.FileChange
 	if preview.Change != "would_change" || c == nil || c.Diff != "" || c.FullDiff != nil || !strings.Contains(c.DiffOmitted, "sha256") ||

@@ -141,8 +141,10 @@ one path copies the named file's bytes unchanged:
     permissions_mode: "0600"
 ```
 
-Each path is absolute. MMX follows links, as certbot's `live` directory
-uses, and each path must end at a regular file. Otherwise this is an ordinary
+Each path is absolute. MMX follows a link at the end of a path only when
+root owns the link, as certbot's `live` links are, and each path must end at
+a regular file. A link that another account owns fails the node task: that
+account could point the link at a file only root may read. Otherwise this is an ordinary
 `file` node task: MMX compares, runs `check_new_file`, installs atomically, and
 sets the metadata. In a node task block, the destination is a tracked input,
 so a renewed certificate reloads or restarts the block's service on the next

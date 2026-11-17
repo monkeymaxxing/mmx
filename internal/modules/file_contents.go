@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"syscall"
 
 	"mmx/internal/assets"
 	"mmx/internal/value"
@@ -71,8 +70,8 @@ func OpenFileContents(f File, s value.Scope) (*FileContents, error) {
 	return &FileContents{ReadSeeker: strings.NewReader(text), Size: int64(len(text))}, nil
 }
 
-// openNodePaths opens files on the node, following links, as one content: their
-// bytes in order. Each path must resolve to a regular file; a missing one
+// openNodePaths opens files on the node, following links that root owns
+// (openNodeFile), as one content: their bytes in order. Each path must resolve to a regular file; a missing one
 // returns an error for which errors.Is(err, os.ErrNotExist) holds.
 func openNodePaths(paths []string) (*FileContents, error) {
 	var parts nodeFiles
@@ -84,8 +83,7 @@ func openNodePaths(paths []string) (*FileContents, error) {
 		return err
 	}
 	for _, path := range paths {
-		// O_NONBLOCK: opening a named pipe must not wait for a writer.
-		file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+		file, err := openNodeFile(path)
 		if err != nil {
 			// These are read-only input files, so closing them cannot lose managed writes.
 			_ = closeAll()
