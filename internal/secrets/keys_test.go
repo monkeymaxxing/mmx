@@ -378,6 +378,22 @@ func TestANestedSecretGoesIntoItsMappingAndNothingElseChanges(t *testing.T) {
 			"files:\n  user: sentinel-one\n  ca.pem: \"Zx9new\"\n"},
 		"a name of digits is quoted, so that it stays text": {"", "files 2026",
 			"files:\n  \"2026\": \"Zx9new\"\n"},
+		"an empty mapping written as its name alone": {"files:\nzeta: sentinel-two\n", "files password",
+			"files:\n  password: \"Zx9new\"\nzeta: sentinel-two\n"},
+		"an empty mapping with comments under it": {"files:\n  # slack-webhook-team: \"https://...\"\n  # another-file: \"...\"\n\n# Next\nzeta: sentinel-two\n", "files password",
+			"files:\n  # slack-webhook-team: \"https://...\"\n  # another-file: \"...\"\n  password: \"Zx9new\"\n\n# Next\nzeta: sentinel-two\n"},
+		"an empty mapping written as {}, with a comment": {"files: {} # the files\nzeta: sentinel-two\n", "files password",
+			"files: # the files\n  password: \"Zx9new\"\nzeta: sentinel-two\n"},
+		"an empty mapping written as {} at the end": {"files: {}", "files password",
+			"files:\n  password: \"Zx9new\"\n"},
+		"an empty mapping written as null": {"files: null\n", "files password",
+			"files:\n  password: \"Zx9new\"\n"},
+		"an empty mapping inside a mapping": {"service:\n  tls:\n  user: sentinel-one\n", "service tls key",
+			"service:\n  tls:\n    key: \"Zx9new\"\n  user: sentinel-one\n"},
+		"the vault that mmx secrets edit starts": {newVaultText, "mmwatchdog_secret_files slack-webhook-team",
+			newVaultText + "mmwatchdog_secret_files:\n  slack-webhook-team: \"Zx9new\"\n"},
+		"MMWatchdog's documented shape, before its first file": {newVaultText + "mmwatchdog_secret_files:\n", "mmwatchdog_secret_files smtp-password",
+			newVaultText + "mmwatchdog_secret_files:\n  smtp-password: \"Zx9new\"\n"},
 		"depth 3, all new": {"", "service tls key",
 			"service:\n  tls:\n    key: \"Zx9new\"\n"},
 		"depth 3, a new mapping inside a mapping": {"service:\n  user: sentinel-one\nzeta: sentinel-two\n", "service tls key",
@@ -443,7 +459,7 @@ func TestNestedSetRefusalsSayWhatToDoAndKeepTheVault(t *testing.T) {
 	cleanEnvironment(t)
 	const password = "nested set test passphrase"
 	path := filepath.Join(t.TempDir(), "secrets.age")
-	original := quickVault(t, path, password, "token: sentinel-value\nports:\n  - sentinel-value\nflow: {user: sentinel-value}\nfiles:\n  user: sentinel-value\n  deeper:\n    leaf: sentinel-value\n")
+	original := quickVault(t, path, password, "token: sentinel-value\nports:\n  - sentinel-value\nnone: []\nflag: true\nflow: {user: sentinel-value}\nfiles:\n  user: sentinel-value\n  deeper:\n    leaf: sentinel-value\n")
 	asked := 0
 	value := func() (string, error) { asked++; return "Zx9new", nil }
 	for name, tc := range map[string]struct {
@@ -453,7 +469,11 @@ func TestNestedSetRefusalsSayWhatToDoAndKeepTheVault(t *testing.T) {
 	}{
 		"a parent that holds a value": {[]string{"token", "smtp-password"}, false,
 			"the vault's token holds a value, not names, so smtp-password cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of token"},
-		"a parent that holds a list": {[]string{"ports", "first"}, true, "the vault's ports holds a value, not names"},
+		"a parent that holds a list": {[]string{"ports", "first"}, true,
+			"the vault's ports holds a list, not names, so first cannot go inside it. To keep the list, choose another secret key; to give ports names instead, run mmx secrets edit and replace the list with the names, one per line below ports, each indented by two spaces"},
+		"a parent that holds an empty list": {[]string{"none", "first"}, true,
+			"the vault's none holds a list, not names, so first cannot go inside it. To keep the list, choose another secret key; to give none names instead, run mmx secrets edit and replace the list with the names"},
+		"a parent that holds true": {[]string{"flag", "first"}, true, "the vault's flag holds a value, not names"},
 		"a parent at depth 2 that holds a value": {[]string{"files", "user", "first"}, true,
 			"the vault's files user holds a value, not names, so first cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of files user"},
 		"a parent written inside braces": {[]string{"flow", "password"}, true,

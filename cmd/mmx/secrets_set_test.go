@@ -147,6 +147,22 @@ func TestSecretsSetRefusalsKeepTheVaultAndShowNoValue(t *testing.T) {
 	}
 }
 
+// A vault that holds the inventory's list by mistake, as
+// mmwatchdog_secret_files: [], refuses a name inside it and says what to do.
+func TestSecretsSetRefusesANameInsideAList(t *testing.T) {
+	root, passwordFile := secretsProject(t)
+	vault := filepath.Join(root, "secrets_vault.age")
+	quickVault(t, vault, vaultTestPassphrase, "mmwatchdog_secret_files: []\n")
+	original, _ := os.ReadFile(vault)
+	stdout, stderr, code := secretsOutputFromInput(t, "sentinel-token-value\n", "set", "mmwatchdog_secret_files", "smtp-password", "--vault-password-file", passwordFile)
+	if code != 4 || stdout != "" || stderr != "mmx: the vault's mmwatchdog_secret_files holds a list, not names, so smtp-password cannot go inside it. To keep the list, choose another secret key; to give mmwatchdog_secret_files names instead, run mmx secrets edit and replace the list with the names, one per line below mmwatchdog_secret_files, each indented by two spaces\n" {
+		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
+	}
+	if now, _ := os.ReadFile(vault); !bytes.Equal(now, original) {
+		t.Fatal("the refused command changed the vault")
+	}
+}
+
 // A run reads a key that secrets_from_env binds from the environment
 // variable, so a value for it in the vault would never be read. The refusal
 // comes before the vault is unlocked: it needs no passphrase.

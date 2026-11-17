@@ -171,6 +171,11 @@ type vaultPlace struct {
 	written []string
 	// existed says that the vault has the secret.
 	existed bool
+	// emptyParentLine, when it is not nil, replaces the line of an empty
+	// mapping written as {} or null, so that the new lines can go below it.
+	emptyParentLine []byte
+	// emptyParentAt is the index of that line in lines.
+	emptyParentAt int
 }
 
 // placeOf finds where the secret at keyPath goes in text, which ends with a
@@ -184,9 +189,14 @@ type vaultPlace struct {
 //     line, with the mappings below it.
 //   - A name that a mapping below the top does not have: after the
 //     mapping's last line, with the indentation of the mapping's names.
+//   - A name inside an empty level, written as "parent:" alone, "parent: {}",
+//     or "parent: null", as a vault often starts: below the level's line and
+//     the comment lines indented below it, two spaces further in. {} and
+//     null are removed from the level's line.
 //
-// A level that holds a value, or that is written inside { }, is refused,
-// since a name cannot go into it as a line.
+// A level that holds a value, such as text, a number, or a list, or that
+// holds names written inside { }, is refused, since a name cannot go into
+// it as a line.
 func placeOf(text []byte, keyPath []string) (vaultPlace, error) {
 	lines := bytes.SplitAfter(text, []byte("\n"))
 	var document yaml.Node
@@ -223,15 +233,52 @@ func placeOf(text []byte, keyPath []string) (vaultPlace, error) {
 		}
 		value := mapping.Content[at+1]
 		holder := KeyPathText(keyPath[:depth+1])
+		if empty := value.Kind == yaml.MappingNode && len(value.Content) == 0 || value.Kind == yaml.ScalarNode && value.ShortTag() == "!!null"; empty {
+			return emptyParentPlace(lines, nameLine, next, indent, value, holder, keyPath[depth+1:])
+		}
+		if value.Kind == yaml.SequenceNode {
+			return vaultPlace{}, fmt.Errorf("the vault's %s holds a list, not names, so %s cannot go inside it. To keep the list, choose another secret key; to give %s names instead, run mmx secrets edit and replace the list with the names, one per line below %s, each indented by two spaces", holder, keyPath[depth+1], holder, holder)
+		}
 		if value.Kind != yaml.MappingNode {
 			return vaultPlace{}, fmt.Errorf("the vault's %s holds a value, not names, so %s cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of %s", holder, keyPath[depth+1], holder)
 		}
-		if value.Style&yaml.FlowStyle != 0 || len(value.Content) == 0 {
+		if value.Style&yaml.FlowStyle != 0 {
 			return vaultPlace{}, fmt.Errorf("the vault writes the names of %s inside { }, and MMX adds a name only between names written one per line. Run mmx secrets edit and write the names of %s one per line below it, each indented by two spaces", holder, holder)
 		}
 		mapping, limit, indent = value, next, value.Content[0].Column-1
 	}
 	panic("unreachable: the loop returns at the last word of the key path")
+}
+
+// emptyParentPlace is the place of written inside the empty level holder,
+// whose name is on lines[nameLine] with indent spaces before it; the level's
+// lines end before lines[next]. The new lines go below the comment lines
+// that are indented below the name.
+func emptyParentPlace(lines [][]byte, nameLine, next, indent int, value *yaml.Node, holder string, written []string) (vaultPlace, error) {
+	place := vaultPlace{indent: indent + 2, written: written}
+	if value.Value != "" || value.Kind == yaml.MappingNode {
+		// {} or null: the line keeps the name and a comment after the value.
+		if value.Line-1 != nameLine {
+			return vaultPlace{}, fmt.Errorf("the vault writes the empty value of %s on a line of its own; run mmx secrets edit, remove that line, and write the names one per line below %s, each indented by two spaces", holder, holder)
+		}
+		line := lines[nameLine]
+		rewritten := bytes.TrimRight(bytes.Clone(line[:value.Column-1]), " \t")
+		if comment := bytes.IndexByte(line[value.Column-1:], '#'); comment >= 0 {
+			rewritten = append(append(rewritten, ' '), bytes.TrimRight(line[value.Column-1+comment:], "\r\n")...)
+		}
+		place.emptyParentLine, place.emptyParentAt = append(rewritten, '\n'), nameLine
+	}
+	at := nameLine + 1
+	for at < next {
+		line := bytes.TrimRight(lines[at], " \t\r\n")
+		text := bytes.TrimLeft(line, " ")
+		if len(text) == 0 || text[0] != '#' || len(line)-len(text) <= indent {
+			break
+		}
+		at++
+	}
+	place.first, place.end = at, at
+	return place, nil
 }
 
 // withoutTrailingComments returns end, moved up past the blank lines and the
@@ -277,6 +324,9 @@ func withValue(text []byte, before map[string]any, keyPath []string, value strin
 		refused = cannotReplaceInPlace(keyPath)
 	}
 	lines := bytes.SplitAfter(text, []byte("\n"))
+	if place.emptyParentLine != nil {
+		lines[place.emptyParentAt] = place.emptyParentLine
+	}
 	text = bytes.Join(slices.Concat(lines[:place.first], [][]byte{entry}, lines[place.end:]), nil)
 	// The new lines must change only the one secret. A vault whose text is
 	// written in another way is left as it is.
@@ -300,7 +350,7 @@ func withDecodedValue(values map[string]any, keyPath []string, value string) (ma
 	mapping := root
 	for _, name := range keyPath[:len(keyPath)-1] {
 		below := map[string]any{}
-		if existing, exists := mapping[name]; exists {
+		if existing, exists := mapping[name]; exists && existing != nil {
 			names, ok := existing.(map[string]any)
 			if !ok {
 				return nil, false

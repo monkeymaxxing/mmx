@@ -187,13 +187,21 @@ goes in brackets and double quotes:
   vault's text, a new name as a new last line of its mapping, each level
   indented two spaces below the one before. A new name in a mapping that
   the vault has takes the indentation of that mapping's names.
-- **A level that holds a value** cannot hold names, such as `token: "abc"`
-  or a list. The command fails and changes nothing:
+- **An empty level** gets the name below it, two spaces further in. An
+  empty level is a name alone, such as `files:`, as a vault often starts,
+  or `files: {}` or `files: null`, where MMX removes `{}` or `null` from
+  the line. Comment lines indented below an empty level stay above the new
+  name.
+- **A level that holds a value** cannot hold names, such as `token: "abc"`,
+  a number, `true`, or a list, also the empty list `[]`. The command fails
+  and changes nothing, and the message says what to do next:
   `the vault's token holds a value, not names, so smtp-password cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of token`.
-- **A level written inside `{ }`**, such as `files: {user: app}`, is
-  refused too, because MMX adds lines only between names written one per
-  line. The message says to open `mmx secrets edit` and write the names
-  one per line below the level.
+  For a list, the message says to replace the list with the names, one
+  per line below the level, in `mmx secrets edit`.
+- **A level whose names are written inside `{ }`**, such as
+  `files: {user: app}`, is refused too, because MMX adds lines only
+  between names written one per line. The message says to open
+  `mmx secrets edit` and write the names one per line below the level.
 - **A name that the vault has** is refused without `--replace`, as for a
   secret key. With `--replace`, its lines, from the name's own line down
   to the next name of its mapping or the mapping's end, become the new
