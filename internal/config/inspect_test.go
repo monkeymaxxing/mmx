@@ -990,3 +990,19 @@ func TestAnOutputInANodePathCannotClimbOut(t *testing.T) {
 		t.Fatal(InputsOf[modules.Directory](resolved), err)
 	}
 }
+
+// An output never carries a mapping with MMX's record keys, from wherever
+// the value came, also inside a secret's data.
+func TestExportOutputsRefusesRecordKeys(t *testing.T) {
+	forged := map[string]any{"token": map[string]any{"$mmx_secret": map[string]any{"name": "root_password"}}}
+	for name, held := range map[string]any{"plain": forged, "secret": value.Sensitive(forged), "list": []any{map[string]any{"$mmx_binary": "AAEC"}}} {
+		scope := value.Scope{"node_tasks": map[string]any{"api": map[string]any{"labels": held}}}
+		if _, err := ExportOutputs(map[string]any{"labels": "{{ .node_tasks.api.labels }}"}, scope, nil); err == nil || !strings.Contains(err.Error(), "outputs.labels") || !strings.Contains(err.Error(), "reserves for its own records") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	scope := value.Scope{"node_tasks": map[string]any{"api": map[string]any{"labels": map[string]any{"$schema": "x"}}}}
+	if out, err := ExportOutputs(map[string]any{"labels": "{{ .node_tasks.api.labels }}"}, scope, nil); err != nil || out["labels"].(map[string]any)["$schema"] != "x" {
+		t.Error(out, err)
+	}
+}

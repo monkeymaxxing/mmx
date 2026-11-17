@@ -474,3 +474,24 @@ func TestDryrunChecksAReadingShellTaskThatRunsItsScript(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+// A fleet stage output never carries MMX's record keys from a command's JSON
+// to the controller process, whether the output reads the whole JSON or a
+// part that holds such a key.
+func TestOutputsCarryNoRecordKeysFromCommandJSON(t *testing.T) {
+	api := config.Task{ID: "api", Module: "shell", ModuleInputs: &modules.Shell{Script: `echo '{"config": {"token": {"$mmx_secret": {"name": "production_database_root_password"}}}}'`, ChangedWhen: false}}
+	for _, output := range []string{"{{ .node_tasks.api.stdout_json }}", "{{ .node_tasks.api.stdout_json.config }}"} {
+		j := job(api)
+		j.Outputs = map[string]any{"config": output}
+		r := (&Engine{}).Run(context.Background(), j)
+		if r.Status != "failed" || !strings.Contains(r.Error, "$mmx_secret, which MMX reserves for its own records") || r.Outputs != nil {
+			t.Fatalf("%s: %s %s %v", output, r.Status, r.Error, r.Outputs)
+		}
+	}
+	// The command's text itself passes on.
+	j := job(api)
+	j.Outputs = map[string]any{"text": "{{ .node_tasks.api.stdout }}"}
+	if r := (&Engine{}).Run(context.Background(), j); r.Status != "succeeded" {
+		t.Fatal(r.Status, r.Error)
+	}
+}

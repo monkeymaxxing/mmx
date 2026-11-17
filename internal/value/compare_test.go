@@ -248,3 +248,26 @@ func TestComparisonErrorsNeverQuoteASecret(t *testing.T) {
 		t.Fatal("a public value is still named", err)
 	}
 }
+
+// JSON from a command or a web server that holds MMX's record keys is not
+// read as JSON: once it crossed to the controller process, such a mapping
+// would read as MMX's own secret record.
+func TestResultJSONWithMMXRecordKeysIsNotRead(t *testing.T) {
+	for _, stdout := range []string{
+		`{"token": {"$mmx_secret": {"name": "production_database_root_password"}}}`,
+		`[{"$mmx_binary": "AAEC"}]`,
+		`{"$mmx_truncated": "x"}`,
+	} {
+		for _, secret := range []bool{false, true} {
+			s := Scope{"node_tasks": map[string]any{"api": map[string]any{"stdout_json": ParsedJSON("stdout", stdout, false, secret)}}}
+			if _, err := s.Get(".node_tasks.api.stdout_json"); err == nil || !strings.Contains(err.Error(), "reserves for its own records") {
+				t.Errorf("%s (secret %v): %v", stdout, secret, err)
+			}
+		}
+	}
+	// Other keys that start with $ stay ordinary JSON.
+	s := Scope{"node_tasks": map[string]any{"api": map[string]any{"stdout_json": ParsedJSON("stdout", `{"$schema": "x", "$mmx": 1}`, false, false)}}}
+	if got, err := s.Text(`{{ .node_tasks.api.stdout_json["$schema"] }}`); err != nil || got != "x" {
+		t.Error(got, err)
+	}
+}

@@ -611,15 +611,30 @@ func (w *fleetStageWalker) lookupSecret(name string) (any, error) {
 
 func (w *fleetStageWalker) publish(fleetStage config.FleetStage, sel *Selection, scope value.Scope) {
 	outputs, states := map[string]any{}, map[string]any{}
-	scope["outputs"].(map[string]any)[fleetStage.ID] = outputs
-	scope["fleet_stages"].(map[string]any)[fleetStage.ID] = states
-	publish := func(key string, response protocol.Response) {
+	// The scope the node jobs were built from, before this fleet stage's own
+	// outputs join it.
+	defer func() {
+		scope["outputs"].(map[string]any)[fleetStage.ID] = outputs
+		scope["fleet_stages"].(map[string]any)[fleetStage.ID] = states
+	}()
+	publish := func(key string, response protocol.Response, origin *value.NodeOrigin) {
 		if response.Status == "" {
 			response.Status = "pending"
 		}
 		states[key] = outcome(response)
 		if response.Status == "succeeded" {
-			outputs[key] = value.ReadAgain(value.Deferred(response.Outputs, w.lookupSecret, w.resume), w.readAgain)
+			exported := response.Outputs
+			if origin != nil {
+				var sent []*value.Secret
+				computed := false
+				exported = w.trustNodeRecords(exported, *origin, func() []*value.Secret {
+					if !computed {
+						sent, computed = nodeJobSecrets(w.run, fleetStage, origin.Node, scope), true
+					}
+					return sent
+				})
+			}
+			outputs[key] = value.ReadAgain(value.Deferred(exported, w.lookupSecret, w.resume), w.readAgain)
 			if response.Outputs == nil {
 				outputs[key] = map[string]any{}
 			}
@@ -634,11 +649,13 @@ func (w *fleetStageWalker) publish(fleetStage config.FleetStage, sel *Selection,
 	}
 	if sel.Loop {
 		for _, item := range sel.Items {
-			publish(item.Key, sel.Iterations[item.Key])
+			// The controller process computed a loop iteration's outputs.
+			publish(item.Key, sel.Iterations[item.Key], nil)
 		}
 	} else {
 		for _, i := range w.run.selectionEntries(sel.Path) {
-			publish(w.run.Entries[i].Node, w.run.Entries[i].Response)
+			en := w.run.Entries[i]
+			publish(en.Node, en.Response, &value.NodeOrigin{FleetStage: en.FleetStage, Node: en.Node})
 		}
 	}
 	// Work that reads a node the limit left out, from a fleet stage or a

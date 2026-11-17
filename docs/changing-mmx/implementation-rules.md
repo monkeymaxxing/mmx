@@ -605,7 +605,19 @@ Only a node's own managed key is read per node.
   A reference inside other text and a template refuse `value.Binary`.
 - Module results cannot contain the reserved record keys (`$mmx_secret`,
   `$mmx_truncated`, `$mmx_binary`). The restriction prevents a module from
-  forging an internal record.
+  forging an internal record. For the same reason `value.ParsedJSON` reads
+  JSON holding such a key as `NotJSON`, `config.ExportOutputs` refuses an
+  output holding one (`value.ReservedKey`, which also looks inside a
+  secret's data), and a read-file answer holds only text or `value.Binary`.
+- A node job's outputs are data the node chose, even when they decode to
+  secret records. `fleetStageWalker.publish` passes a node job's outputs
+  through `trustNodeRecords` before anything loads them: a record keeps its
+  name only when `wasSent` finds that the node job received that part of the
+  named secret whole (`nodeJobSecrets` computes delivery again from the scope
+  the node job was built from), and a `read_file` origin only when it names
+  the node job's own fleet stage and node (`ownOrigins`, which
+  `secretsStillNeeded` applies too). Any other record keeps the node's data
+  with the node job as its origin, so a resume reports it unavailable.
 
 ## Task trees
 

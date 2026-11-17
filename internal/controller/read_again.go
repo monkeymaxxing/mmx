@@ -183,8 +183,9 @@ func secretsStillNeeded(r *Run) map[value.NodeOrigin]bool {
 			return
 		}
 		for _, j := range r.selectionEntries(path) {
-			if key == "" || r.Entries[j].Node == key {
-				pick(r.Entries[j].Response.Outputs)
+			if en := r.Entries[j]; key == "" || en.Node == key {
+				// A node job's record reads a file only on its own node.
+				pick(ownOrigins(en.Response.Outputs, value.NodeOrigin{FleetStage: en.FleetStage, Node: en.Node}).(map[string]any))
 			}
 		}
 	}

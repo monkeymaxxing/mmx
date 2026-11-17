@@ -606,6 +606,13 @@ func ExportOutputs(outputs map[string]any, scope value.Scope, sources Sources) (
 	out := map[string]any{}
 	for _, key := range sortedKeys(outputs) {
 		v, err := scope.Evaluate(outputs[key])
+		if err == nil {
+			// An output crosses to the controller process, which would read
+			// such a mapping as MMX's own record.
+			if reserved := value.ReservedKey(v); reserved != "" {
+				err = fmt.Errorf("the value holds the mapping key %s, which MMX reserves for its own records", reserved)
+			}
+		}
 		if err != nil {
 			return nil, SourceError(sources, "outputs."+key, outputs[key], scope, err)
 		}

@@ -33,6 +33,11 @@ func ParsedJSON(field, text string, truncated, secret bool) any {
 	if _, err := decoder.Token(); err != io.EOF {
 		return NotJSON{field + " is not valid JSON: text follows the first JSON value"}
 	}
+	// Restore would read such a mapping as MMX's own record once the value
+	// crosses to the controller process.
+	if key := ReservedKey(parsed); key != "" {
+		return NotJSON{fmt.Sprintf("%s holds the mapping key %s, which MMX reserves for its own records, so MMX does not read it as JSON", field, key)}
+	}
 	if secret {
 		return Sensitive(parsed)
 	}

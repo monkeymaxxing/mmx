@@ -16,8 +16,13 @@ Booleans are spelled `true`/`false`; file modes are quoted strings. Duplicate
 keys, custom tags, aliases, anchors, and merge keys are rejected: reuse comes
 from variables and roles, not YAML structure. MMX's internal records use the
 mapping keys `$mmx_secret`, `$mmx_truncated`, and `$mmx_binary`. MMX rejects
-`$mmx_secret`, `$mmx_truncated`, and `$mmx_binary` in project files and in
-results from modules that are not core.
+`$mmx_secret`, `$mmx_truncated`, and `$mmx_binary` in project files, in
+results from modules that are not core, in JSON that `stdout_json` or
+`response_body_json` reads, and in fleet stage and role outputs. The
+controller process trusts a node's record only as far as the node job could
+have made it: a secret's name only for a part of a named secret the
+controller process sent that node job whole, and a `read_file` origin only
+for that node job's own fleet stage and node.
 
 ## Playbooks contain ordered fleet stages
 
@@ -1234,7 +1239,9 @@ parsed JSON value:
 
 Reading `stdout_json` or `response_body_json` when the output is not valid
 JSON is an error that says so, and a missing key is an error like any missing
-value.
+value. JSON holding one of MMX's record keys (`$mmx_secret`,
+`$mmx_truncated`, `$mmx_binary`) anywhere is not read either, so a command or
+a web server cannot pass a value that MMX would take for its own record.
 
 `set_vars` evaluates all its values against the state before the task, then
 applies them together; if any fails, none apply. A value that is exactly one

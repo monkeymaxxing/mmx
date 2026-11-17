@@ -138,22 +138,32 @@ func Restore(v any) any {
 }
 
 // HasReservedKey reports an internal record's mapping key anywhere in v.
-func HasReservedKey(v any) bool {
+func HasReservedKey(v any) bool { return ReservedKey(v) != "" }
+
+// ReservedKey is the first internal record's mapping key found in v, inside
+// a secret's data too, or "" when v holds none. Data from outside MMX that
+// holds one is refused, never read as MMX's own record.
+func ReservedKey(v any) string {
 	switch x := v.(type) {
+	case *Secret:
+		return ReservedKey(x.Data)
 	case map[string]any:
-		for k, child := range x {
-			if k == "$mmx_secret" || k == "$mmx_truncated" || k == "$mmx_binary" || HasReservedKey(child) {
-				return true
+		for _, k := range slices.Sorted(maps.Keys(x)) {
+			if k == "$mmx_secret" || k == "$mmx_truncated" || k == "$mmx_binary" {
+				return k
+			}
+			if found := ReservedKey(x[k]); found != "" {
+				return found
 			}
 		}
 	case []any:
 		for _, child := range x {
-			if HasReservedKey(child) {
-				return true
+			if found := ReservedKey(child); found != "" {
+				return found
 			}
 		}
 	}
-	return false
+	return ""
 }
 
 // HiddenBecause is the HiddenBecause of the first secret in v that has one.

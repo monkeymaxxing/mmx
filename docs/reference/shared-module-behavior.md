@@ -468,7 +468,9 @@ reference to a true or false value, such as
   and the results of `http` and `wait_for` have `response_body_json`: the
   output, read as JSON, so a condition reads one field, such as
   `"{{ .node_tasks.health.response_body_json.ready }}"`. Reading a field of
-  output that is not valid JSON fails and says so.
+  output that is not valid JSON fails and says so. So does output whose
+  JSON holds one of MMX's own record keys, `$mmx_secret`, `$mmx_truncated`,
+  or `$mmx_binary`, anywhere.
 - **`path_exists`** is accepted only in the `when` of a node task or node
   task block. It looks at the node when the node task is reached, so it
   sees what earlier node tasks of the same run created. In a dryrun, when

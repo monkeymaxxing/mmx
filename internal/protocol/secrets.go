@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -277,6 +278,11 @@ func (r *ReadFileResponse) UnmarshalJSON(b []byte) error {
 	if err := Decode(b, (*plain)(r)); err != nil {
 		return err
 	}
+	// A file's content is text or binary content, never another record.
 	r.Content = value.Restore(r.Content)
-	return nil
+	switch r.Content.(type) {
+	case string, value.Binary:
+		return nil
+	}
+	return fmt.Errorf("the node answered with read-file content that is neither text nor binary content")
 }

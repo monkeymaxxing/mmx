@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
+	"slices"
+	"strconv"
 
 	"mmx/internal/access"
 	"mmx/internal/config"
@@ -103,4 +106,168 @@ func scopeJobSecrets(job config.Job) (config.Job, error) {
 	job.Scope = value.KeepSecrets(job.Scope, allowed).(map[string]any)
 	job.PrivateInputs = value.HasPrivateData(job.Scope) || value.HasPrivateData(job.Vars)
 	return job, nil
+}
+
+// A node job's outputs are data the node chose. MMX's own secret records
+// in them are instructions to the controller process: a name loads that
+// secret again, and a read_file origin makes mmx resume read that file on
+// that node. A node runner an attacker controls, or a playbook exporting
+// someone else's JSON, could write such a record. So the controller process
+// takes a name only for a part of a named secret it sent that node job whole
+// (nodeJobSecrets), and a read_file origin only for that node job's own fleet
+// stage and node (ownOrigins). Every other record keeps the node's data, as a
+// secret the node job produced.
+
+// trustNodeRecords returns a node job's outputs with only the records the
+// node job could have made. sent gives the named secrets delivered to that
+// node job, computed only when a record names one.
+func (w *fleetStageWalker) trustNodeRecords(outputs map[string]any, origin value.NodeOrigin, sent func() []*value.Secret) map[string]any {
+	var trust func(any) any
+	trust = func(v any) any {
+		switch x := v.(type) {
+		case *value.Secret:
+			if x.Name == "" || w.wasSent(x, sent()) {
+				return ownOrigins(x, origin)
+			}
+			return &value.Secret{Data: x.Data, Available: x.Available, FromNode: &value.NodeOrigin{FleetStage: origin.FleetStage, Node: origin.Node}, HiddenBecause: x.HiddenBecause}
+		case map[string]any:
+			if x == nil {
+				return x
+			}
+			out := map[string]any{}
+			for k, child := range x {
+				out[k] = trust(child)
+			}
+			return out
+		case []any:
+			out := make([]any, len(x))
+			for i, child := range x {
+				out[i] = trust(child)
+			}
+			return out
+		default:
+			return v
+		}
+	}
+	trusted, _ := trust(outputs).(map[string]any)
+	return trusted
+}
+
+// ownOrigins replaces a secret's origin that names another fleet stage or
+// node than the node job origin, which sent it, with origin itself: such a
+// secret is unavailable on resume, and nothing reads a file for it.
+func ownOrigins(v any, origin value.NodeOrigin) any {
+	switch x := v.(type) {
+	case *value.Secret:
+		if x.FromNode == nil || x.FromNode.FleetStage == origin.FleetStage && x.FromNode.Node == origin.Node {
+			return x
+		}
+		copy := *x
+		copy.FromNode = &value.NodeOrigin{FleetStage: origin.FleetStage, Node: origin.Node}
+		return &copy
+	case map[string]any:
+		if x == nil {
+			return x
+		}
+		out := map[string]any{}
+		for k, child := range x {
+			out[k] = ownOrigins(child, origin)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, child := range x {
+			out[i] = ownOrigins(child, origin)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// wasSent reports whether a node job received the whole part of a named
+// secret that record names: a secret it received only in part, such as one
+// field, names only that field.
+func (w *fleetStageWalker) wasSent(record *value.Secret, sent []*value.Secret) bool {
+	full, err := w.lookupSecret(record.Name)
+	if err != nil {
+		return false
+	}
+	whole, ok := selectSecretPart(full, record.Path)
+	if !ok {
+		return false
+	}
+	for _, s := range sent {
+		if s.Name != record.Name || len(s.Path) > len(record.Path) || !slices.Equal(s.Path, record.Path[:len(s.Path)]) {
+			continue
+		}
+		part, ok := selectSecretPart(s.Data, record.Path[len(s.Path):])
+		if ok && sameJSON(part, whole) {
+			return true
+		}
+	}
+	return false
+}
+
+// selectSecretPart follows path into a secret's data, as value.Refresh does.
+func selectSecretPart(data any, path []string) (any, bool) {
+	for _, part := range path {
+		switch c := data.(type) {
+		case map[string]any:
+			var ok bool
+			if data, ok = c[part]; !ok {
+				return nil, false
+			}
+		case []any:
+			n, err := strconv.Atoi(part)
+			if err != nil || n < 0 || n >= len(c) {
+				return nil, false
+			}
+			data = c[n]
+		default:
+			return nil, false
+		}
+	}
+	return data, true
+}
+
+// sameJSON compares two secret values as JSON, so a number read from the
+// vault equals the same number decoded from a node's answer.
+func sameJSON(a, b any) bool {
+	x, errX := json.Marshal(value.Transport(a))
+	y, errY := json.Marshal(value.Transport(b))
+	return errX == nil && errY == nil && string(x) == string(y)
+}
+
+// nodeJobSecrets lists the named secrets a node job of the fleet stage on the
+// node received, as delivery computes them from the scope the node job was
+// built from.
+func nodeJobSecrets(r *Run, fleetStage config.FleetStage, node string, scope value.Scope) []*value.Secret {
+	job, err := nodeJob(r, fleetStage, Entry{Node: node, scope: scope})
+	if err == nil {
+		job, err = scopeJobSecrets(job)
+	}
+	if err != nil {
+		return nil
+	}
+	var sent []*value.Secret
+	var collect func(any)
+	collect = func(v any) {
+		switch x := v.(type) {
+		case *value.Secret:
+			if x.Name != "" && x.Available {
+				sent = append(sent, x)
+			}
+		case map[string]any:
+			for _, child := range x {
+				collect(child)
+			}
+		case []any:
+			for _, child := range x {
+				collect(child)
+			}
+		}
+	}
+	collect(job.Scope)
+	return sent
 }
