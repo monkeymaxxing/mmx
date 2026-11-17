@@ -32,9 +32,11 @@ def main(name="mmx-peer"):
     def run(binary):
         target = "/var/tmp/mmx-code-tests/" + binary.name
         vm.copy(binary, target, name)
-        # internal/controller alone takes up to 210 s in a 2-CPU guest, and
-        # the full catalog runs it beside the installer suites.
-        result = vm.guest("sudo", "-n", target, "-test.timeout=600s", timeout=615, name=name)
+        # internal/controller alone takes about 130 s in an idle 2-CPU guest.
+        # The full catalog runs it beside the installer suites, which load the
+        # server's disk: it took 376 to 630 s in the Rocky Linux 9 and
+        # AlmaLinux 10 VMs, mostly in fsync. The limit only catches a hang.
+        result = vm.guest("sudo", "-n", target, "-test.timeout=1800s", timeout=1815, name=name)
         assert result.stdout.strip().endswith("PASS"), result.stdout
         return "PASS Linux " + binary.stem
 
