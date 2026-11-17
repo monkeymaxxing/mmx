@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"mmx/internal/access"
@@ -15,7 +16,7 @@ import (
 	"mmx/internal/secrets"
 )
 
-const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | show KEY [NAME ...] | list-keys | diff-keys | usage [KEY]
+const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | show KEY [NAME ...] | pipe-to KEY [NAME ...] -- COMMAND [ARGUMENT ...] | list-keys | diff-keys | usage [KEY]
 
 Options: --inventory NAME  --vault PATH (not for usage)  --vault-password-file PATH
 Passphrase change: --new-vault-password-file PATH
@@ -24,6 +25,7 @@ Value for set: standard input, such as some_command | mmx secrets set KEY
 A name inside a key: one word for each level, such as mmx secrets set mmwatchdog_secret_files smtp-password
 A key the vault already has: set and add-random change its value only with --replace
 show prints one value, only to a terminal; clear the terminal afterwards
+pipe-to writes one value to COMMAND's standard input; never use a COMMAND that prints its input, such as cat
 Automation: --non-interactive  --json`
 
 // secretsOptions are the options and arguments of one mmx secrets command.
@@ -43,6 +45,8 @@ type secretsOptions struct {
 	// arguments are the words that are not options, such as add-random's KEY
 	// and the NAME words inside it.
 	arguments []string
+	// command is pipe-to's COMMAND and its arguments, the words after --.
+	command []string
 }
 
 func secretCommand(ctx context.Context, args []string) (int, error) {
@@ -52,7 +56,7 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 	}
 	o := secretsOptions{action: args[0]}
 	switch o.action {
-	case "edit", "passwd", "add-random", "set", "show", "list-keys", "diff-keys", "usage":
+	case "edit", "passwd", "add-random", "set", "show", "pipe-to", "list-keys", "diff-keys", "usage":
 	default:
 		return 4, fmt.Errorf("unknown secrets command %q", o.action)
 	}
@@ -73,8 +77,17 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 	if o.action == "set" || o.action == "add-random" {
 		fs.BoolVar(&o.replace, "replace", false, "replace the value of a key the vault already has")
 	}
+	options := args[1:]
+	// pipe-to's COMMAND comes after --, with options of its own.
+	if o.action == "pipe-to" {
+		separator := slices.Index(options, "--")
+		if separator < 0 || separator == len(options)-1 {
+			return 4, pipeToUsage()
+		}
+		options, o.command = options[:separator], options[separator+1:]
+	}
 	// Accept a key before, between, or after the options.
-	for options := args[1:]; ; {
+	for {
 		if err := fs.Parse(options); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
 				return 0, nil
@@ -96,6 +109,8 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 		return secretsSet(ctx, o)
 	case "show":
 		return secretsShow(ctx, o)
+	case "pipe-to":
+		return secretsPipeTo(ctx, o)
 	case "list-keys":
 		return secretsListKeys(ctx, o)
 	case "diff-keys":

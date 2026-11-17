@@ -137,6 +137,7 @@ set:
 | `mmx secrets add-random KEY [NAME ...]` | Adds a secret key, or a name inside one, with a random value. | Yes |
 | `mmx secrets set KEY [NAME ...]` | Adds a secret key, or a name inside one, with a value from standard input. | Yes |
 | `mmx secrets show KEY [NAME ...]` | Prints one secret's value, only to a terminal. | Yes |
+| `mmx secrets pipe-to KEY [NAME ...] -- COMMAND [ARGUMENT ...]` | Writes one secret's value to a program's standard input. | Yes |
 | `mmx secrets list-keys` | Prints the vault's secret keys. | Yes |
 | `mmx secrets diff-keys` | Compares the vault's secret keys with the last Git commit. | Yes |
 | `mmx secrets usage [KEY]` | Lists where each secret key is read. | Only when the vault file exists |
@@ -154,7 +155,7 @@ terminal. `mmx secrets edit` shows the values in your editor.
 | `--length N` | `add-random` | Makes a value of `N` characters. The default is 32. |
 | `--replace` | `add-random`, `set` | Changes the value of a secret key that the vault has. |
 | `--non-interactive` | all | Fails instead of asking a question. |
-| `--json` | all except `show` | Prints JSON, and asks no question. |
+| `--json` | all except `show` and `pipe-to` | Prints JSON, and asks no question. |
 
 ### A name inside a secret key
 
@@ -336,6 +337,39 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
 - The command refuses a secret key that `secrets_from_env` binds to an
   environment variable, because a run never reads that key's value from
   the vault.
+
+### mmx secrets pipe-to
+
+- The command writes the value of one secret to the standard input of a
+  program, so the value goes from the vault to the program without
+  appearing on a screen or in a file. The words before `--` name the
+  secret as for `set`. The words after `--` are the program and its
+  arguments:
+
+  ```sh
+  mmx secrets pipe-to backup_passphrase -- openssl enc -d -aes-256-cbc -pbkdf2 -pass stdin -in backup.tar.enc -out backup.tar
+  mmx secrets pipe-to deploy_keys web01 -- ssh web01.example.com 'umask 077 && cat > ~/.ssh/deploy_key'
+  ```
+
+- MMX starts the program directly, not through a shell, and finds it
+  through `PATH`. The program gets exactly the stored value, plus one
+  line ending, `\n`, when the value does not end with one. A value of
+  several lines, such as an OpenSSH private key, arrives byte for byte,
+  with its final line ending. MMX then closes the program's standard
+  input.
+- The program's output and errors pass through, and MMX exits with the
+  program's exit code. MMX itself prints no value.
+- MMX only reads the vault: the vault file's bytes and time stay the same.
+  The passphrase comes from the passphrase sources; the prompt works,
+  because MMX, not the program, reads the terminal.
+- A missing `--` or program, or a program that `PATH` does not have,
+  fails with exit code 4 before MMX opens the vault. A secret key or name
+  that the vault does not have fails as for `show`. `--json` is refused.
+- **Never use `pipe-to` with a program that prints its input**, such as
+  `cat`, `echo`, or `tee`: the value then lands on the screen, or in a
+  coding agent's conversation. A person runs such steps.
+  A shell command that saves its input to a file, as in the `ssh`
+  example, is fine.
 
 ### mmx secrets list-keys
 

@@ -40,6 +40,7 @@ from environment variables, and keep a separate vault for staging.
 | Run from CI, a script, or a coding agent, with no one to type | [Run without a terminal](#run-without-a-terminal) |
 | Add a secret that another program gives you, or change a secret's value | [Add or change a secret without showing it](#add-or-change-a-secret-without-showing-it) |
 | Read one secret's value yourself, such as to store it in a password manager | [Read one value once](#read-one-value-once) |
+| Give a secret to a program on your computer, such as `openssl` or `ssh` | [Give one value to a program](#give-one-value-to-a-program) |
 | Check which playbooks read a secret, and which secrets are missing or unused | [Find where a secret is used](#find-where-a-secret-is-used) |
 | Change the vault passphrase | [Change the passphrase](#change-the-passphrase) |
 | Keep secrets in environment variables, such as in CI, and no vault | [Secrets from environment variables](#secrets-from-environment-variables) |
@@ -411,6 +412,29 @@ the value. `mmx secrets show` prints nothing through a pipe, into a file,
 or through a coding agent, so a value never lands in an agent's
 conversation or a log by accident. [`mmx secrets show`](../reference/secrets.md#mmx-secrets-show)
 gives the rules.
+
+## Give one value to a program
+
+`mmx secrets pipe-to` writes one secret to a program's standard input, so
+the value never appears on a screen. To decrypt a backup with a
+passphrase from the vault:
+
+```sh
+mmx secrets pipe-to backup_passphrase -- openssl enc -d -aes-256-cbc -pbkdf2 -pass stdin -in backup.tar.enc -out backup.tar
+```
+
+To put a private key on a server, readable only by its owner:
+
+```sh
+mmx secrets pipe-to deploy_keys web01 -- ssh web01.example.com 'umask 077 && cat > ~/.ssh/deploy_key'
+```
+
+MMX prints nothing of its own, and exits with the program's exit code.
+[`mmx secrets pipe-to`](../reference/secrets.md#mmx-secrets-pipe-to)
+gives the rules.
+
+A rule for coding agents: never use `pipe-to` with a program that prints
+its input, such as `cat` or `echo`. A person runs these steps.
 
 ## Find where a secret is used
 
