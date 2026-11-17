@@ -265,7 +265,7 @@ page answers.
    **Check:** every node task says `succeeded`, the site file says
    `created "/etc/nginx/conf.d/shop.conf"`, and the run ends with
    `Run ...: succeeded` and exit code 0. On a first run, `reload_nginx` says
-   `succeeded, changed — service is not running`, because MMX installs a
+   `succeeded, changed — service was not running; started`, because MMX installs a
    package without starting its services, so MMX started nginx instead of
    reloading it
    ([Reload or restart](change-a-configuration-and-reload-its-service.md#reload-or-restart)

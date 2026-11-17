@@ -413,7 +413,7 @@ for your approval.
    without asking for the approval, because memcached was not running yet:
 
    ```text
-     set_up_cache / web01 / shop_cache/activate/restart_memcached: succeeded, changed — service is not running
+     set_up_cache / web01 / shop_cache/activate/restart_memcached: succeeded, changed — service was not running; started
      set_up_cache / web01 / shop_cache/checks_before_restart_or_reload/require_restart_approval: skipped, unchanged — not needed: this task block restarted or reloaded no running service and ran no command that follows a change
      set_up_cache / web01 / shop_cache/verify/check_memcached_port: succeeded, unchanged — TCP port 127.0.0.1:11211 accepts connections
    ```
@@ -618,8 +618,8 @@ fleet_stages:
 A `systemd_service` node task in a node task block's `activate` phase
 with `state: running` starts the service if the service is stopped. MMX
 installs a package without starting its services, so on a server's first
-run the node task says `service is not running` and starts the service
-instead of reloading it. On a running service, MMX
+run the node task starts the service instead of reloading it, and says
+`service was not running; started`. On a running service, MMX
 compares the tracked inputs of the block with what the service last loaded:
 
 | What changed in `changes` | What MMX does to a running service |
@@ -636,7 +636,7 @@ compares the tracked inputs of the block with what the service last loaded:
   loaded starts from the files on disk at the first run after the reboot.
 - A service that MMX starts gets one start, and no reload after the start.
   The first run in [Write a playbook](write-a-playbook.md) says
-  `service is not running` for that reason.
+  `service was not running; started` for that reason.
 - `refresh: reload` works only on `.service` units, and only when the
   program can reload, as nginx can.
 - A failed reload fails the node task. MMX doesn't try a restart instead.

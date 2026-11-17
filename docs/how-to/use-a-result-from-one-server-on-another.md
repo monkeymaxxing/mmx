@@ -415,13 +415,13 @@ turn, and saving values to files on your controller machine.
    ...
      configure_load_balancer / lb01 / load_balancer_site/changes/write_load_balancer_site: created "/etc/nginx/conf.d/shop.conf"
        absent -> 188 bytes, permissions_mode 0644, uid 0, gid 0
-     configure_load_balancer / lb01 / load_balancer_site/activate/reload_nginx: succeeded, changed — service is not running
+     configure_load_balancer / lb01 / load_balancer_site/activate/reload_nginx: succeeded, changed — service was not running; started
      configure_load_balancer / lb01 / load_balancer_site/verify/check_shop_through_load_balancer: succeeded, unchanged
    ...
    Run c07180e8: succeeded
    ```
 
-   `reload_nginx` says `service is not running` on the first run, because
+   `reload_nginx` says `service was not running; started` on the first run, because
    MMX installs a package without starting its services, so MMX started
    nginx instead of reloading it. [Reload or restart](change-a-configuration-and-reload-its-service.md#reload-or-restart)
    says more.

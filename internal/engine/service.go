@@ -332,7 +332,29 @@ func (e *Engine) service(ctx context.Context, sv modules.Service) (result protoc
 		}
 		plan.record = record
 	}
+	result.Reason = reasonAfterTheRun(result.Reason, loadAction)
 	return result
+}
+
+// reasonAfterTheRun turns a reason that describes the unit as a dryrun finds
+// it, such as "service is not running", into what a run found and did:
+// "service was not running; started". A reason that names a change, such
+// as a tracked input that changed, already reads true after the run.
+func reasonAfterTheRun(reason, loadAction string) string {
+	before, ok := map[string]string{
+		"service is not running":    "service was not running",
+		"service is still starting": "service was still starting",
+		"unit is not masked":        "unit was not masked",
+		noConfirmedRecordOfInputs:   "MMX had no confirmed record of the inputs that the running service loaded",
+	}[reason]
+	if !ok {
+		return reason
+	}
+	done, ok := map[string]string{"start": "started", "restart": "restarted", "reload": "reloaded", "": "masked"}[loadAction]
+	if !ok {
+		return reason
+	}
+	return before + "; " + done
 }
 
 // restartNowReason is the reason of a task whose restart_now restarts the
@@ -369,6 +391,10 @@ func refreshes(sv modules.Service) bool {
 	return sv.State == "running" || (sv.State == "do_not_start_or_stop" && (sv.Masked == nil || !*sv.Masked))
 }
 
+// noConfirmedRecordOfInputs is refreshAction's reason when the service
+// record does not say what the running service loaded.
+const noConfirmedRecordOfInputs = "MMX has no confirmed record of the inputs that the running service loaded"
+
 // refreshAction decides what a running unit needs so that it has loaded the
 // input hashes in current: "restart", "reload", or "" for nothing, with the
 // reason. A changed unit definition, package, or installation (what a
@@ -395,7 +421,7 @@ func refreshAction(sv modules.Service, plan *servicePlan, observed modules.Servi
 		if action == "" {
 			action = "restart"
 		}
-		reason = "MMX has no confirmed record of the inputs that the running service loaded"
+		reason = noConfirmedRecordOfInputs
 		if changed := changedInputNames(base, current, "config", "git", "module"); changed != "" {
 			reason = changed + " changed after the service last started or reloaded"
 		}

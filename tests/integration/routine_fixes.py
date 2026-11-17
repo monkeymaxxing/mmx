@@ -116,7 +116,7 @@ def restart_now(remote, command, run, result, mark, workspace):
     remote(f'systemctl stop {UNIT}')
     command('check-one-time-playbooks', expected=2)
     started = result(run('run', name))
-    assert started['change'] == 'changed' and started['reason'] == 'service is not running', started
+    assert started['change'] == 'changed' and started['reason'] == 'service was not running; started', started
     assert remote(f'systemctl is-active {UNIT}') == 'active'
     command('check-one-time-playbooks', expected=0)
     (directory / (name + '.yml')).unlink()

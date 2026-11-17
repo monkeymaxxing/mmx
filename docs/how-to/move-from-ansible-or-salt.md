@@ -427,7 +427,7 @@ Debian 13 servers.
      set_up_nginx / web01 / shop_site/changes/write_site_file: succeeded, changed
      set_up_nginx / web01 / shop_site/changes/write_site_file: created "/etc/nginx/conf.d/shop.conf"
        absent -> 85 bytes, permissions_mode 0644, uid 0, gid 0
-     set_up_nginx / web01 / shop_site/activate/reload_nginx: succeeded, changed — service is not running
+     set_up_nginx / web01 / shop_site/activate/reload_nginx: succeeded, changed — service was not running; started
      set_up_nginx / web01 / shop_site/verify/check_shop_site: succeeded, unchanged
      set_up_nginx / web01 / shop_site: succeeded, changed
    ...
@@ -437,7 +437,7 @@ Debian 13 servers.
    **Check:** the run ends with `Run ...: succeeded` and exit code 0, and
    `curl http://203.0.113.11:8080/` prints `Shop on web01`.
 
-   `reload_nginx` says `service is not running` because `apt_package`
+   `reload_nginx` says `service was not running; started` because `apt_package`
    installs a package without starting its services, so `reload_nginx`
    started nginx. On Debian and Ubuntu, a package's own scripts start a newly
    installed service unless a `policy-rc.d` program forbids it. Ansible's

@@ -466,7 +466,7 @@ the page is about writing a module.
    service is new, so MMX starts the service instead of restarting it:
 
    ```text
-     configure_shop / 2 nodes [web01, web02] / shop_settings/activate/restart_shop: succeeded, changed — service is not running
+     configure_shop / 2 nodes [web01, web02] / shop_settings/activate/restart_shop: succeeded, changed — service was not running; started
    ```
 
    Then change `value: "8081"` to `value: "8082"`, and run again:

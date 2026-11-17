@@ -351,7 +351,7 @@ add `web03`, an Ubuntu 26.04 server at `203.0.113.13`.
    ```
 
    On the first run on `web03`, `reload_nginx` says
-   `succeeded, changed — service is not running`, because MMX installs a
+   `succeeded, changed — service was not running; started`, because MMX installs a
    package without starting its services, so MMX starts nginx
    ([Reload or restart](change-a-configuration-and-reload-its-service.md#reload-or-restart)).
    On `web01`

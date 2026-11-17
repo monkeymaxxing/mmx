@@ -191,7 +191,7 @@ another machine, from the application server `app01`.
    set_up_postgresql / db01: succeeded
      set_up_postgresql / db01 / install_postgresql: succeeded, changed
        [{"name":"perl-modules-5.40","to":"5.40.1-6+deb13u1"},...]
-     set_up_postgresql / db01 / start_postgresql: succeeded, changed — service is not running
+     set_up_postgresql / db01 / start_postgresql: succeeded, changed — service was not running; started
      set_up_postgresql / db01 / wait_for_postgresql: succeeded, unchanged — TCP port 127.0.0.1:5432 accepts connections
      set_up_postgresql / db01 / create_shop_role: succeeded, changed
        {"changed_attributes":[],"created":true}
@@ -361,7 +361,7 @@ MySQL. The steps below install MariaDB, which Debian and Ubuntu package.
    set_up_mariadb / db01: succeeded
      set_up_mariadb / db01 / install_mariadb: succeeded, changed
        [{"name":"galera-4","to":"26.4.23-0+deb13u1"},...]
-     set_up_mariadb / db01 / start_mariadb: succeeded, changed — service is not running
+     set_up_mariadb / db01 / start_mariadb: succeeded, changed — service was not running; started
      set_up_mariadb / db01 / create_shop_database: succeeded, changed
        {"changed_attributes":[],"created":true}
      set_up_mariadb / db01 / create_shop_account: succeeded, changed — created the account shop@localhost; granted ALL PRIVILEGES on shop.*

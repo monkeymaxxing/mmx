@@ -416,7 +416,7 @@ MMX's own package modules.
     install_nginx / test01: succeeded
       install_nginx / test01 / nginx/changes/install_nginx_package: succeeded, changed — installed mailcap 2.1.54-3, nginx 1.30.6-3; upgraded dbus from 1.16.2-2 to 1.16.4-1, libp11-kit from 0.26.5-1 to 0.26.6-1, p11-kit from 0.26.5-1 to 0.26.6-1, python-jsonpatch from 1.45-1 to 1.46-1, python-jsonpointer from 3.8-1 to 3.12-1
         changed_packages: [{"from":"1.16.2-2","name":"dbus","to":"1.16.4-1"},{"from":"0.26.5-1","name":"libp11-kit","to":"0.26.6-1"},{"name":"mailcap","to":"2.1.54-3"},{"name":"nginx","to":"1.30.6-3"},{"from":"0.26.5-1","name":"p11-kit","to":"0.26.6-1"},{"from":"1.45-1","name":"python-jsonpatch","to":"1.46-1"},{"from":"3.8-1","name":"python-jsonpointer","to":"3.12-1"}]
-      install_nginx / test01 / nginx/activate/start_nginx: succeeded, changed — service is not running
+      install_nginx / test01 / nginx/activate/start_nginx: succeeded, changed — service was not running; started
       install_nginx / test01 / nginx: succeeded, changed
     Run 95aa8ded: succeeded
     ```

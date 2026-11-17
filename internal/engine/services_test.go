@@ -850,7 +850,9 @@ func TestStartedWaitsForAUnitThatStillStarts(t *testing.T) {
 			t.Fatalf("dryrun of a unit that still starts: %+v", r.Results)
 		}
 		f.assert(t, "A", "")
-		f.run(t, task, "succeeded")
+		if r := f.e.Run(context.Background(), job(task)); r.Status != "succeeded" || r.Results[0].Reason != "service was still starting; started" {
+			t.Fatalf("run of a unit that still starts: %+v", r)
+		}
 		f.assert(t, "A", "start\n")
 		f.run(t, task, "succeeded")
 		f.assert(t, "A", "start\n")
@@ -1909,8 +1911,10 @@ func TestRestartNowRestartsOnceUntilItsMarkerFileExists(t *testing.T) {
 	}
 	// With the marker file there, a stopped unit is started as by any task
 	// with state: running, not restarted.
+	// A dryrun describes the unit as it is; a run says what it found and did.
 	put(t, filepath.Join(unit, "active"), "inactive\n")
-	attempt(false, "changed", "service is not running")
+	attempt(true, "would_change", "service is not running")
+	attempt(false, "changed", "service was not running; started")
 	if got := read(t, filepath.Join(unit, "actions")); got != "restart\nstart\n" {
 		t.Fatalf("actions %q", got)
 	}
@@ -1967,4 +1971,20 @@ func TestStoppedServiceStartedOutsideMMXIsNotRefreshed(t *testing.T) {
 	put(t, filepath.Join(unit, "loaded"), "B")
 	f.run(t, f.op("B"), "succeeded")
 	f.assert(t, "B", "")
+}
+
+// A run's reason says what the run found and did; a reason that names a
+// change already reads true after the run and stays as it is.
+func TestARunSaysWhatItFoundAndDidToAService(t *testing.T) {
+	for _, tc := range []struct{ reason, loadAction, want string }{
+		{"service is not running", "start", "service was not running; started"},
+		{"service is still starting", "start", "service was still starting; started"},
+		{"unit is not masked", "", "unit was not masked; masked"},
+		{noConfirmedRecordOfInputs, "reload", "MMX had no confirmed record of the inputs that the running service loaded; reloaded"},
+		{"service definition changed", "restart", "service definition changed"},
+	} {
+		if got := reasonAfterTheRun(tc.reason, tc.loadAction); got != tc.want {
+			t.Errorf("%q after %q: got %q, want %q", tc.reason, tc.loadAction, got, tc.want)
+		}
+	}
 }

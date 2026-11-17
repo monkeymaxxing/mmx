@@ -296,11 +296,11 @@ rbenv, or uv.
    set_up_shop_api / web01 / shop_api/changes/install_dependencies: succeeded, changed — installed: there is no record of an earlier installation
      {"lock_file":"package-lock.json"}
    ...
-   set_up_shop_api / web01 / shop_api/activate/restart_shop_api: succeeded, changed — service is not running
+   set_up_shop_api / web01 / shop_api/activate/restart_shop_api: succeeded, changed — service was not running; started
    set_up_shop_api / web01 / shop_api/verify/check_shop_api: succeeded, unchanged
    ```
 
-   `service is not running` means that MMX started the application for the
+   `service was not running; started` means that MMX started the application for the
    first time. On Debian 13, installing `npm` brings several hundred
    small packages, so the first run took about twelve minutes. Ask
    each server for the page:

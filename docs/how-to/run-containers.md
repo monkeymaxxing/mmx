@@ -194,7 +194,7 @@ stays visible.
 
    **Check:** every node task says `succeeded`, and the run ends with
    `Run ...: succeeded` and exit code 0. On this first run, `start_docker`
-   says `service is not running`, because MMX started the daemon instead of
+   says `service was not running; started`, because MMX started the daemon instead of
    restarting the daemon. A second `mmx run install_docker` says `unchanged` for
    every node task.
 
@@ -546,7 +546,7 @@ the shop's job queue.
      run_shop_queue / app01 / shop_queue/changes/write_queue_unit: succeeded, changed
      run_shop_queue / app01 / shop_queue/changes/write_queue_unit: created "/etc/systemd/system/shop-queue.service"
        absent -> 359 bytes, permissions_mode 0644, uid 0, gid 0
-     run_shop_queue / app01 / shop_queue/activate/start_queue: succeeded, changed — service is not running
+     run_shop_queue / app01 / shop_queue/activate/start_queue: succeeded, changed — service was not running; started
      run_shop_queue / app01 / shop_queue/verify/wait_for_queue_port: succeeded, unchanged — TCP port 127.0.0.1:6379 accepts connections
      run_shop_queue / app01 / shop_queue: succeeded, changed
    Run 194044d3: succeeded

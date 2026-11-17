@@ -1012,7 +1012,7 @@ set_up_nginx / web01: succeeded
   set_up_nginx / web01 / shop_site/changes/write_site_file: succeeded, changed
   set_up_nginx / web01 / shop_site/changes/write_site_file: created "/etc/nginx/conf.d/shop.conf"
     absent -> 51 bytes, permissions_mode 0644, uid 0, gid 0
-  set_up_nginx / web01 / shop_site/activate/reload_nginx: succeeded, changed — service is not running
+  set_up_nginx / web01 / shop_site/activate/reload_nginx: succeeded, changed — service was not running; started
   set_up_nginx / web01 / shop_site/verify/check_home_page: succeeded, unchanged
   set_up_nginx / web01 / shop_site: succeeded, changed
 Run 2ef17ec3: succeeded
