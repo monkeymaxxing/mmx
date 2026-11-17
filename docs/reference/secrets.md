@@ -328,8 +328,10 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   added as with `add-random`.
 - A new secret key, a new vault, a text that is not a list of `key: value`
   lines, and a secret key in `secrets_from_env` work as for `add-random`.
-- The command prints nothing when it succeeds. `--json` prints only the
-  vault's path and `status`.
+- When it succeeds, the command prints one line that names the secret key
+  and the vault, such as `Saved the key database_password in the vault
+  secrets_vault.age. MMX does not show the value.` It never prints the
+  value. `--json` prints only the vault's path and `status`.
 
 ### mmx secrets show
 

@@ -32,14 +32,17 @@ func secretsOutputFromInput(t *testing.T, input string, args ...string) (stdout,
 	return secretsOutput(t, args...)
 }
 
-func TestSecretsSetTakesTheValueFromStandardInputAndPrintsNothing(t *testing.T) {
+func TestSecretsSetTakesTheValueFromStandardInputAndNamesWhatItSaved(t *testing.T) {
 	root, passwordFile := secretsProject(t)
 	// A project that has no vault yet gets one: here the vault that the
 	// selected inventory names.
 	stagingVault := filepath.Join(root, "inventories/staging_vault.age")
 	stdout, stderr, code := secretsOutputFromInput(t, "sentinel-token-value\n", "set", "cloudflare_tunnel_token", "--inventory", "staging", "--vault-password-file", passwordFile)
-	if code != 0 || stdout != "" || stderr != "" {
+	if code != 0 || !strings.HasPrefix(stdout, "Saved the key ") || strings.Contains(stdout, "sentinel") || stderr != "" {
 		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
+	}
+	if want := "Saved the key cloudflare_tunnel_token in the vault inventories/staging_vault.age. MMX does not show the value.\n"; stdout != want {
+		t.Fatalf("stdout %q, want %q", stdout, want)
 	}
 	values, err := secrets.Read(stagingVault, vaultTestPassphrase)
 	if err != nil || !reflect.DeepEqual(values, map[string]any{"cloudflare_tunnel_token": "sentinel-token-value"}) {
@@ -63,7 +66,7 @@ func TestSecretsSetTakesTheValueFromStandardInputAndPrintsNothing(t *testing.T) 
 		"with_a_second_line_ending":  "sentinel-token-value\n\n",
 		"with_a_carriage_return_end": "sentinel-token-value\r",
 	} {
-		if stdout, stderr, code := secretsOutputFromInput(t, input, "set", key, "--vault-password-file", passwordFile); code != 0 || stdout != "" || stderr != "" {
+		if stdout, stderr, code := secretsOutputFromInput(t, input, "set", key, "--vault-password-file", passwordFile); code != 0 || !strings.HasPrefix(stdout, "Saved the key ") || strings.Contains(stdout, "sentinel") || stderr != "" {
 			t.Fatalf("%s: exit code %d\n%s%s", key, code, stdout, stderr)
 		}
 	}
@@ -96,10 +99,10 @@ func TestSecretsSetReplacesAValueOnlyWithReplace(t *testing.T) {
 	}
 	// --replace changes the value and keeps the other key; with a key the
 	// vault does not have, it adds the key.
-	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-changed-value\n", "set", "--replace", "database_password", "--vault-password-file", passwordFile); code != 0 || stdout != "" || stderr != "" {
+	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-changed-value\n", "set", "--replace", "database_password", "--vault-password-file", passwordFile); code != 0 || !strings.HasPrefix(stdout, "Saved the key ") || strings.Contains(stdout, "sentinel") || stderr != "" {
 		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
 	}
-	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-nested-value\n", "set", "session_cookie_secret", "--replace", "--vault-password-file", passwordFile); code != 0 || stdout != "" || stderr != "" {
+	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-nested-value\n", "set", "session_cookie_secret", "--replace", "--vault-password-file", passwordFile); code != 0 || !strings.HasPrefix(stdout, "Saved the key ") || strings.Contains(stdout, "sentinel") || stderr != "" {
 		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
 	}
 	values, err := secrets.Read(vault, vaultTestPassphrase)
@@ -185,7 +188,7 @@ func TestSecretsSetSetsANameInsideAKey(t *testing.T) {
 	root, passwordFile := secretsProject(t)
 	vault := filepath.Join(root, "secrets_vault.age")
 	quickVault(t, vault, vaultTestPassphrase, "# The shop\ndatabase_password: sentinel-database-value\nmmwatchdog_secret_files:\n  # Mail\n  smtp-user: sentinel-nested-value\n")
-	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-token-value\n", "set", "mmwatchdog_secret_files", "smtp-password", "--vault-password-file", passwordFile); code != 0 || stdout != "" || stderr != "" {
+	if stdout, stderr, code := secretsOutputFromInput(t, "sentinel-token-value\n", "set", "mmwatchdog_secret_files", "smtp-password", "--vault-password-file", passwordFile); code != 0 || !strings.HasPrefix(stdout, "Saved the key ") || strings.Contains(stdout, "sentinel") || stderr != "" {
 		t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
 	}
 	// A certificate, two levels down, in a mapping that does not exist yet.

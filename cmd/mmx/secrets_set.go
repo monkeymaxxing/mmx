@@ -75,7 +75,7 @@ func secretsSet(ctx context.Context, o secretsOptions) (int, error) {
 	if err := secrets.SetKey(vault, password, keyPath, o.replace, value); err != nil {
 		return secretsFailure(err)
 	}
-	return o.saved(vault, "")
+	return o.saved(vault, fmt.Sprintf("Saved the key %s in the vault %s. MMX does not show the value.", place, displayPath(vault)))
 }
 
 // valueOf is the value that input gives for the secret that place names:
