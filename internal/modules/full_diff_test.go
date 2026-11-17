@@ -1,6 +1,7 @@
 package modules
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,13 +12,16 @@ import (
 
 func TestFullDifferenceInputAndPreviewBoundaries(t *testing.T) {
 	t.Parallel()
+	// A directory others can pass through, so the file is not private by
+	// where it is: the test's working directory may be a private home directory.
+	path := filepath.Join(traversableTempDir(t), "app.conf")
 	for _, size := range []int{64 * 1024, 64*1024 + 1, differences.InputLimit, differences.InputLimit + 1} {
 		for _, before := range []bool{false, true} {
 			old, next := []byte{}, []byte(strings.Repeat("x", size-1)+"\n")
 			if before {
 				old, next = next, []byte("new\n")
 			}
-			c := &protocol.FileChange{After: &protocol.FileState{Mode: "0644"}}
+			c := &protocol.FileChange{Path: path, After: &protocol.FileState{Mode: "0644"}}
 			var full string
 			r := Runtime{RetainDiff: func(text string) (*assets.Ref, string) { full = text; return &assets.Ref{}, "" }}
 			r.textDiff(c, old, next)
@@ -39,7 +43,7 @@ func TestFullDifferenceInputAndPreviewBoundaries(t *testing.T) {
 		}
 	}
 	for _, mode := range []string{"0600", "0644"} {
-		c := &protocol.FileChange{After: &protocol.FileState{Mode: mode}}
+		c := &protocol.FileChange{Path: path, After: &protocol.FileState{Mode: mode}}
 		r := Runtime{RetainDiff: func(string) (*assets.Ref, string) { t.Fatal("suppressed content offered to storage"); return nil, "" }}
 		r.textDiff(c, nil, []byte("binary\x00"))
 		if c.FullDiffOmitted == "" {

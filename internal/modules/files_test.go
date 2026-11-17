@@ -157,6 +157,9 @@ func TestLinkAndRemovalDetectReplacedDestination(t *testing.T) {
 
 func TestFileTextPreview(t *testing.T) {
 	t.Parallel()
+	// A directory others can pass through, so the file is not private by
+	// where it is: the test's working directory may be a private home directory.
+	path := filepath.Join(traversableTempDir(t), "app.conf")
 	cases := []struct{ old, next, contains, omitted string }{
 		{"old\n", "new\n", "-old\n+new\n", ""},
 		{"", "new\n", "@@ -0,0 +1,1 @@", ""},
@@ -168,7 +171,7 @@ func TestFileTextPreview(t *testing.T) {
 		{"", strings.Repeat("line\n", 300), "+line", "truncated"},
 	}
 	for _, c := range cases {
-		change := &protocol.FileChange{After: &protocol.FileState{Mode: "0644"}}
+		change := &protocol.FileChange{Path: path, After: &protocol.FileState{Mode: "0644"}}
 		(Runtime{}).textDiff(change, []byte(c.old), []byte(c.next))
 		if !strings.Contains(change.Diff, c.contains) || !strings.Contains(change.DiffOmitted, c.omitted) || len(change.Diff) > 16*1024 || strings.Count(change.Diff, "\n") > 200 {
 			t.Fatalf("%+v", change)
@@ -178,7 +181,7 @@ func TestFileTextPreview(t *testing.T) {
 		}
 	}
 	for _, modes := range [][2]string{{"0600", "0644"}, {"0644", "0640"}} {
-		change := &protocol.FileChange{Before: &protocol.FileState{Mode: modes[0]}, After: &protocol.FileState{Mode: modes[1]}}
+		change := &protocol.FileChange{Path: path, Before: &protocol.FileState{Mode: modes[0]}, After: &protocol.FileState{Mode: modes[1]}}
 		(Runtime{}).textDiff(change, []byte("old-secret"), []byte("new-secret"))
 		if change.Diff != "" || !strings.Contains(change.DiffOmitted, "private") {
 			t.Fatal(change)
