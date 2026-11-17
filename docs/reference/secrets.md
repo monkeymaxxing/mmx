@@ -551,7 +551,7 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   the project `shop`:
 
   ```text
-  Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop.
+  Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop, the file that holds your vault passphrase.
   When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop
   ```
 

@@ -73,7 +73,7 @@ func secretsWritePassphraseFile(ctx context.Context, o secretsOptions) (int, err
 	if replaced {
 		fmt.Printf("Replaced the old %s.\n", shown)
 	}
-	fmt.Printf("Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=%s.\n", shown)
+	fmt.Printf("Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=%s, the file that holds your vault passphrase.\n", shown)
 	fmt.Printf("When you are done, delete the file: rm %s\n", shown)
 	return 0, nil
 }

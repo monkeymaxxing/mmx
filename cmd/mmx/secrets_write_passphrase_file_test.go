@@ -133,7 +133,7 @@ func TestSecretsWritePassphraseFileWritesTheCheckedPassphraseForAnAgent(t *testi
 		t.Fatalf("exit code %d\n%s", code, shown)
 	}
 	checkShownLines(t, shown,
-		"Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop.",
+		"Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop, the file that holds your vault passphrase.",
 		"When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop")
 	if b, err := os.ReadFile(file); err != nil || string(b) != typedPassphrase+"\n" {
 		t.Fatalf("file holds %q, %v", b, err)
@@ -169,7 +169,7 @@ func TestSecretsWritePassphraseFileWritesTheCheckedPassphraseForAnAgent(t *testi
 	}
 	checkShownLines(t, shown,
 		"Replaced the old ~/.config/mmx/vault-passphrase-shop.",
-		"Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop.",
+		"Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop, the file that holds your vault passphrase.",
 		"When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop")
 	if b, _ := os.ReadFile(file); string(b) != typedPassphrase+"\n" {
 		t.Fatalf("file holds %q", b)
@@ -203,7 +203,7 @@ func TestSecretsWritePassphraseFileForANewVault(t *testing.T) {
 	}
 	checkShownLines(t, shown,
 		"Created the vault inventories/staging_vault.age with this passphrase. The vault holds no secrets yet.",
-		"Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop-staging_vault.",
+		"Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop-staging_vault, the file that holds your vault passphrase.",
 		"When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop-staging_vault")
 	if values, err := secrets.Read(vault, typedPassphrase); err != nil || len(values) != 0 {
 		t.Fatal(values, err)

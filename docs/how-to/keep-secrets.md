@@ -80,7 +80,7 @@ from environment variables, and keep a separate vault for staging.
 
    ```text
    Created the vault secrets_vault.age with this passphrase. The vault holds no secrets yet.
-   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example.
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example, the file that holds your vault passphrase.
    When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-mmx_example
    ```
 
@@ -334,7 +334,7 @@ yourself, and let the agent read the passphrase from a file.
    Then MMX prints, for the project `mmx_example`:
 
    ```text
-   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example.
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example, the file that holds your vault passphrase.
    When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-mmx_example
    ```
 
@@ -698,7 +698,7 @@ staging needs no production secret.
 
    ```text
    Created the vault inventories/staging_secrets_vault.age with this passphrase. The vault holds no secrets yet.
-   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault.
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault, the file that holds your vault passphrase.
    When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-mmx_example-staging_secrets_vault
    ```
 
