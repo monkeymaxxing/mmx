@@ -48,12 +48,28 @@ distributions. There is no persistent controller service or message broker.
 When `dryrun`, `run`, or `run-command` needs an MMX installation, bootstrap
 uses existing SSH key or password access and OpenSSH's verified node
 identity. Bootstrap installs the node runner executable from the controller
-process's MMX release. Bootstrap then configures the node HTTPS API process
-and checks that direct HTTPS works.
+process's MMX release. `run` and `run-command` then configure the node HTTPS
+API process and check that direct HTTPS works. Before that setup on a node
+without the unit `mmx-https-api.service`, the controller process prints one
+line that names the unit, TCP port 7443 on every network address, and the
+`mmx remove-mmx-from-node` command for the node.
 Bootstrap runs as part of the requested command, with visible progress and
-no separate preparation step. Dryrun can set up MMX itself without changing
-declared resources. Repeated commands reuse a correct installation and
-finish interrupted setup.
+no separate preparation step. Repeated commands reuse a correct installation
+and finish interrupted setup.
+
+A dryrun on a node without the unit `mmx-https-api.service`, a new node or
+one removed from MMX's management and added back, installs only the node
+runner executable and uses SSH for that node, as `connection: ssh_only`
+does. The node gets no TLS key, no systemd unit, no listener, and no change
+to its authorized keys; the dryrun records `connection_used: ssh`.
+`check-one-time-playbooks` is a dryrun and behaves the same. The reason: a
+dryrun is how a person looks before agreeing to change a server, so it
+should not leave a network service behind. The cost: until the first run,
+each dryrun goes over SSH, which is slower for a large fleet, and a node
+whose sudo asks for a password asks once per dryrun. A dryrun on a node
+that has the unit, such as one set up from another controller machine or
+another project, sets up and uses HTTPS as a run does: the service already
+exists, so the setup adds nothing a run would have to undo.
 
 The account of the first login is whatever the server's provider created:
 `root`, or an ordinary account with sudo such as `ubuntu`, `debian`, or `rocky`.

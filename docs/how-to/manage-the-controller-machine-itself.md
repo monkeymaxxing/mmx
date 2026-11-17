@@ -177,12 +177,11 @@ trusts.
    echo "exit code $?"
    ```
 
-   The first dryrun sets up MMX on the controller machine over SSH. When
-   your account's `sudo` asks for a password, MMX asks for the password
-   once:
+   The first dryrun copies MMX's node program to the controller machine
+   and works over SSH. When your account's `sudo` asks for a password, MMX
+   asks for the password once for each dryrun:
 
    ```text
-   127.0.0.1: setting up MMX through verified SSH
    sudo password for barbara@127.0.0.1:22:
    Progress: 1 running
      turn_on_security_updates / controller_machine: connecting
@@ -215,9 +214,13 @@ trusts.
    turn_on_security_updates / web01: succeeded
    ```
 
-   This run prints no `setting up` line for `127.0.0.1` and asks for no
-   password, because the run reaches the controller machine over HTTPS on
-   port 7443. `mmx results --json` shows `"connection_used": "https"` for
+   This first run sets up MMX's HTTPS service on the controller machine
+   over SSH, so MMX asks for the `sudo` password once more and prints a
+   line such as
+   `127.0.0.1: setting up MMX's HTTPS service on controller_machine (mmx-https-api.service, TCP port 7443 on every network address); ...`.
+   Later runs and dryruns print no `setting up` line for `127.0.0.1` and
+   ask for no password, because they reach the controller machine over
+   HTTPS on port 7443. `mmx results --json` shows `"connection_used": "https"` for
    `controller_machine`.
 
 ### What MMX keeps on the controller machine as a node
@@ -412,7 +415,7 @@ Module pages that rely on this section: [`reboot`](../reference/modules/reboot.m
 | --- | --- |
 | `MMX does not reboot the controller machine, the machine where this mmx command runs. Run the playbook from another machine, or reboot this machine by hand after MMX finishes.` | A fleet stage that ends with `reboot` selects the controller machine. See [Patch every node and reboot the controller machine by hand](#patch-every-node-and-reboot-the-controller-machine-by-hand). |
 | `no SSH signing key on the controller machine matches the administrator account's SSH access (unsafe SSH authorization path /home/you/.ssh/authorized_keys: group or other accounts can write this file, so sshd and MMX do not trust it; run chmod go-w /home/you/.ssh/authorized_keys); ...` | The message names the file or directory that another account could change and says what to run: `chmod go-w` on that path, or `chmod 600 ~/.ssh/authorized_keys` for the file, as in step 2. When the message says the path belongs to another account, give the path to the administrator account or to `root` with `chown`. Each directory from `/` down to the file must belong to `root` or to the account. |
-| `sudo password for barbara@127.0.0.1:22 is required; configure an environment variable for the credential or use an SSH key or ssh-agent (prompts are disabled)` | The first contact needs your `sudo` password, and MMX may not ask. Run the first dryrun from a terminal, or see [Passwords for automation](connect-to-your-servers.md#passwords-for-automation). |
+| `sudo password for barbara@127.0.0.1:22 is required; configure an environment variable for the credential or use an SSH key or ssh-agent (prompts are disabled)` | The first contact needs your `sudo` password, and MMX may not ask. Run the first dryrun and the first run from a terminal, or see [Passwords for automation](connect-to-your-servers.md#passwords-for-automation). |
 | `SSH localhost: exit status 255: No ED25519 host key is known for localhost and you have requested strict checking.` | Your account does not trust the controller machine's host key under the address in the inventory. Do step 3 with that address. |
 | `SSH localhost: exit status 255: ssh: connect to host localhost port 22: Connection refused` | No SSH server runs on the controller machine. Do step 1. |
 | `this machine does not run Linux: it answered "Darwin" (macOS) to the command uname -s. MMX manages Linux nodes only, and a macOS controller machine cannot be a node. ...` | The inventory names your Mac as a node. Remove the Mac from the inventory, or leave the Mac out of the fleet stage with `except_nodes`. |

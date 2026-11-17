@@ -79,7 +79,7 @@ that server's work. The other servers go on, unless the fleet stage's
 
 MMX's first command over SSH asks the server for its system, its
 architecture, whether systemd runs it, and its systemd machine ID. The
-notice `setting up MMX through verified SSH` appears only after this first
+notices that start with `setting up MMX` appear only after this first
 check passes, so a server that fails here shows no such notice. The
 machine ID is the 32 hexadecimal digits in the server's `/etc/machine-id`.
 MMX tells servers apart by the machine ID. The server fails at once when
