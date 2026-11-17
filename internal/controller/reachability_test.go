@@ -683,7 +683,7 @@ func TestConfirmationSSHPreparationIsReadOnlyAndRetained(t *testing.T) {
 
 func TestSSHOnlyConnectionConstructsNoHTTPSConfirmationClient(t *testing.T) {
 	c, r := sshNode(t, "echo unexpected >&2; exit 1")
-	conn, err := c.connect(context.Background(), r, r.Inventory.Nodes["a"], "", machine{})
+	conn, err := c.connect(context.Background(), r, "a", "", machine{})
 	if err != nil {
 		t.Fatal(err)
 	}

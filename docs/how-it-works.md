@@ -252,9 +252,10 @@ MMX's own modules change nothing on a node during a dryrun, apart from
 MMX's own setup. A `shell` node task's `dryrun` command, a program
 module's check mode, and a script's `run_command` still run as root, and
 their authors make sure that they change nothing. The first
-dryrun on a new server installs `mmx-runner` on the server and starts
-`mmx-https-api.service`. For a server that takes only a password, the
-setup also adds MMX's own SSH key to the login account.
+dryrun on a new server copies `mmx-runner` to `/opt/mmx/bin/` and keeps a
+record in `/var/lib/mmx/`. It starts no service, opens no port, and adds no
+SSH key: it works over SSH until the first `mmx run` starts
+`mmx-https-api.service` on port 7443.
 Here is the first dryrun of [Get started](get-started.md):
 
 ```text
@@ -263,7 +264,6 @@ Project: mmx_example   Playbook: example
 Inventory: example (1 node)   Selected: 1 node
 Output: nodes (change with --output=nodes or --output=summary)
 Progress: 1 not started
-203.0.113.11: setting up MMX through verified SSH
 Progress: 1 running
   welcome / web01: connecting
 welcome / web01: succeeded
@@ -275,8 +275,13 @@ Run fbe759f2: succeeded
 Saved: /home/you/shop/.mmx/runs/20261115T035229.429039873-fbe759f2091942e3
 ```
 
-The line `setting up MMX through verified SSH` is the setup. The line
-`would create "/etc/mmx-example"` is the change that a run would make.
+The line `would create "/etc/mmx-example"` is the change that a run would
+make. The first `mmx run` then prints one more line before its first
+change:
+
+```text
+203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+```
 
 ### Why a dryrun cannot check some work
 
@@ -387,16 +392,20 @@ MMX's first SSH command asks the node what it runs:
 A node that is not Linux, has no systemd, or has no valid machine ID
 fails at once, with what MMX found and what to do.
 
-Then, over SSH, as root or through `sudo`, MMX:
+Then, over SSH, as root or through `sudo`, MMX installs `mmx-runner` in
+`/opt/mmx/bin/` on the node, and checks that `mmx-runner` comes from the
+same MMX release as `mmx`. A dryrun stops there: it starts no service and
+opens no port, and it does its work over SSH. The first `mmx run`, or
+`mmx run-command`, on the node goes on. First it prints one line that
+names the service, the port, and `mmx remove-mmx-from-node`, which removes
+MMX again. Then it:
 
-1. installs `mmx-runner` in `/opt/mmx/bin/` on the node, and checks that
-   `mmx-runner` comes from the same MMX release as `mmx`
-2. starts the **node HTTPS API process**, `mmx-runner serve`, as the
+1. starts the **node HTTPS API process**, `mmx-runner serve`, as the
    systemd service `mmx-https-api.service`, which listens on TCP port 7443
    on every network address of the node
-3. reads the node's HTTPS identity, called its **pin**: the SHA-256 of the
+2. reads the node's HTTPS identity, called its **pin**: the SHA-256 of the
    node's HTTPS public key
-4. saves a SHA-256 hash of the machine ID, and the pin, on the controller
+3. saves a SHA-256 hash of the machine ID, and the pin, on the controller
    machine, in the project's `.mmx/nodes/`
 
 The pin arrives over SSH, which you already trust. So MMX can later trust
@@ -404,7 +413,8 @@ the node's HTTPS connection without a public certificate authority.
 
 **Each project saves its own copy** of a node's identity, in its own
 `.mmx/nodes/`. A second project that manages the same node, or a
-teammate's copy of the project, sets up MMX on the node again over SSH.
+teammate's copy of the project, sets up MMX on the node again over SSH,
+in a dryrun too, because the node already has the service.
 That setup finds MMX installed and keeps the node's HTTPS key, so the pin
 that the first project saved stays valid.
 

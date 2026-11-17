@@ -27,7 +27,7 @@ project.)
 | [`mmx validate [PLAYBOOK]`](#mmx-validate) | Checks the project files. | No |
 | [`mmx nodes [PLAYBOOK]`](#mmx-nodes) | Lists the inventory's nodes and groups; with a playbook, also the nodes each fleet stage selects. | No |
 | [`mmx explain PLAYBOOK`](#mmx-explain) | Shows the work each node would get, with each value and where the value came from. | No |
-| [`mmx dryrun PLAYBOOK`](#mmx-dryrun) | Reports what a run would change, and changes nothing the playbook describes. On a new node, first installs MMX's program and its HTTPS service. | Yes |
+| [`mmx dryrun PLAYBOOK`](#mmx-dryrun) | Reports what a run would change, without changing it. Copies MMX's program to a node that does not have it yet. | Yes |
 | [`mmx run PLAYBOOK`](#mmx-run) | Applies the playbook to the nodes it selects. | Yes |
 | [`mmx resume [RUN_ID]`](#mmx-resume) | Finishes the work that a saved run left undone. | Yes |
 | [`mmx status [RUN_ID]`](#mmx-status) | Collects the current results of a saved run from its nodes. | Yes |
@@ -371,10 +371,11 @@ The [`ufw` page](modules/ufw.md) shows how `mmx explain` lists a node task's fir
 ## mmx dryrun
 
 `mmx dryrun PLAYBOOK` connects to each selected node and reports what a
-run would change. A dryrun changes nothing the playbook describes. On a
-node without MMX, the dryrun first sets MMX up: it installs MMX's program
-in `/opt/mmx/bin/` and starts its HTTPS service, `mmx-https-api.service`,
-which listens on TCP port 7443 on every network address.
+run would change, without changing it. On a node without MMX, the dryrun
+first copies MMX's node program to `/opt/mmx/bin/` and keeps a record in
+`/var/lib/mmx/`. It starts no service and opens no port: until the first
+`mmx run` on the node, the dryrun works over SSH, so a server whose `sudo`
+asks for a password asks once for each dryrun.
 
 ```sh
 mmx dryrun set_up_web_servers --limit web01 --diff
@@ -429,7 +430,10 @@ says what each result means.
 ## mmx run
 
 `mmx run PLAYBOOK` applies the playbook to the nodes it selects, and
-saves the run.
+saves the run. On a node without MMX's HTTPS service, the run first starts
+the service, `mmx-https-api.service` on TCP port 7443 on every network
+address, and prints one line that says so and names
+`mmx remove-mmx-from-node` to remove MMX again.
 
 ```sh
 mmx run set_up_web_servers --limit web01
@@ -1235,7 +1239,7 @@ stage on that node is a **node job**.
 | `node_job_attempt` | `1` for the first node job, one more for each `mmx resume` that ran it again; `0` when no node job started, such as when MMX could not connect. |
 | `previous_node_job_attempts` | The earlier node jobs, each with `job_id` and `response`. |
 | `job_id` | The node job's ID on the node. |
-| `connection_used` | `https`, `ssh`, or `ssh_fallback` (SSH because HTTPS on port 7443 failed); `connection_fallback_reason` then says why. |
+| `connection_used` | `https`, `ssh`, or `ssh_fallback` (SSH because HTTPS on port 7443 failed); `connection_fallback_reason` then says why. A dryrun on a node where no `mmx run` has started MMX's HTTPS service yet records `ssh`. |
 | `node_id`, `architecture`, `runner_hash` | The node's identity as MMX saved it, its processor architecture, and the checksum of MMX's node program on it. |
 | `housekeeping` | Problems on the controller machine apart from the node tasks' results, such as a difference that could not be downloaded. |
 | `response` | What the node reported. See below. |

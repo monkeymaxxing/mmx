@@ -100,12 +100,14 @@ Put in your own servers' addresses and accounts.
    mmx run example --limit web01
    ```
 
-   The first run sets up MMX on the server over SSH, then runs the
-   playbook:
+   The first run sets up MMX's HTTPS service on the server over SSH,
+   then runs the playbook. It says so before it changes anything:
 
    ```text
-   203.0.113.11: setting up MMX through verified SSH
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
    ```
+
+   A dryrun before this run works over SSH and starts no service.
 
    **Check:** the run ends with `Run ...: succeeded`. The next run on
    `web01` prints no `setting up` line, because the run uses HTTPS.
@@ -114,7 +116,7 @@ Put in your own servers' addresses and accounts.
 ## A server that takes only a password
 
 MMX asks for the SSH password and the `sudo` password at the first
-contact. Then MMX creates an SSH key on your computer, in `~/.ssh/mmx/`,
+contact. At the first run, MMX creates an SSH key on your computer, in `~/.ssh/mmx/`,
 and adds the key's public half to the account's
 `~/.ssh/authorized_keys` on the server. Later runs over HTTPS need no
 password, because they sign in with that key. A run that uses SSH, such as
@@ -144,16 +146,16 @@ The example account is `deploy` on `web02`, with a login password and a
 
    **Check:** `mmx nodes` lists `web02   203.0.113.12   deploy`.
 
-3. **Run the first dryrun from a terminal, and type both passwords.**
+3. **Make the first run from a terminal, and type both passwords.**
 
    ```sh
-   mmx dryrun example --limit web02
+   mmx run example --limit web02
    ```
 
    ```text
-   203.0.113.12: setting up MMX through verified SSH
    SSH password for deploy@203.0.113.12:22:
    sudo password for deploy@203.0.113.12:22:
+   203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web02 --inventory example removes it
    Progress: 1 running
      welcome / web02: connecting
    203.0.113.12: establishing ordinary SSH key access; private key: /home/you/.ssh/mmx/c4566d72437fccc6921b14be1a0d1da5082acc193af229b34a2518d8299a619c
@@ -161,7 +163,9 @@ The example account is `deploy` on `web02`, with a login password and a
 
    MMX asks each question only when the server needs the answer. An
    account with a key and with `sudo` that needs no password gets no
-   question.
+   question. A dryrun before this first run asks for both passwords too,
+   on every dryrun, and creates no key: the key comes with the run that
+   sets up MMX's HTTPS service.
 
    **Check:** `ls ~/.ssh/mmx/` shows the new key, and the account's
    `~/.ssh/authorized_keys` on the server holds the key's public half, on a
@@ -403,7 +407,7 @@ the new key.
    machine, and says so:
 
    ```text
-   203.0.113.11: saved node HTTPS API identity is out of date (verified SSH reached another machine); setting up MMX again through verified SSH
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
    Progress: 1 running
      welcome / web01: connecting
    203.0.113.11: node address now reaches a different machine with a trusted SSH host key; saved node identity updated

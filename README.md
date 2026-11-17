@@ -177,10 +177,9 @@ mmx dryrun set_up_web_servers --limit web01 --diff
 ```
 
 `--limit web01` picks the node `web01`, and `--diff` shows the changed lines
-of each file. A dryrun changes nothing your playbooks describe. On a new
-server, the first dryrun also installs MMX's program (`/opt/mmx/bin/`) and
-its HTTPS service, which listens on TCP port 7443 on every network address.
-Part of the dryrun's output:
+of each file. The dryrun changes nothing that the playbook lists; on a new
+server it only copies MMX's own program, as [First run](#first-run) says.
+Part of its output:
 
 ```text
   set_up_nginx / web01 / install_nginx: succeeded, unchanged
@@ -276,9 +275,7 @@ checks the changes. These parts of MMX are made for that:
 - `mmx describe-module NAME` prints a module's whole page, with its inputs,
   examples, and errors, so the agent doesn't have to guess.
 - `mmx dryrun` reports what each node task would change, with file
-  differences, and changes nothing that the playbooks describe. On a new
-  server, the first dryrun also installs MMX's program and its HTTPS
-  service. You or your agent can read the report
+  differences, and changes nothing that the playbook lists. You or your agent can read the report
   before `mmx run`. MMX cannot know what a `shell` task would do, so the
   report shows a `shell` task as skipped, with its change unknown, unless
   the task gives its own `dryrun` command.
@@ -313,7 +310,8 @@ project's modules live in your project's repository.
 
 MMX is one program on the controller machine, with no service to keep
 running there. You install nothing on the nodes by hand: the first
-`mmx dryrun` installs MMX's program on each node.
+`mmx dryrun` copies MMX's program to each node, and the first `mmx run`
+starts MMX's HTTPS service there.
 
 Your project is a directory of plain files, so you can keep every change in
 Git. Secrets are kept in one encrypted file, the vault, in the same
@@ -414,9 +412,10 @@ mmx run set_up_web_servers       # make the changes
 mmx run set_up_web_servers       # nothing differs now, so this run changes nothing
 ```
 
-The first command that connects to a node also installs MMX's own program
-on that node, even when the command is a dryrun. [First run](#first-run)
-says what that installation does.
+The first command that connects to a node also copies MMX's own program
+to that node, even when the command is a dryrun. The first `mmx run` also
+starts MMX's HTTPS service on the node. [First run](#first-run) says what
+each one does.
 
 The [how-it-works guide](docs/how-it-works.md) builds a similar example up
 step by step, and explains what happens on the controller machine and on
@@ -550,7 +549,7 @@ In an empty directory:
 mmx init                  # creates mmx_project_settings.yml, inventories/example.yml, playbooks/example.yml
 # Put your server's address and SSH account in inventories/example.yml.
 mmx validate              # check the project files, without contacting a server
-mmx dryrun example        # set MMX up on the server, then show what would change
+mmx dryrun example        # copy MMX's program to the server, then show what would change
 mmx run example           # make the changes
 ```
 
@@ -564,15 +563,23 @@ Before the first dryrun:
 - Use the account `root`, or an account that can run any command with
   `sudo`.
 
-**What the first dryrun does to the server.** MMX logs in over SSH and
-installs `mmx-runner`, its node program. It starts `mmx-runner` as the
+**What the first dryrun does to the server.** MMX logs in over SSH,
+copies `mmx-runner`, its node program, to `/opt/mmx/bin/`, and keeps a
+record in `/var/lib/mmx/`. The dryrun starts no service and opens no port;
+it works over SSH.
+
+**What the first run adds.** The first `mmx run` starts `mmx-runner` as the
 systemd service `mmx-https-api.service`, which listens on TCP port 7443 on
-every network address of the server.
-After that, `mmx` connects over HTTPS on port 7443 and proves who it is
-with your SSH key. Over HTTPS, your SSH key alone gives root on the
-server: when the login account uses `sudo`, the server does not ask for
-the `sudo` password. MMX keeps its records on the server in
-`/var/lib/mmx/`.
+every network address of the server. Before it does, it prints one line
+that names the service, the port, and the command that removes MMX again:
+`mmx remove-mmx-from-node NODE`. After that, `mmx` connects over HTTPS on
+port 7443 and proves who it is with your SSH key, for runs and dryruns
+alike. Over HTTPS, your SSH key alone gives root on the server: when the
+login account uses `sudo`, the server does not ask for the `sudo` password.
+
+Until that first run, each dryrun works over SSH. Over SSH, a dryrun of
+many servers is slower than over HTTPS, and a server whose `sudo` asks for
+a password asks once for each dryrun.
 
 MMX never opens a firewall port itself. If port 7443 is closed between the
 controller machine and the server, MMX uses SSH for that server and says so
@@ -594,9 +601,8 @@ before moving on. Use one server first, then the rest.
 | 5 | The changes are made. | `mmx run PLAYBOOK --limit NODE` ends with no failed node. |
 | 6 | The playbook is repeatable. | Run it again: no node task reports a change, apart from `shell` tasks that run every time. |
 
-- Before the first dryrun on a new server, tell the person that it
-  installs MMX's program and its HTTPS service on the server (TCP port
-  7443), and wait for their yes.
+- Before the first dryrun on a new server, tell the person that it copies
+  MMX's program to the server, and wait for their yes.
 - Look up each module with `mmx describe-module NAME` before using it. Use a
   core module when one fits. Use `shell` for a short command.
 - When no module fits and a short `shell` command is not enough, write a
@@ -606,6 +612,10 @@ before moving on. Use one server first, then the rest.
 - Never put a secret's value in a YAML file, a command line, or the chat.
   Use `mmx secrets set KEY`, which reads the value from standard input, or
   `mmx secrets add-random KEY`.
+- The first `mmx run` on a server starts MMX's HTTPS service,
+  `mmx-https-api.service`, on TCP port 7443 on every network address. Tell
+  the person before that run. If they want no listener, set
+  `connection: ssh_only` on the node in the inventory.
 - A first dryrun on a new server can report `not_checked` for a node task
   that depends on an earlier one, such as a file in a directory that a
   package creates. Tell the person so when you show the dryrun, and don't

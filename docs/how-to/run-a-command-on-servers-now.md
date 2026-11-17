@@ -62,9 +62,9 @@ write a playbook instead.
    `--nodes all` selects every node of the inventory. `true` is a shell
    command that does nothing and succeeds, so this run changes nothing on
    the servers except MMX's own setup. On a server where MMX was never
-   set up, MMX first sets itself up, as a first dryrun does: MMX logs in
-   over SSH, installs MMX's node program, and starts the node program. A first run shows
-   the setup:
+   set up, MMX first sets itself up, as a first `mmx run` does: MMX logs in
+   over SSH, installs MMX's node program, and starts MMX's HTTPS service on
+   TCP port 7443. A first run shows the setup:
 
    ```text
    Run 7fe1181f
@@ -72,10 +72,10 @@ write a playbook instead.
    Inventory: example (4 nodes)   Selected: 4 nodes
    Output: nodes (change with --output=nodes or --output=summary)
    Progress: 4 not started
-   203.0.113.12: setting up MMX through verified SSH
-   203.0.113.11: setting up MMX through verified SSH
-   203.0.113.21: setting up MMX through verified SSH
-   203.0.113.13: setting up MMX through verified SSH
+   203.0.113.12: setting up MMX's HTTPS service on web02 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web02 --inventory example removes it
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+   203.0.113.21: setting up MMX's HTTPS service on db01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node db01 --inventory example removes it
+   203.0.113.13: setting up MMX's HTTPS service on web03 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web03 --inventory example removes it
    ...
    run-command / db01: succeeded
    run-command / web01: succeeded

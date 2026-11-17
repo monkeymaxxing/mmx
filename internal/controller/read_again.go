@@ -104,13 +104,12 @@ func (c Controller) readSecretsAgain(ctx context.Context, r *Run) *nodeFileReads
 }
 
 func (c Controller) readNodeFile(ctx context.Context, r *Run, origin value.NodeOrigin, recorded machine) (any, error) {
-	managedNode, ok := r.Inventory.Nodes[origin.Node]
-	if !ok {
+	if _, ok := r.Inventory.Nodes[origin.Node]; !ok {
 		return nil, fmt.Errorf("the saved inventory has no node %s", origin.Node)
 	}
 	ctx, cancel := context.WithTimeout(ctx, readAgainLimit)
 	defer cancel()
-	conn, err := c.connect(ctx, r, managedNode, "", recorded)
+	conn, err := c.connect(ctx, r, origin.Node, "", recorded)
 	if err != nil {
 		return nil, err
 	}

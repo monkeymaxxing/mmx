@@ -94,7 +94,7 @@ func (c Controller) MarkNodeWorkFailed(ctx context.Context, r *Run, node string)
 		return 0, nil
 	}
 	first := r.Entries[work[0]]
-	conn, err := c.connect(ctx, r, r.Inventory.Nodes[node], first.RunnerHash, machine{first.NodeID, first.Architecture})
+	conn, err := c.connect(ctx, r, node, first.RunnerHash, machine{first.NodeID, first.Architecture})
 	var replaced *replacedError
 	var configuration *sshConfigurationError
 	switch {

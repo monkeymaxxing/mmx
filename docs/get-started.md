@@ -125,9 +125,9 @@ your own server's address and account.
    echo "exit code $?"
    ```
 
-   The first dryrun on a server also sets up MMX there: it logs in over
-   SSH, installs MMX's node program, and starts it. Then it shows what a
-   run would change and changes nothing else:
+   The first dryrun on a server logs in over SSH and copies MMX's node
+   program there. Then it shows what a run would change and changes
+   nothing else:
 
    ```text
    Run fbe759f2
@@ -135,7 +135,6 @@ your own server's address and account.
    Inventory: example (1 node)   Selected: 1 node
    Output: nodes (change with --output=nodes or --output=summary)
    Progress: 1 not started
-   203.0.113.11: setting up MMX through verified SSH
    Progress: 1 running
      welcome / web01: connecting
    welcome / web01: succeeded
@@ -164,6 +163,13 @@ your own server's address and account.
    mmx run example
    ```
 
+   The first run on a server starts MMX's HTTPS service there, and says
+   so before it changes anything:
+
+   ```text
+   203.0.113.11: setting up MMX's HTTPS service on web01 (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node web01 --inventory example removes it
+   ```
+
    **Check:** the task says `succeeded, changed` and `created
    "/etc/mmx-example"`, and the run ends with `Run ...: succeeded` and exit
    code 0. On the server, `cat /etc/mmx-example` prints `Managed by MMX.`
@@ -180,10 +186,15 @@ your own server's address and account.
 
 Next, write your own playbook: [Write a playbook](how-to/write-a-playbook.md).
 
-## What the first dryrun did on the server
+## What the first dryrun and the first run did on the server
 
-- It installed `mmx-runner`, MMX's node program, and started it as the
-  systemd service `mmx-https-api.service`, which listens on TCP port 7443.
+- The first dryrun copied `mmx-runner`, MMX's node program, to
+  `/opt/mmx/bin/` and kept a record in `/var/lib/mmx/`. It started no
+  service and opened no port, and it worked over SSH.
+- The first run started `mmx-runner` as the systemd service
+  `mmx-https-api.service`, which listens on TCP port 7443 on every network
+  address of the server. `mmx remove-mmx-from-node web01` removes MMX from
+  the server again.
 - From then on, `mmx` connects to the server over HTTPS on port 7443 and
   proves who it is with your SSH key. If port 7443 is closed between your
   computer and the server, MMX uses SSH instead and says so in its output.
