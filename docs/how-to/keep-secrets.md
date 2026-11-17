@@ -339,7 +339,7 @@ project has none.
    The vault then holds `smtp-password` below `mail_secret_files`, and
    MMX adds `mail_secret_files` when the vault does not have it. A node
    task reads the value as
-   `{{ index .secrets.mail_secret_files "smtp-password" }}`.
+   `{{ .secrets.mail_secret_files.smtp-password }}`.
    [A name inside a secret key](../reference/secrets.md#a-name-inside-a-secret-key)
    gives the rules.
 

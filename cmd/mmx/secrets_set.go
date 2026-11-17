@@ -78,8 +78,9 @@ func secretsSet(ctx context.Context, o secretsOptions) (int, error) {
 	return o.saved(vault, "")
 }
 
-// valueOf is the value that input gives, for the secret that place names: without exactly one final line
-// ending, "\n" or "\r\n", so that echo and printf %s give the same value.
+// valueOf is the value that input gives for the secret that place names:
+// without exactly one final line ending, "\n" or "\r\n", so that echo and
+// printf %s give the same value.
 // An empty value is refused: it is almost always a command that printed
 // nothing.
 func valueOf(input, place string) (string, error) {

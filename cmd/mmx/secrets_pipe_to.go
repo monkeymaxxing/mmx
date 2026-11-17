@@ -30,8 +30,11 @@ func secretsPipeTo(ctx context.Context, o secretsOptions) (int, error) {
 	// A program that is not there fails before the vault is opened, so
 	// nobody types a passphrase for nothing.
 	program, err := exec.LookPath(o.command[0])
-	if err != nil {
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
 		return 4, fmt.Errorf("cannot start %s: no such program; check the program's name, or the PATH environment variable", o.command[0])
+	}
+	if err != nil {
+		return 4, fmt.Errorf("cannot start %s: %w", o.command[0], err)
 	}
 	_, _, values, err := o.existingVault(ctx)
 	if err != nil {

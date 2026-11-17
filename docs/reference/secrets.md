@@ -169,9 +169,10 @@ mmwatchdog_secret_files:
 ```
 
 A node task reads the value as
-`{{ index .secrets.mmwatchdog_secret_files "smtp-password" }}`, or as
-`{{ .secrets.mmwatchdog_secret_files.smtp_password }}` for a name
-without hyphens or dots, such as `smtp_password`.
+`{{ .secrets.mmwatchdog_secret_files.smtp-password }}`. A name with
+characters other than letters, digits, `_`, and `-`, such as `ca.pem`,
+goes in brackets and double quotes:
+`{{ .secrets.mmwatchdog_secret_files["ca.pem"] }}`.
 
 - **The first word** is a secret key and follows the rules of
   [secret keys](#the-vault-file). Each word after it is a name inside
