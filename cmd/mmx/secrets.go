@@ -15,7 +15,7 @@ import (
 	"mmx/internal/secrets"
 )
 
-const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | list-keys | diff-keys | usage [KEY]
+const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | show KEY [NAME ...] | list-keys | diff-keys | usage [KEY]
 
 Options: --inventory NAME  --vault PATH (not for usage)  --vault-password-file PATH
 Passphrase change: --new-vault-password-file PATH
@@ -23,6 +23,7 @@ Length of the value that add-random generates: --length N (default 32)
 Value for set: standard input, such as some_command | mmx secrets set KEY
 A name inside a key: one word for each level, such as mmx secrets set mmwatchdog_secret_files smtp-password
 A key the vault already has: set and add-random change its value only with --replace
+show prints one value, only to a terminal; clear the terminal afterwards
 Automation: --non-interactive  --json`
 
 // secretsOptions are the options and arguments of one mmx secrets command.
@@ -51,7 +52,7 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 	}
 	o := secretsOptions{action: args[0]}
 	switch o.action {
-	case "edit", "passwd", "add-random", "set", "list-keys", "diff-keys", "usage":
+	case "edit", "passwd", "add-random", "set", "show", "list-keys", "diff-keys", "usage":
 	default:
 		return 4, fmt.Errorf("unknown secrets command %q", o.action)
 	}
@@ -93,6 +94,8 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 		return secretsAddRandom(ctx, o)
 	case "set":
 		return secretsSet(ctx, o)
+	case "show":
+		return secretsShow(ctx, o)
 	case "list-keys":
 		return secretsListKeys(ctx, o)
 	case "diff-keys":
@@ -197,6 +200,20 @@ func (o secretsOptions) environmentBindings() (map[string]string, error) {
 		return nil, err
 	}
 	return project.Secrets, nil
+}
+
+// refuseKeyFromEnvironment refuses a secret key that secrets_from_env binds
+// to an environment variable: a run reads that key from the variable, so
+// the vault's value for it would never be read.
+func (o secretsOptions) refuseKeyFromEnvironment(key string) error {
+	bindings, err := o.environmentBindings()
+	if err != nil {
+		return err
+	}
+	if variable, bound := bindings[key]; bound {
+		return fmt.Errorf("secret key %s is bound to environment variable %s by secrets_from_env in mmx_project_settings.yml. MMX reads %s from the environment instead of the vault. Remove the secrets_from_env entry or choose a different secret key", key, variable, key)
+	}
+	return nil
 }
 
 // existingVault opens the vault of a command that only reads: it returns the

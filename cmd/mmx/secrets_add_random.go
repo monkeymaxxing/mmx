@@ -25,14 +25,8 @@ func secretsAddRandom(ctx context.Context, o secretsOptions) (int, error) {
 	if o.length < 1 {
 		return 4, fmt.Errorf("--length must be a positive integer, such as --length 48; got %d", o.length)
 	}
-	// A run reads a key that the project binds to an environment variable
-	// from that variable, so a value in the vault would never be read.
-	bindings, err := o.environmentBindings()
-	if err != nil {
+	if err := o.refuseKeyFromEnvironment(key); err != nil {
 		return 4, err
-	}
-	if variable, bound := bindings[key]; bound {
-		return 4, fmt.Errorf("secret key %s is bound to environment variable %s by secrets_from_env in mmx_project_settings.yml. MMX reads %s from the environment instead of the vault. Remove the secrets_from_env entry or choose a different secret key", key, variable, key)
 	}
 	vault, err := o.vaultFile()
 	if err != nil {

@@ -136,12 +136,14 @@ set:
 | `mmx secrets passwd` | Encrypts the vault with a new passphrase. | Yes |
 | `mmx secrets add-random KEY [NAME ...]` | Adds a secret key, or a name inside one, with a random value. | Yes |
 | `mmx secrets set KEY [NAME ...]` | Adds a secret key, or a name inside one, with a value from standard input. | Yes |
+| `mmx secrets show KEY [NAME ...]` | Prints one secret's value, only to a terminal. | Yes |
 | `mmx secrets list-keys` | Prints the vault's secret keys. | Yes |
 | `mmx secrets diff-keys` | Compares the vault's secret keys with the last Git commit. | Yes |
 | `mmx secrets usage [KEY]` | Lists where each secret key is read. | Only when the vault file exists |
 
 No `mmx secrets` command prints a secret's value, also not in an error
-message. `mmx secrets edit` shows the values in your editor.
+message, except `mmx secrets show`, which prints one value to your
+terminal. `mmx secrets edit` shows the values in your editor.
 
 | Option | Commands | What the option does |
 | --- | --- | --- |
@@ -152,7 +154,7 @@ message. `mmx secrets edit` shows the values in your editor.
 | `--length N` | `add-random` | Makes a value of `N` characters. The default is 32. |
 | `--replace` | `add-random`, `set` | Changes the value of a secret key that the vault has. |
 | `--non-interactive` | all | Fails instead of asking a question. |
-| `--json` | all | Prints JSON, and asks no question. |
+| `--json` | all except `show` | Prints JSON, and asks no question. |
 
 ### A name inside a secret key
 
@@ -308,6 +310,32 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   lines, and a secret key in `secrets_from_env` work as for `add-random`.
 - The command prints nothing when it succeeds. `--json` prints only the
   vault's path and `status`.
+
+### mmx secrets show
+
+- The command prints the value of one secret, for a person who needs to
+  read the value once, such as to store a passphrase in a password
+  manager. The words name the secret as for `set`:
+  `mmx secrets show mmwatchdog_secret_files smtp-password`.
+- The command prints only when standard output is a terminal. In a pipe,
+  in a file, with `--json`, or through a coding agent, the command fails
+  with exit code 4 before MMX opens the vault:
+  `mmx secrets show prints a secret only to a terminal. Run it yourself in a terminal, not through your coding agent`.
+- The output is the value, then one line:
+
+  ```text
+  Clear your terminal afterwards with `clear`.
+  ```
+
+  A value of several lines prints as those lines. A value that is not
+  text, such as a number or a list, prints as its YAML text.
+- A secret key that the vault does not have fails with exit code 4 and
+  says that `mmx secrets list-keys` lists the secret keys. A name that
+  the vault does not have, or words that end at a mapping of names, fail
+  too, and the message lists the names that the vault has there.
+- The command refuses a secret key that `secrets_from_env` binds to an
+  environment variable, because a run never reads that key's value from
+  the vault.
 
 ### mmx secrets list-keys
 

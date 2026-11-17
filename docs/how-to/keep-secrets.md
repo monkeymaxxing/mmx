@@ -39,6 +39,7 @@ from environment variables, and keep a separate vault for staging.
 | Start keeping secrets, and use one in a playbook | [Create the vault and use a secret](#create-the-vault-and-use-a-secret) |
 | Run from CI, a script, or a coding agent, with no one to type | [Run without a terminal](#run-without-a-terminal) |
 | Add a secret that another program gives you, or change a secret's value | [Add or change a secret without showing it](#add-or-change-a-secret-without-showing-it) |
+| Read one secret's value yourself, such as to store it in a password manager | [Read one value once](#read-one-value-once) |
 | Check which playbooks read a secret, and which secrets are missing or unused | [Find where a secret is used](#find-where-a-secret-is-used) |
 | Change the vault passphrase | [Change the passphrase](#change-the-passphrase) |
 | Keep secrets in environment variables, such as in CI, and no vault | [Secrets from environment variables](#secrets-from-environment-variables) |
@@ -394,6 +395,22 @@ project has none.
    ```
 
    **Check:** `mmx secrets diff-keys` shows `(none)` on all three lines.
+
+## Read one value once
+
+Sometimes a person needs to read one value, such as a passphrase to store
+in a password manager. Run this yourself, in a terminal:
+
+```sh
+mmx secrets show database_password
+```
+
+MMX prints the value and the line
+``Clear your terminal afterwards with `clear`.`` Do so when you have copied
+the value. `mmx secrets show` prints nothing through a pipe, into a file,
+or through a coding agent, so a value never lands in an agent's
+conversation or a log by accident. [`mmx secrets show`](../reference/secrets.md#mmx-secrets-show)
+gives the rules.
 
 ## Find where a secret is used
 

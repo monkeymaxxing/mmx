@@ -380,6 +380,41 @@ func cannotReplaceInPlace(keyPath []string) error {
 	return fmt.Errorf(`cannot replace the value of secret key %s: the vault is not written as separate "key: value" lines, for example because the keys are inside { }. Use mmx secrets edit to change the secret value`, KeyPathText(keyPath))
 }
 
+// ValueAt returns the value of the secret at keyPath in a vault's decoded
+// values, for a command that hands one value to a person or a program. A
+// value that is not text, such as a number or a list, is its YAML text.
+// When the key path does not end at one value, the error says what the
+// vault has there instead, so the person can pick the right words; it
+// names keys and names, never a value.
+func ValueAt(values map[string]any, keyPath []string) (string, error) {
+	var found any = values
+	for depth, name := range keyPath {
+		place := KeyPathText(keyPath[:depth])
+		mapping, ok := found.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("the vault's %s holds a value, not names; to read the value, give only %s", place, place)
+		}
+		if found, ok = mapping[name]; !ok {
+			if depth == 0 {
+				return "", fmt.Errorf("the vault has no secret key %s; mmx secrets list-keys lists the secret keys", name)
+			}
+			return "", fmt.Errorf("the vault's %s has no name %s; its names are %s", place, name, strings.Join(Keys(mapping), ", "))
+		}
+	}
+	switch found := found.(type) {
+	case string:
+		return found, nil
+	case map[string]any:
+		place := KeyPathText(keyPath)
+		return "", fmt.Errorf("the vault's %s holds names, not one value: %s. Give one more word for the name to read, such as %s %s", place, strings.Join(Keys(found), ", "), place, Keys(found)[0])
+	}
+	text, err := yaml.Marshal(found)
+	if err != nil {
+		return "", fmt.Errorf("cannot write the value of %s as YAML text", KeyPathText(keyPath))
+	}
+	return string(text), nil
+}
+
 // Keys returns the vault's top-level keys, sorted.
 func Keys(values map[string]any) []string {
 	keys := make([]string, 0, len(values))
