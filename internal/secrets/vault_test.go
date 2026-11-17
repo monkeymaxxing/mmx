@@ -166,7 +166,7 @@ func TestPasswordSourcesAndNoFallback(t *testing.T) {
 	}
 	// A new vault's prompt says that the person chooses the passphrase now
 	// and must keep it.
-	if len(labels) != 2 || labels[0] != "You are creating a new vault. Choose its passphrase now, and keep it safe, such as in a password manager.\nNobody can open the vault without the passphrase, and MMX cannot recover a lost one.\nNew vault passphrase: " ||
+	if len(labels) != 2 || labels[0] != "You are creating a new vault. Choose its passphrase now: make it new, not a password you use anywhere else, and keep it safe, such as in a password manager.\nNobody can open the vault without the passphrase, and MMX cannot recover a lost one.\nNew vault passphrase: " ||
 		labels[1] != "Confirm new vault passphrase: " {
 		t.Fatalf("new vault prompts: %q", labels)
 	}

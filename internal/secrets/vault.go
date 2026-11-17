@@ -80,7 +80,7 @@ func passwordFile(path string, warn io.Writer) (string, error) {
 
 // newVaultPassphrasePrompt asks for the passphrase of a vault that does not
 // exist yet. The person chooses it now, and a lost one cannot be recovered.
-const newVaultPassphrasePrompt = "You are creating a new vault. Choose its passphrase now, and keep it safe, such as in a password manager.\n" +
+const newVaultPassphrasePrompt = "You are creating a new vault. Choose its passphrase now: make it new, not a password you use anywhere else, and keep it safe, such as in a password manager.\n" +
 	"Nobody can open the vault without the passphrase, and MMX cannot recover a lost one.\n" +
 	"New vault passphrase: "
 
