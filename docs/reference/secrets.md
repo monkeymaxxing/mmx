@@ -144,14 +144,17 @@ set:
 | --- | --- | --- |
 | `mmx secrets edit` | Opens the whole vault in your editor, to view or reorganize it. Creates the vault if there is none. | Yes |
 | `mmx secrets passwd` | Encrypts the vault with a new passphrase. | Yes |
-| `mmx secrets add-random KEY` | Adds a secret key with a random value. | Yes |
-| `mmx secrets set KEY` | Adds a secret key with a value from standard input, or asks for the value at a terminal. | Yes |
+| `mmx secrets add-random KEY [NAME ...]` | Adds a secret key, or a name inside one, with a random value. | Yes |
+| `mmx secrets set KEY [NAME ...]` | Adds a secret key, or a name inside one, with a value from standard input, or asks for the value at a terminal. | Yes |
+| `mmx secrets show KEY [NAME ...]` | Prints one secret's value, only to a terminal. | Yes |
+| `mmx secrets pipe-to KEY [NAME ...] -- COMMAND [ARGUMENT ...]` | Writes one secret's value to a program's standard input. | Yes |
 | `mmx secrets list-keys` | Prints the vault's secret keys. | Yes |
 | `mmx secrets diff-keys` | Compares the vault's secret keys with the last Git commit. | Yes |
 | `mmx secrets usage [KEY]` | Lists where each secret key is read. | Only when the vault file exists |
 
 No `mmx secrets` command prints a secret's value, also not in an error
-message. `mmx secrets edit` shows the values in your editor.
+message, except `mmx secrets show`, which prints one value to your
+terminal. `mmx secrets edit` shows the values in your editor.
 
 | Option | Commands | What the option does |
 | --- | --- | --- |
@@ -162,7 +165,61 @@ message. `mmx secrets edit` shows the values in your editor.
 | `--length N` | `add-random` | Makes a value of `N` characters. The default is 32. |
 | `--replace` | `add-random`, `set` | Changes the value of a secret key that the vault has. |
 | `--non-interactive` | all | Fails instead of asking a question. |
-| `--json` | all | Prints JSON, and asks no question. |
+| `--json` | all except `show` and `pipe-to` | Prints JSON, and asks no question. |
+
+### A name inside a secret key
+
+`mmx secrets set` and `mmx secrets add-random` take one word for each
+level of the vault's text. `mmx secrets set mmwatchdog_secret_files smtp-password`
+sets `smtp-password` inside the mapping `mmwatchdog_secret_files`:
+
+```yaml
+mmwatchdog_secret_files:
+  smtp-password: "the value"
+```
+
+A node task reads the value as
+`{{ .secrets.mmwatchdog_secret_files.smtp-password }}`. A name with
+characters other than letters, digits, `_`, and `-`, such as `ca.pem`,
+goes in brackets and double quotes:
+`{{ .secrets.mmwatchdog_secret_files["ca.pem"] }}`.
+
+- **The first word** is a secret key and follows the rules of
+  [secret keys](#the-vault-file). Each word after it is a name inside
+  the level before. A name can hold any text. MMX writes a name of
+  letters, digits, `_`, `-`, and `.` as it is, such as `ca.pem`, and any
+  other name in double quotes. An empty name is refused, and so are
+  `true`, `false`, and `null`.
+- **Any depth** works the same way:
+  `mmx secrets set service tls ca.pem < ca.pem` sets `ca.pem` inside
+  `tls` inside `service`.
+- **A missing level** is added: a new secret key as a new last line of the
+  vault's text, a new name as a new last line of its mapping, each level
+  indented two spaces below the one before. A new name in a mapping that
+  the vault has takes the indentation of that mapping's names.
+- **An empty level** gets the name below it, two spaces further in. An
+  empty level is a name alone, such as `files:`, as a vault often starts,
+  or `files: {}` or `files: null`, where MMX removes `{}` or `null` from
+  the line. Comment lines indented below an empty level stay above the new
+  name.
+- **A level that holds a value** cannot hold names, such as `token: "abc"`,
+  a number, `true`, or a list, also the empty list `[]`. The command fails
+  and changes nothing, and the message says what to do next:
+  `the vault's token holds a value, not names, so smtp-password cannot go inside it. To keep the value, choose another name; to replace the value with names, run mmx secrets edit and remove the value of token`.
+  For a list, the message says to replace the list with the names, one
+  per line below the level, in `mmx secrets edit`.
+- **A level whose names are written inside `{ }`**, such as
+  `files: {user: app}`, is refused too, because MMX adds lines only
+  between names written one per line. The message says to open
+  `mmx secrets edit` and write the names one per line below the level.
+- **A name that the vault has** is refused without `--replace`, as for a
+  secret key. With `--replace`, its lines, from the name's own line down
+  to the next name of its mapping or the mapping's end, become the new
+  lines. Comments and the other names stay.
+- **Messages and the prompt** name the place as the words joined by
+  spaces, such as `Value of mmwatchdog_secret_files smtp-password:`.
+- `mmx secrets list-keys` and `diff-keys` show the top-level secret key,
+  `mmwatchdog_secret_files`. `--json` output keeps its fields.
 
 Each command names the vault file from your working directory, in its
 output and messages: `secrets_vault.age` in the project directory, and
@@ -226,6 +283,8 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   as they were.
 - A project without a vault gets a new vault. The passphrase comes from
   the passphrase sources, and the prompt asks twice.
+- `mmx secrets add-random KEY NAME` sets a name inside a secret key, as
+  [A name inside a secret key](#a-name-inside-a-secret-key) says.
 - The command changes nothing when the vault's text does not end as a list
   of `key: value` lines, such as when all secret keys are written inside
   `{ }` on one line. The message says so; use `mmx secrets edit` then.
@@ -243,6 +302,8 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   MMX removes exactly one line ending, `\n` or `\r\n`, at the end, so
   `echo token` and `printf %s token` give the same value. To keep a final
   line ending, as some private key files need, end the input with two.
+- `mmx secrets set KEY NAME` sets a name inside a secret key, as
+  [A name inside a secret key](#a-name-inside-a-secret-key) says.
 - When standard input is a terminal, the command asks `Value of KEY:` and
   hides what you type. With `--non-interactive` or `--json`, the command
   fails instead of asking.
@@ -269,6 +330,65 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   lines, and a secret key in `secrets_from_env` work as for `add-random`.
 - The command prints nothing when it succeeds. `--json` prints only the
   vault's path and `status`.
+
+### mmx secrets show
+
+- The command prints the value of one secret, for a person who needs to
+  read the value once, such as to store a passphrase in a password
+  manager. The words name the secret as for `set`:
+  `mmx secrets show mmwatchdog_secret_files smtp-password`.
+- The command prints only when standard output is a terminal. In a pipe,
+  in a file, with `--json`, or through a coding agent, the command fails
+  with exit code 4 before MMX opens the vault:
+  `mmx secrets show prints a secret only to a terminal. Run it yourself in a terminal, not through your coding agent`.
+- The output is the value, then one line:
+
+  ```text
+  Clear your terminal afterwards with `clear`.
+  ```
+
+  A value of several lines prints as those lines. A value that is not
+  text, such as a number or a list, prints as its YAML text.
+- A secret key that the vault does not have fails with exit code 4 and
+  says that `mmx secrets list-keys` lists the secret keys. A name that
+  the vault does not have, or words that end at a mapping of names, fail
+  too, and the message lists the names that the vault has there.
+- The command refuses a secret key that `secrets_from_env` binds to an
+  environment variable, because a run never reads that key's value from
+  the vault.
+
+### mmx secrets pipe-to
+
+- The command writes the value of one secret to the standard input of a
+  program, so the value goes from the vault to the program without
+  appearing on a screen or in a file. The words before `--` name the
+  secret as for `set`. The words after `--` are the program and its
+  arguments:
+
+  ```sh
+  mmx secrets pipe-to backup_passphrase -- openssl enc -d -aes-256-cbc -pbkdf2 -pass stdin -in backup.tar.enc -out backup.tar
+  mmx secrets pipe-to deploy_keys web01 -- ssh web01.example.com 'umask 077 && cat > ~/.ssh/deploy_key'
+  ```
+
+- MMX starts the program directly, not through a shell, and finds it
+  through `PATH`. The program gets exactly the stored value, plus one
+  line ending, `\n`, when the value does not end with one. A value of
+  several lines, such as an OpenSSH private key, arrives byte for byte,
+  with its final line ending. MMX then closes the program's standard
+  input.
+- The program's output and errors pass through, and MMX exits with the
+  program's exit code. MMX itself prints no value.
+- MMX only reads the vault: the vault file's bytes and time stay the same.
+  The passphrase comes from the passphrase sources; the prompt works,
+  because MMX, not the program, reads the terminal.
+- A missing `--` or program, or a program that `PATH` does not have,
+  fails with exit code 4 before MMX opens the vault. A secret key or name
+  that the vault does not have fails as for `show`. `--json` is refused.
+- **Never use `pipe-to` with a program that prints its input**, such as
+  `cat`, `echo`, or `tee`: the value then lands on the screen, or in a
+  coding agent's conversation. A person runs such steps.
+  A shell command that saves its input to a file, as in the `ssh`
+  example, is fine.
 
 ### mmx secrets list-keys
 

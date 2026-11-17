@@ -39,6 +39,8 @@ from environment variables, and keep a separate vault for staging.
 | Start keeping secrets, and use one in a playbook | [Create the vault and use a secret](#create-the-vault-and-use-a-secret) |
 | Run from CI, a script, or a coding agent, with no one to type | [Run without a terminal](#run-without-a-terminal) |
 | Add a secret that another program gives you, or change a secret's value | [Add or change a secret without showing it](#add-or-change-a-secret-without-showing-it) |
+| Read one secret's value yourself, such as to store it in a password manager | [Read one value once](#read-one-value-once) |
+| Give a secret to a program on your computer, such as `openssl` or `ssh` | [Give one value to a program](#give-one-value-to-a-program) |
 | Check which playbooks read a secret, and which secrets are missing or unused | [Find where a secret is used](#find-where-a-secret-is-used) |
 | Change the vault passphrase | [Change the passphrase](#change-the-passphrase) |
 | Keep secrets in environment variables, such as in CI, and no vault | [Secrets from environment variables](#secrets-from-environment-variables) |
@@ -318,6 +320,20 @@ project has none.
    **Check:** the command prints nothing and exits with code 0, and
    `mmx secrets list-keys` prints `mail_api_token`.
 
+   To put a value inside a secret key, give one more word for each level,
+   such as for a role that reads several values from one secret key:
+
+   ```sh
+   mmx secrets set mail_secret_files smtp-password < ~/Downloads/smtp-password.txt
+   ```
+
+   The vault then holds `smtp-password` below `mail_secret_files`, and
+   MMX adds `mail_secret_files` when the vault does not have it. A node
+   task reads the value as
+   `{{ .secrets.mail_secret_files.smtp-password }}`.
+   [A name inside a secret key](../reference/secrets.md#a-name-inside-a-secret-key)
+   gives the rules.
+
 2. **Change the value of a secret key that the vault has.** Add
    `--replace`:
 
@@ -372,6 +388,45 @@ project has none.
    ```
 
    **Check:** `mmx secrets diff-keys` shows `(none)` on all three lines.
+
+## Read one value once
+
+Sometimes a person needs to read one value, such as a passphrase to store
+in a password manager. Run this yourself, in a terminal:
+
+```sh
+mmx secrets show database_password
+```
+
+MMX prints the value and the line
+``Clear your terminal afterwards with `clear`.`` Do so when you have copied
+the value. `mmx secrets show` prints nothing through a pipe, into a file,
+or through a coding agent, so a value never lands in an agent's
+conversation or a log by accident. [`mmx secrets show`](../reference/secrets.md#mmx-secrets-show)
+gives the rules.
+
+## Give one value to a program
+
+`mmx secrets pipe-to` writes one secret to a program's standard input, so
+the value never appears on a screen. To decrypt a backup with a
+passphrase from the vault:
+
+```sh
+mmx secrets pipe-to backup_passphrase -- openssl enc -d -aes-256-cbc -pbkdf2 -pass stdin -in backup.tar.enc -out backup.tar
+```
+
+To put a private key on a server, readable only by its owner:
+
+```sh
+mmx secrets pipe-to deploy_keys web01 -- ssh web01.example.com 'umask 077 && cat > ~/.ssh/deploy_key'
+```
+
+MMX prints nothing of its own, and exits with the program's exit code.
+[`mmx secrets pipe-to`](../reference/secrets.md#mmx-secrets-pipe-to)
+gives the rules.
+
+A rule for coding agents: never use `pipe-to` with a program that prints
+its input, such as `cat` or `echo`. A person runs these steps.
 
 ## Find where a secret is used
 
@@ -661,6 +716,8 @@ gives the rules of travel, saved records, and `mmx resume`.
 | `vault is missing required secret mail_token` | A playbook reads a secret key that the vault does not have, often a misspelled name. The run stopped before any server changed, unless the missing key is a node's `ssh_password` or `sudo_password`, which MMX reads when it connects to that node. `mmx secrets usage` lists the key under `Referenced but not defined:` with its file and line. Fix the name, or add the secret. |
 | `secret database_password requires a nonempty environment variable SHOP_DATABASE_PASSWORD` | `secrets_from_env` binds the secret key to an environment variable that is not set or is empty. Set the environment variable. |
 | `the vault already has the key session_cookie_secret; to give it a new random value, add --replace` | `add-random` or `set` refuses to replace a value by accident. Add `--replace` if you want a new value. |
+| `the vault's token holds a value, not names, so smtp-password cannot go inside it. ...` | `mmx secrets set token smtp-password` would put a name inside `token`, but `token` holds a value. To keep the value, choose another secret key. To replace the value with names, run `mmx secrets edit` and remove the value of `token`. |
+| `the vault's mail_secret_files holds a list, not names, ...` | The vault holds a list under that key, such as `mail_secret_files: []`, often copied from an inventory's `vars`. Run `mmx secrets edit`, remove `[]`, and write the names one per line below the key, each indented by two spaces. |
 | `secret key database_password is bound to environment variable SHOP_DATABASE_PASSWORD by secrets_from_env in mmx_project_settings.yml. ...` | A run reads this secret key from the environment variable, so a value in the vault would never be read. Remove the `secrets_from_env` entry, or choose another secret key. |
 | `vault must contain one YAML mapping with unique secret names` after `mmx secrets edit` | The text you saved is not a list of `key: value` lines, or has a secret key twice. MMX kept the vault as it was. At a terminal, MMX asks `Edit again? [Y/n]`; answer Enter to fix the text in your editor. Without a terminal, your changes are lost, so run `mmx secrets edit` again. |
 | `role input database_password receives a secret; declare secret: true` | A role call passes a secret to a role's input. Add `secret: true` to that input in the role's file, below `type` and `required`. |

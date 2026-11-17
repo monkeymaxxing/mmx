@@ -19,21 +19,16 @@ import (
 // not in an error: on success it prints nothing, and with --json only the
 // vault's path and the status.
 func secretsSet(ctx context.Context, o secretsOptions) (int, error) {
-	if len(o.arguments) != 1 {
-		return 4, fmt.Errorf("usage: some_command | mmx secrets set KEY [--replace]; KEY is the name of the secret, such as cloudflare_tunnel_token")
+	if len(o.arguments) == 0 {
+		return 4, fmt.Errorf("usage: some_command | mmx secrets set KEY [NAME ...] [--replace]; KEY is the name of the secret, such as cloudflare_tunnel_token, and each NAME is one level inside it, such as mmx secrets set mmwatchdog_secret_files smtp-password")
 	}
-	key := o.arguments[0]
-	if err := secrets.CheckKey(key); err != nil {
+	keyPath := o.arguments
+	if err := secrets.CheckKeyPath(keyPath); err != nil {
 		return 4, err
 	}
-	// A run reads a key that the project binds to an environment variable
-	// from that variable, so a value in the vault would never be read.
-	bindings, err := o.environmentBindings()
-	if err != nil {
+	key, place := keyPath[0], secrets.KeyPathText(keyPath)
+	if err := o.refuseKeyFromEnvironment(key); err != nil {
 		return 4, err
-	}
-	if variable, bound := bindings[key]; bound {
-		return 4, fmt.Errorf("secret key %s is bound to environment variable %s by secrets_from_env in mmx_project_settings.yml. MMX reads %s from the environment instead of the vault. Remove the secrets_from_env entry or choose a different secret key", key, variable, key)
 	}
 	// A prompt for the value needs a terminal on standard input, and
 	// --non-interactive and --json never prompt.
@@ -43,7 +38,7 @@ func secretsSet(ctx context.Context, o secretsOptions) (int, error) {
 		if o.asJSON {
 			option = "--json"
 		}
-		return 4, fmt.Errorf("standard input is a terminal, and %s turns off the prompt for the value; give the value on standard input, such as some_command | mmx secrets set %s", option, key)
+		return 4, fmt.Errorf("standard input is a terminal, and %s turns off the prompt for the value; give the value on standard input, such as some_command | mmx secrets set %s", option, place)
 	}
 	vault, err := o.vaultFile()
 	if err != nil {
@@ -62,38 +57,39 @@ func secretsSet(ctx context.Context, o secretsOptions) (int, error) {
 	value := func() (string, error) {
 		if prompt {
 			credentials := &access.Credentials{Context: ctx}
-			typed, err := credentials.ReadPassword("Value of " + key + ": ")
+			typed, err := credentials.ReadPassword("Value of " + place + ": ")
 			if err != nil {
 				return "", err
 			}
-			return valueOf(typed, key)
+			return valueOf(typed, place)
 		}
 		read, err := io.ReadAll(io.LimitReader(os.Stdin, secrets.MaxVaultBytes+1))
 		if err != nil {
-			return "", fmt.Errorf("read the value for %s from standard input: %w", key, err)
+			return "", fmt.Errorf("read the value for %s from standard input: %w", place, err)
 		}
 		if len(read) > secrets.MaxVaultBytes {
-			return "", fmt.Errorf("the value for %s on standard input is larger than the vault, which holds at most 4 MiB", key)
+			return "", fmt.Errorf("the value for %s on standard input is larger than the vault, which holds at most 4 MiB", place)
 		}
-		return valueOf(string(read), key)
+		return valueOf(string(read), place)
 	}
-	if err := secrets.SetKey(vault, password, key, o.replace, value); err != nil {
+	if err := secrets.SetKey(vault, password, keyPath, o.replace, value); err != nil {
 		return secretsFailure(err)
 	}
 	return o.saved(vault, "")
 }
 
-// valueOf is the value that input gives: without exactly one final line
-// ending, "\n" or "\r\n", so that echo and printf %s give the same value.
+// valueOf is the value that input gives for the secret that place names:
+// without exactly one final line ending, "\n" or "\r\n", so that echo and
+// printf %s give the same value.
 // An empty value is refused: it is almost always a command that printed
 // nothing.
-func valueOf(input, key string) (string, error) {
+func valueOf(input, place string) (string, error) {
 	value, cut := strings.CutSuffix(input, "\n")
 	if cut {
 		value = strings.TrimSuffix(value, "\r")
 	}
 	if value == "" {
-		return "", fmt.Errorf("the value for %s is empty; mmx secrets set needs a value on standard input, such as some_command | mmx secrets set %s", key, key)
+		return "", fmt.Errorf("the value for %s is empty; mmx secrets set needs a value on standard input, such as some_command | mmx secrets set %s", place, place)
 	}
 	return value, nil
 }
