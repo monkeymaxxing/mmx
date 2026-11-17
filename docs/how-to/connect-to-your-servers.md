@@ -557,7 +557,9 @@ sshd's key rules, and checks that the account is `root` or can run any
 command with `sudo`. When sshd uses a rule that the service can't follow,
 such as `ForceCommand`, `ChrootDirectory`, a revocation list, or
 `UseDNS`, the service refuses the connection with an error that names
-`connection: ssh_only`. The service does not see keys that come only from
+`connection: ssh_only`. A connection whose key the account does not list
+gets one fixed refusal that says nothing about the server's accounts, and
+`journalctl -u mmx-https-api.service` on the server shows the reason. The service does not see keys that come only from
 `AuthorizedKeysCommand` or from a certificate authority, and it does not
 run PAM. Use `connection: ssh_only` when your servers rely on such login
 rules, so that OpenSSH checks the rules at every connection:
@@ -585,12 +587,13 @@ connection closes, and node jobs that already started keep running.
 | `sudo password for deploy@203.0.113.12:22 is required; ...` on a run with `--connection ssh_only` | Each SSH request uses `sudo`, so an SSH run needs the `sudo` password every time the account's `sudo` asks for one. Set `sudo_password` from a secret, or let the run use HTTPS. |
 | `secret deploy_sudo_password requires a nonempty environment variable MMX_DEPLOY_SUDO_PASSWORD` | The run needs a password whose environment variable is not set. Set the variable. |
 | `MMX could not connect to https://203.0.113.11:7443 (connection timed out).` | Port 7443 is closed. MMX used SSH, and the run went on. See [A server whose port 7443 is closed](#a-server-whose-port-7443-is-closed). |
-| `HTTPS 403: key is not authorized for unrestricted MMX access as root; check current SSH keys or use connection: ssh_only for other SSH authorization mechanisms` | The MMX service on the server did not find your key in the account's `authorized_keys`. Check that the key MMX uses is in that file. |
+| `HTTPS 403: key is not authorized for unrestricted MMX access as this account; check current SSH keys or use connection: ssh_only for other SSH authorization mechanisms; journalctl -u mmx-https-api.service on the node gives the reason` | The MMX service on the server did not find your key in the account's `authorized_keys`, or could not read the account or that file, such as a file that another account can write. Check that the key MMX uses is in that file; the journal line names the reason. |
 | `HTTPS 403: key is not authorized for unrestricted MMX access as root: its line in authorized_keys has options MMX does not accept (command, from); remove them, or use connection: ssh_only for other SSH authorization mechanisms` | Your key's line in `authorized_keys` limits it, for example with `command="..."` or a `from=` that does not match. MMX's HTTPS service gives full access, so it refuses a limited key. Remove those options, or use `connection: ssh_only`. |
 | `automatic setup of the node runner executable from http://203.0.113.40:18473/wrong/mmx-runner-8bf9a38b...: ... curl: (22) The requested URL returned error: 404` | The server could not download `mmx-runner` from `mmx_runner_download_url`. Check the URL and the file names on the web server. |
 | `node was replaced since this run (machine identity changed); its recorded work belongs to the previous machine; use mmx run` | You resumed a run from before the server was replaced. Start a new `mmx run`. |
 | `mmx: resume uses the recorded run's connection choice and accepts no --connection; start a new mmx run <playbook> --connection ssh_only for SSH` | `mmx resume` keeps the run's connection choice. Start a new run with `--connection ssh_only`. |
 | `account deploy does not have unrestricted root sudo access` | The account must be `root`, or able to run any command with `sudo`. Change the account's `sudo` rule, or use another account. |
+| `administrator account deploy has a locked password, and sshd refuses a locked account unless UsePAM is yes` | The account's password is locked (`!` in `/etc/shadow`), and the server's sshd does not use PAM, so sshd refuses the account's SSH keys too. Run `usermod -p '*' deploy` for an account with keys and no password, or give it a password. |
 
 [When something fails](../when-something-fails.md#connecting-to-a-server-and-setting-it-up)
 lists the other failures at the first contact, such as a login script that

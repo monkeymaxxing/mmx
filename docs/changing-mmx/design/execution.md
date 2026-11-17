@@ -104,8 +104,19 @@ Administrator private keys stay on the controller machine.
 
 At authentication the node HTTPS API process checks the account's current
 authorized key files, unrestricted root or sudo access, account expiry,
+a locked password where sshd refuses one (UsePAM not `yes`),
 and the effective `sshd -T` allow/deny policy. Adding a key to ordinary SSH
 access grants MMX access; removing the key refuses the next connection.
+
+Anyone can sign a proof with a key made for the purpose, so the node HTTPS
+API process checks the key files first. Until a line of the account's key
+files lists the key, every refusal, such as an unknown account, gets one
+fixed answer that names `journalctl -u mmx-https-api.service`, and the
+reason goes only to the node's journal. A client that has proved its key
+then gets the reason itself, such as missing sudo access. At most ten
+authentications run at once, as sshd's own `MaxStartups` begins, since each
+starts `sshd -C` as root; another waits within the authentication's 10
+second limit.
 SSH setups the node HTTPS API process does
 not evaluate itself use explicit `connection: ssh_only`; the
 [Connect to your servers](../../how-to/connect-to-your-servers.md) page lists them.

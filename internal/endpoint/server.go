@@ -146,6 +146,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(result)
 }
 
+// refusedBeforeKeyProofAnswer is the node HTTPS API's whole answer to a
+// client whose key the account does not list, whatever the reason.
+const refusedBeforeKeyProofAnswer = "key is not authorized for unrestricted MMX access as this account; check current SSH keys or use connection: ssh_only for other SSH authorization mechanisms; journalctl -u " + HTTPSAPIUnit + " on the node gives the reason"
+
+// refusalJournal receives the reason for each refused authentication. The
+// node HTTPS API process's standard error goes to the systemd journal.
+var refusalJournal io.Writer = os.Stderr
+
+// authorizations holds one entry for each authentication being checked. Each
+// check starts sshd -C, and for a proved key getent and sudo, as root; ten
+// at once, the start of sshd's own MaxStartups, bounds the processes a flood
+// of tries can start. A try waits its turn within the check's time limit.
+var authorizations = make(chan struct{}, 10)
+
 // authenticate verifies a signature over this connection's keying material,
 // then authorizes the key against the node's current SSH and sudo settings.
 func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, current *session) {
@@ -187,7 +201,20 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, current *s
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
+	select {
+	case authorizations <- struct{}{}:
+		defer func() { <-authorizations }()
+	case <-ctx.Done():
+		http.Error(w, "the node HTTPS API is busy checking other connections; try again", http.StatusServiceUnavailable)
+		return
+	}
 	if err := s.Authorize(ctx, p.User, key, remote, local); err != nil {
+		fmt.Fprintf(refusalJournal, "MMX authentication refused for account %q from %s: %v\n", p.User, remote, err)
+		var before *refusedBeforeKeyProof
+		if errors.As(err, &before) {
+			http.Error(w, refusedBeforeKeyProofAnswer, http.StatusForbidden)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}

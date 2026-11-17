@@ -1,8 +1,11 @@
 package endpoint
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -292,6 +295,65 @@ func TestUnsafeAuthorizationPathSaysWhatIsUnsafeAndTheFix(t *testing.T) {
 		got := check(file, "0")
 		if !strings.Contains(got, "belongs to the account with user ID "+uid) || !strings.Contains(got, "neither root nor the administrator account") || !strings.Contains(got, "chown") {
 			t.Fatalf("owner message %q", got)
+		}
+	}
+}
+
+// Before the key is proved, a refusal is one that the client must not read:
+// an unknown account, or a key the account does not list.
+func TestRefusalsBeforeTheKeyIsProvedAreMarked(t *testing.T) {
+	key := testSigner(t).PublicKey()
+	var before *refusedBeforeKeyProof
+	if err := (Authorizer{}).Authorize(context.Background(), "no_such_mmx_account", key, "127.0.0.1", "127.0.0.1"); !errors.As(err, &before) {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "authorized_keys")
+	other := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(testSigner(t).PublicKey())))
+	listed := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+	account := &user.User{Username: "admin", Uid: strconv.Itoa(os.Getuid()), HomeDir: dir}
+	settings := sshdConfig{"authorizedkeysfile": {file}, "pubkeyacceptedalgorithms": {"ssh-ed25519"}}
+	for _, tt := range []struct {
+		line   string
+		before bool
+	}{
+		{other, true},
+		// The key's own line proves the key: its options are named.
+		{`command="/usr/bin/true" ` + listed, false},
+	} {
+		if err := os.WriteFile(file, []byte(tt.line+"\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		err := authorizeKey(account, settings, key, "127.0.0.1")
+		if err == nil || errors.As(err, &before) != tt.before {
+			t.Fatal(tt.line, err)
+		}
+	}
+}
+
+// sshd built without PAM, or with UsePAM no, refuses an account whose
+// password is locked, so the node HTTPS API does too. With UsePAM yes, sshd
+// leaves the account check to PAM, which accepts a key for a locked password.
+func TestLockedPasswordFollowsUsePAM(t *testing.T) {
+	for _, tt := range []struct {
+		shadow, usePAM string
+		locked         bool
+	}{
+		{"admin:!$6$salt$hash:19000:0:99999:7:::", "no", true},
+		{"admin:!:19000:0:99999:7:::", "", true},
+		{"admin:!:19000:0:99999:7:::", "yes", false},
+		{"admin:*:19000:0:99999:7:::", "no", false},
+		{"admin:$6$salt$hash:19000:0:99999:7:::", "no", false},
+	} {
+		settings := sshdConfig{}
+		if tt.usePAM != "" {
+			settings["usepam"] = []string{tt.usePAM}
+		}
+		if lockedForSSHD(tt.shadow, settings) != tt.locked {
+			t.Fatal(tt)
 		}
 	}
 }

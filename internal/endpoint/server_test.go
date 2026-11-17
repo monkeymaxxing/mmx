@@ -336,3 +336,62 @@ func TestHTTPSAPIServerNegotiatesOnlyHTTP1(t *testing.T) {
 		t.Fatal("unauthenticated HTTP/1.1 request on the negotiated connection", code)
 	}
 }
+
+// A client that has not proved that its key is listed for the account learns
+// nothing about the node's accounts, sudo, or sshd policy: the answer is one
+// fixed text, and the reason goes to the node's journal. A refusal after the
+// key is proved, such as missing sudo, names the reason for its holder.
+func TestRefusalBeforeTheKeyIsProvedSaysNothingAboutTheNode(t *testing.T) {
+	identity, err := LoadIdentity(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var journal bytes.Buffer
+	defer func(w io.Writer) { refusalJournal = w }(refusalJournal)
+	refusalJournal = &journal
+	signer := testSigner(t)
+	s := &Server{Info: Info{NodeID: "node", TLSPin: identity.Pin}, Authorize: func(_ context.Context, user string, key ssh.PublicKey, remote, local string) error {
+		if user == "deploy" {
+			return errors.New("account deploy does not have unrestricted root sudo access")
+		}
+		return &refusedBeforeKeyProof{errors.New("administrator account is unavailable")}
+	}}
+	server := serveTLS(t, identity, s, nil)
+	for _, tt := range []struct{ user, answer string }{
+		{"guess", refusedBeforeKeyProofAnswer},
+		{"deploy", "account deploy does not have unrestricted root sudo access"},
+	} {
+		conn, err := tls.Dial("tcp", server.Listener.Addr().String(), ClientTLS(identity.Pin))
+		if err != nil {
+			t.Fatal(err)
+		}
+		state := conn.ConnectionState()
+		binding, err := state.ExportKeyingMaterial(sessionLabel, nil, 32)
+		if err != nil {
+			t.Fatal(err)
+		}
+		signature, err := sign(signer, signedSession(identity.Pin, tt.user, binding))
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := json.Marshal(sessionProof{User: tt.user, Key: signer.PublicKey().Marshal(), Signature: ssh.Marshal(signature)})
+		r, _ := http.NewRequest("POST", "https://mmx/v1/session", bytes.NewReader(body))
+		if err := r.Write(conn); err != nil {
+			t.Fatal(err)
+		}
+		response, err := http.ReadResponse(bufio.NewReader(conn), r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		answer, _ := io.ReadAll(response.Body)
+		conn.Close()
+		if response.StatusCode != 403 || strings.TrimSpace(string(answer)) != tt.answer {
+			t.Fatal(tt.user, response.StatusCode, string(answer))
+		}
+	}
+	for _, reason := range []string{`"guess"`, "administrator account is unavailable", `"deploy"`, "unrestricted root sudo access"} {
+		if !strings.Contains(journal.String(), reason) {
+			t.Fatalf("the journal lacks %s: %s", reason, journal.String())
+		}
+	}
+}

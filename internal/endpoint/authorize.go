@@ -27,33 +27,37 @@ var accountName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]*[$]?$`)
 
 type Authorizer struct{ SSHPort int }
 
+// refusedBeforeKeyProof is a refusal reached before the client proved that
+// the account lists its key: anyone can sign with a key made for the
+// purpose, so such a refusal must not tell the client which accounts exist or
+// how sudo and sshd are set up. The node HTTPS API answers it with one fixed
+// text and writes the reason to the node's journal.
+type refusedBeforeKeyProof struct{ error }
+
+func (e *refusedBeforeKeyProof) Unwrap() error { return e.error }
+
+// account checks the account's whole SSH and sudo access, for setup over
+// verified SSH.
 func (a Authorizer) account(ctx context.Context, name, remote, local string) (*user.User, sshdConfig, error) {
+	u, settings, err := a.keyFiles(ctx, name, remote, local)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := a.access(ctx, u, settings, remote); err != nil {
+		return nil, nil, err
+	}
+	return u, settings, nil
+}
+
+// keyFiles finds what decides which keys the account accepts: the account,
+// and sshd's settings for this connection.
+func (a Authorizer) keyFiles(ctx context.Context, name, remote, local string) (*user.User, sshdConfig, error) {
 	if !accountName.MatchString(name) {
 		return nil, nil, fmt.Errorf("invalid administrator account")
 	}
 	u, err := user.Lookup(name)
 	if err != nil {
 		return nil, nil, fmt.Errorf("administrator account is unavailable")
-	}
-	passwd, err := exec.CommandContext(ctx, "getent", "passwd", name).Output()
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot inspect administrator account")
-	}
-	fields := strings.Split(strings.TrimSpace(string(passwd)), ":")
-	if len(fields) != 7 || fields[0] != name || fields[2] != u.Uid || !ordinaryShell(fields[6]) {
-		return nil, nil, fmt.Errorf("administrator account details or shell could not be verified for HTTPS access; use connection: ssh_only")
-	}
-	shadow, err := exec.CommandContext(ctx, "getent", "shadow", name).Output()
-	if err != nil || !accountCurrent(string(shadow), name, time.Now()) {
-		return nil, nil, fmt.Errorf("administrator account is expired or its account policy is unavailable")
-	}
-	if u.Uid != "0" {
-		cmd := exec.CommandContext(ctx, "sudo", "-n", "-ll", "-U", name)
-		cmd.Env = append(os.Environ(), "LC_ALL=C")
-		out, err := cmd.Output()
-		if err != nil || !unrestrictedSudo(string(out)) {
-			return nil, nil, fmt.Errorf("account %s does not have unrestricted root sudo access", name)
-		}
 	}
 	if a.SSHPort == 0 {
 		a.SSHPort = 22
@@ -62,26 +66,56 @@ func (a Authorizer) account(ctx context.Context, name, remote, local string) (*u
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot read effective SSH authorization for %s: %w", name, err)
 	}
-	settings := parseSSHD(out)
+	return u, parseSSHD(out), nil
+}
+
+// access checks the rest of what sshd and sudo decide for the account: an
+// ordinary shell, an account that is current and not locked as sshd sees it,
+// unrestricted root sudo, and the sshd policy this endpoint evaluates.
+func (a Authorizer) access(ctx context.Context, u *user.User, settings sshdConfig, remote string) error {
+	name := u.Username
+	passwd, err := exec.CommandContext(ctx, "getent", "passwd", name).Output()
+	if err != nil {
+		return fmt.Errorf("cannot inspect administrator account")
+	}
+	fields := strings.Split(strings.TrimSpace(string(passwd)), ":")
+	if len(fields) != 7 || fields[0] != name || fields[2] != u.Uid || !ordinaryShell(fields[6]) {
+		return fmt.Errorf("administrator account details or shell could not be verified for HTTPS access; use connection: ssh_only")
+	}
+	shadow, err := exec.CommandContext(ctx, "getent", "shadow", name).Output()
+	if err != nil || !accountCurrent(string(shadow), name, time.Now()) {
+		return fmt.Errorf("administrator account is expired or its account policy is unavailable")
+	}
+	if lockedForSSHD(string(shadow), settings) {
+		return fmt.Errorf("administrator account %s has a locked password, and sshd refuses a locked account unless UsePAM is yes; give the account a password, or no password with usermod -p '*' %s", name, name)
+	}
+	if u.Uid != "0" {
+		cmd := exec.CommandContext(ctx, "sudo", "-n", "-ll", "-U", name)
+		cmd.Env = append(os.Environ(), "LC_ALL=C")
+		out, err := cmd.Output()
+		if err != nil || !unrestrictedSudo(string(out)) {
+			return fmt.Errorf("account %s does not have unrestricted root sudo access", name)
+		}
+	}
 	if err := sshdPolicy(settings, name, u.Uid == "0"); err != nil {
-		return nil, nil, err
+		return err
 	}
 	groups, err := u.GroupIds()
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 	var groupNames []string
 	for _, id := range groups {
 		group, err := user.LookupGroupId(id)
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot read administrator group %s: %w", id, err)
+			return fmt.Errorf("cannot read administrator group %s: %w", id, err)
 		}
 		groupNames = append(groupNames, group.Name)
 	}
 	if !allowedAccount(settings, name, remote, groupNames) {
-		return nil, nil, fmt.Errorf("SSH account policy denies %s", name)
+		return fmt.Errorf("SSH account policy denies %s", name)
 	}
-	return u, settings, nil
+	return nil
 }
 
 // sshdConnectionSpec uses OpenSSH's connection-test keywords. Its host field
@@ -154,6 +188,14 @@ func ordinaryShell(path string) bool {
 		return true
 	}
 	return false
+}
+
+// lockedForSSHD reports a locked password ("!" first in the shadow
+// password field) that sshd refuses: OpenSSH on Linux refuses a locked
+// account itself unless UsePAM is yes, which leaves the account check to PAM.
+func lockedForSSHD(shadow string, settings sshdConfig) bool {
+	fields := strings.Split(strings.TrimSpace(shadow), ":")
+	return settings.get("usepam") != "yes" && len(fields) == 9 && strings.HasPrefix(fields[1], "!")
 }
 
 func accountCurrent(shadow, name string, now time.Time) bool {
@@ -342,17 +384,49 @@ func readKeys(path, uid string) ([]byte, error) {
 	return os.ReadFile(resolved)
 }
 
+// Authorize checks key for the account first, so that a client whose key the
+// account does not list gets a refusedBeforeKeyProof, and only then the rest
+// of the account's access.
 func (a Authorizer) Authorize(ctx context.Context, name string, key ssh.PublicKey, remote, local string) error {
-	u, settings, err := a.account(ctx, name, remote, local)
+	u, settings, err := a.keyFiles(ctx, name, remote, local)
 	if err != nil {
+		return &refusedBeforeKeyProof{err}
+	}
+	if err := authorizeKey(u, settings, key, remote); err != nil {
 		return err
 	}
-	return authorizeKey(u, settings, key, remote)
+	return a.access(ctx, u, settings, remote)
 }
 
-// authorizeKey checks key against the account's current key files and policy.
+// authorizeKey checks key against the account's current key files and
+// policy. The key files come first: until a line lists the key, every refusal
+// is a refusedBeforeKeyProof.
 func authorizeKey(u *user.User, settings sshdConfig, key ssh.PublicKey, remote string) error {
 	name := u.Username
+	paths, err := authorizedPaths(u, settings)
+	if err != nil {
+		return &refusedBeforeKeyProof{err}
+	}
+	matched := false
+	var refused []string
+	for _, path := range paths {
+		data, err := readKeys(path, u.Uid)
+		if err != nil {
+			return &refusedBeforeKeyProof{err}
+		}
+		ok, refusedHere, err := keyAllowed(data, key, remote)
+		if err != nil {
+			return &refusedBeforeKeyProof{err}
+		}
+		matched = matched || ok
+		refused = append(refused, refusedHere...)
+	}
+	switch {
+	case !matched && len(refused) == 0:
+		return &refusedBeforeKeyProof{notAuthorizedError(name, nil)}
+	case !matched:
+		return notAuthorizedError(name, refused)
+	}
 	algorithm := key.Type()
 	switch algorithm {
 	case ssh.KeyAlgoED25519, ssh.KeyAlgoRSA, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
@@ -376,27 +450,6 @@ func authorizeKey(u *user.User, settings sshdConfig, key ssh.PublicKey, remote s
 	}
 	if !accepted {
 		return fmt.Errorf("key algorithm is not permitted by current SSH policy")
-	}
-	paths, err := authorizedPaths(u, settings)
-	if err != nil {
-		return err
-	}
-	matched := false
-	var refused []string
-	for _, path := range paths {
-		data, err := readKeys(path, u.Uid)
-		if err != nil {
-			return err
-		}
-		ok, refusedHere, err := keyAllowed(data, key, remote)
-		if err != nil {
-			return err
-		}
-		matched = matched || ok
-		refused = append(refused, refusedHere...)
-	}
-	if !matched {
-		return notAuthorizedError(name, refused)
 	}
 	return nil
 }
