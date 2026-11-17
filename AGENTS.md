@@ -122,7 +122,8 @@ and owed restore.
 **MMX 0.1.0 is released. Every change keeps the promises in
 [Compatibility between releases](docs/changing-mmx/design/README.md#compatibility-between-releases).**
 
-- A patch release, such as 0.1.1, makes no incompatible change. An
+- A patch release, such as 0.1.1, makes no incompatible change; fixes,
+  documentation changes, and additions go in one. An
   incompatible change to a project file, a command, a flag, or a result field
   makes the next release a minor release, such as 0.2.0, whose release notes
   give the edit that a project needs.
