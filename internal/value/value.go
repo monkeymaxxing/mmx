@@ -107,6 +107,9 @@ func (s Scope) expand(v string) (text string, sensitive, truncated bool, err err
 		if HasBinary(x) {
 			return "", false, false, binaryInText(v[m[2]:m[3]])
 		}
+		if err := s.checkOutputLines(v[m[2]:m[3]], x); err != nil {
+			return "", false, false, err
+		}
 		sensitive = sensitive || HasSecrets(x)
 		truncated = truncated || HasTruncated(x)
 		t, err := Scalar(x)
@@ -302,11 +305,18 @@ func (s Scope) Template(source string) (string, error) {
 		if path == "." {
 			v := s.Data()
 			s.touch(v)
-			return templateValues(v), RequireAvailable(v)
+			err := RequireAvailable(v)
+			if err == nil {
+				err = s.checkOutputLines(path, v)
+			}
+			return templateValues(v), err
 		}
 		v, err := s.Get(path)
 		if err == nil && HasBinary(v) {
 			err = binaryInText(path)
+		}
+		if err == nil {
+			err = s.checkOutputLines(path, v)
 		}
 		return templateValues(v), err
 	}})

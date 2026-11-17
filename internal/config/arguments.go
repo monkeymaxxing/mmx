@@ -237,6 +237,7 @@ func roleInput(t Task, k string) (raw any, provided, ok bool) {
 func RoleScope(t Task, parent value.Scope) value.Scope {
 	child := value.Scope{"vars": map[string]any{}, "inputs": map[string]any{}, "node_tasks": map[string]any{}, "node": parent["node"], "inventory": parent["inventory"]}
 	child.InheritTrace(parent)
+	child.InheritOutputLines(parent)
 	origins := Origins{}
 	SetOrigins(child, origins)
 	secretOrigins := map[string][]string{}

@@ -538,6 +538,15 @@ The rules that decide what a reader gets:
   whole-value reference, such as `loop: "{{ .outputs.configure_app }}"`,
   keeps the type. A list or a mapping inside other text is an error. A
   template formats a list or a mapping instead.
+- **An output inside other text stays on one line.** On the node, MMX
+  refuses to put an output's text inside other text, in a value or a
+  template, when the text has a line break or another control character
+  before its end, also after a role input, a loop item, or a variable
+  passed the text on. Such text could add a line, such as a WireGuard
+  `PostUp =` line, that runs as root on the reading node. A tab and line
+  breaks at the very end are fine. A multi-line output, such as a
+  certificate, goes into a file as the whole content:
+  `content: "{{ .outputs.prepare_ca.util01.certificate }}"`.
 - **A fleet stage may publish without node tasks.** A fleet stage with
   `outputs` and no `node_tasks` publishes facts or values only, such as
   each app server's `address`.
@@ -901,6 +910,7 @@ Module pages that rely on this section: [`read_file`](../reference/modules/read_
 | --- | --- |
 | `write_app_config: ... .outputs.prepare_database.db01.address: prepare_database on db01 is failed: read_app_key: /etc/shop/app_key is not a regular file`, and the node is `blocked` | The fleet stage that publishes the output failed on `db01`, so every reader is blocked. Fix the cause on `db01`, here a directory at the key file's path, then run `mmx resume` with the run's ID. |
 | `prepare_database / db01: not_checked` and `write_app_config: not_checked` in a dryrun | The value exists only after a run, such as a key file that a run creates. See [What a dryrun shows before a value exists](#what-a-dryrun-shows-before-a-value-exists). Run, and change the playbook only if the run fails. |
+| `.outputs.prepare_ca.util01.certificate holds a fleet stage output from a node with a line break or another control character, and MMX does not insert such a value inside other text` | A multi-line output is inside other text. Give the output a reference with no surrounding text, such as a file's whole `content`; in a template, read only the fields the template prints. |
 | `unknown output in .outputs.prepare_database.db01.adress` | The output name is misspelled, or the fleet stage doesn't declare the output under `outputs`. |
 | `reference .outputs.prepare_database.db02.address names a node that the referenced fleet stage does not select` | The node name in the reference is not one of that fleet stage's nodes. `mmx nodes connect_servers` lists each fleet stage's nodes. |
 | `reference .outputs.configure_load_balancer.lb01.address names a value that is not declared or is declared later` | The reference names a later fleet stage. Move the fleet stage that publishes the output before the fleet stage that reads the output. |

@@ -1327,6 +1327,17 @@ skipped. A read of the skipped node's or skipped loop iteration's output
 entry is blocked and names the condition. A whole collection can feed a
 template or role input, such as backend addresses for a load balancer.
 
+An output's text comes from a node, and a node that reads it inside other
+text must not get extra lines from it: an output that adds a WireGuard
+`PostUp =` line or an ifupdown `up` line would run a command as root on the
+reading node. So on the node, text from `.outputs` that holds a line break
+or another control character, other than a tab, before its trailing line
+breaks is refused inside other text, in a value or a template, also after
+a role input, a loop item, or a variable passed it on whole. A whole
+reference keeps such a value, so a certificate still goes into a file as
+its whole `content`. Templates the controller process renders for
+`save_on_controller_machine` have no such limit.
+
 A role declares values in `outputs:`, evaluated after the role's node tasks
 succeed; the caller reads
 `.node_tasks.<role_call_id>.outputs.<name>`, independent of the role's task names.

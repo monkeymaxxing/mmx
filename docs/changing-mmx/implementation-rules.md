@@ -598,6 +598,15 @@ Only a node's own managed key is read per node.
   the secret.
   A file that could not be written keeps its loop iteration unfinished
   (`sequenceOutcome`), so resume writes the file.
+- On the node, text from `.outputs` with a control character other than a
+  tab before its trailing line breaks never goes inside other text: the
+  engine calls `Scope.GuardOutputLines`, `RoleScope` passes the guard on
+  (`InheritOutputLines`), and `expand` and `Scope.Template` refuse a read
+  whose value holds such text (`checkOutputLines`). The guard matches the
+  text itself, so a role input, loop item, or variable that passes it on
+  whole is guarded too. A whole reference passes the value unchanged. The
+  controller process sets no guard: its `save_on_controller_machine`
+  templates may collect multi-line outputs.
 - A condition error never quotes a secret: `value.describe` names such an
   operand "a secret value".
 - `value.Binary` is the one form of content that is not UTF-8 text.

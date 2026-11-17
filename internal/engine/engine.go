@@ -116,6 +116,7 @@ func (e *Engine) Run(ctx context.Context, j config.Job) protocol.Response {
 	scope := value.Scope(clone(j.Scope))
 	scope["vars"], scope["inputs"], scope["node_tasks"], scope["node"] = clone(j.Vars), map[string]any{}, map[string]any{}, e.facts.Values
 	config.SetOrigins(scope, j.Origins)
+	scope.GuardOutputLines()
 	for path, reason := range e.facts.Unavailable {
 		scope.Mark(path, reason)
 	}

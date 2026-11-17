@@ -252,6 +252,11 @@ A later fleet stage reads them as `.outputs.<fleet stage>.<node>.<name>`.
   `node_tasks` publishes values only.
 - A loop's `outputs` are published for each iteration, under the
   iteration's `key`.
+- On the node that reads an output, text from the output with a line
+  break or another control character before its end is refused inside
+  other text, in a value or a template, so it cannot add lines to a file
+  or a setting there. The whole value as the whole input, such as a
+  certificate as a file's whole `content`, is fine.
 - [How a later fleet stage reads an output](../how-to/use-a-result-from-one-server-on-another.md#how-a-later-fleet-stage-reads-an-output)
   lists the references and what a failed, skipped, or left-out producer
   does to a reader.
