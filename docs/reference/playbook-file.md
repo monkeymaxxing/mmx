@@ -762,6 +762,9 @@ written on the node task, beside its module:
   what it waited for, or else `context deadline exceeded`. When the limit
   ends during a pause between tries, the reason is `time_limit exceeded
   during retry.pause_between_tries`.
+- When `time_limit_per_try` ends a try, the try fails with a reason that
+  starts with `time_limit_per_try exceeded:`, followed in the same way by
+  the module's own reason. The next try follows as `retry` says.
 - A duration is a number with a unit, such as `500ms`, `90s`, `15m`, or
   `1h30m`.
 

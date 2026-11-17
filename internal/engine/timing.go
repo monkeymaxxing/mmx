@@ -55,13 +55,18 @@ func (e *Engine) timed(ctx context.Context, t config.Task, s value.Scope) protoc
 			tryContext, cancel = context.WithTimeout(ctx, duration)
 		}
 		r := e.execute(tryContext, t, s)
+		tryErr := tryContext.Err()
 		cancel()
-		if err := ctx.Err(); err != nil {
-			// The task's time limit has ended, or the node job was stopped. A
-			// try that failed then with a reason of its own keeps that reason
-			// behind the words that say which of the two happened: a module
+		limit, err := "time_limit exceeded", ctx.Err()
+		if err == nil && errors.Is(tryErr, context.DeadlineExceeded) {
+			limit, err = "time_limit_per_try exceeded", tryErr
+		}
+		if err != nil {
+			// A time limit has ended, or the node job was stopped. A try
+			// that failed then with a reason of its own keeps that reason
+			// behind the words that say which of them happened: a module
 			// that waited says what it waited for.
-			what, why := "time_limit exceeded", err.Error()
+			what, why := limit, err.Error()
 			if errors.Is(err, context.Canceled) {
 				what, why = "the node job was stopped", ""
 			}

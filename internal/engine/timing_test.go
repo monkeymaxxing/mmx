@@ -78,6 +78,13 @@ func TestTimeLimitKeepsTheReasonOfTheTryThatFailedAtTheLimit(t *testing.T) {
 		t.Fatalf("%s: %s", r.Status, r.Reason)
 	}
 
+	// time_limit_per_try names itself, so the reason says which limit ended
+	// the try.
+	r = (&Engine{}).timed(context.Background(), config.Task{Show: "the try's limit ended before this task", TimeLimitPerTry: &already}, scope())
+	if r.Status != "failed" || r.Reason != "time_limit_per_try exceeded: context deadline exceeded" {
+		t.Fatalf("%s: %s", r.Status, r.Reason)
+	}
+
 	// A node job that was stopped: the same failed request. Its reason does
 	// not speak of a time limit.
 	cancelled, cancel := context.WithCancel(context.Background())
