@@ -176,7 +176,7 @@ func (s *Store) Get(name string) (any, error) {
 }
 
 // withoutYAMLDocument reports a text that holds no YAML document, such as one
-// of only comments like newVaultText: a vault without a secret key.
+// of only comments: a vault without a secret key.
 func withoutYAMLDocument(plaintext []byte) bool {
 	var document yaml.Node
 	return yaml.Unmarshal(plaintext, &document) == nil && document.Kind == 0
@@ -266,9 +266,14 @@ func ChangePassword(path, old, new string) error {
 	return Write(path, new, plaintext)
 }
 
-// newVaultText is what the editor shows for a vault that does not exist yet:
-// comments that show the format, so the first secret is simply a new line.
-const newVaultText = "# Named secret values, one per line, such as:\n# database_password: \"the password\"\n"
+// newVaultText is what the editor shows for a vault that does not exist yet.
+// Its first line is an uncommented example, so a line typed below it is not
+// turned into a comment by an editor that continues comments, as vim does
+// for YAML. Saved unchanged, the example is a secret key that nothing reads:
+// harmless, and mmx secrets usage lists it as never referenced.
+const newVaultText = "example_secret_key: \"replace this line with your own secret key and value\"\n" +
+	"# Easier for one secret: close this editor and run mmx secrets set KEY. It asks for the value and hides what you type.\n" +
+	"# To save and close: in vim, press Esc, type :wq, and press Enter. In other editors, save and close.\n"
 
 // Edit opens the vault's text in an editor. When the edited text is rejected,
 // editAgain (nil: never) is told why and says whether to reopen the editor

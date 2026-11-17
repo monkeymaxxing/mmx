@@ -5,18 +5,13 @@ root-owned configuration file with mode `0600` using one explicit secret
 role input. The secret role input also works inside a file-and-node task
 block such as the [nginx role](../nginx-role/).
 
-Create `secrets_vault.age` in your editor. When prompting is enabled and no
-passphrase source is configured, MMX asks for and confirms the new vault's
-passphrase before opening the editor:
+Create `secrets_vault.age` with the secret `database_password`. When
+prompting is enabled and no passphrase source is configured, MMX asks for
+and confirms the new vault's passphrase, then asks for the secret's value
+and hides what you type:
 
 ```sh
-mmx secrets edit
-```
-
-Enter this structure with your value:
-
-```yaml
-database_password: your-value
+mmx secrets set database_password
 ```
 
 MMX encrypts the file using its built-in age library. The encrypted file can

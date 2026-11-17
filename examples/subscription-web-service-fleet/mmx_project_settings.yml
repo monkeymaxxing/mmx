@@ -11,7 +11,7 @@ allow_role_calls_within_roles: false
 
 # Secrets come from the controller machine's environment, which the test sets
 # to test values. A production project keeps its secrets in the encrypted
-# vault instead (mmx secrets edit) and removes these bindings.
+# vault instead (mmx secrets set KEY for each one) and removes these bindings.
 secrets_from_env:
   recovery_account_password_hash: SUBSCRIPTION_WEB_SERVICE_RECOVERY_ACCOUNT_PASSWORD_HASH
   main_application_database_password: SUBSCRIPTION_WEB_SERVICE_MAIN_APPLICATION_DATABASE_PASSWORD

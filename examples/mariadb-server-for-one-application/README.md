@@ -27,7 +27,8 @@ environment changes only the account's password.
 `shop_database_password` from the environment variable
 `SHOP_DATABASE_PASSWORD`. To keep `shop_database_password` in the project's
 encrypted vault instead, remove `secrets_from_env` from
-`mmx_project_settings.yml`. Write the secret with `mmx secrets edit`. The
+`mmx_project_settings.yml`. Store the secret with
+`mmx secrets set shop_database_password`. The
 application's own configuration file reads `shop_database_password`. MMX
 computes the form in which the server stores the password and sends only
 that form, so the password is in no statement and in none of the server's

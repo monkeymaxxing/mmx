@@ -60,12 +60,20 @@ of the inventory that the run uses. On the `mmx secrets` commands,
   `database` with `user` and `password` below, is one secret key, which a
   node task reads as `{{ .secrets.database.password }}`. A text of only
   comments is a vault with no secret keys.
-- **A new vault** starts with two comment lines that show the format:
+- **A new vault** opens in `mmx secrets edit` with an example line and two
+  comment lines:
 
   ```yaml
-  # Named secret values, one per line, such as:
-  # database_password: "the password"
+  example_secret_key: "replace this line with your own secret key and value"
+  # Easier for one secret: close this editor and run mmx secrets set KEY. It asks for the value and hides what you type.
+  # To save and close: in vim, press Esc, type :wq, and press Enter. In other editors, save and close.
   ```
+
+  Replace the example line with your own secret, or add lines below the
+  example line. The example line is not a comment, so an editor that
+  continues comments, as vim does, does not turn your new line into a
+  comment. Saved unchanged, the example line is a secret key that nothing
+  reads; `mmx secrets usage` lists it under `Defined but never referenced:`.
 
 - **Secret keys** start with a letter or an underscore and continue with
   letters, digits, underscores, or hyphens. A secret key appears once.
@@ -132,10 +140,10 @@ set:
 
 | Command | What the command does | Opens the vault |
 | --- | --- | --- |
-| `mmx secrets edit` | Creates or edits the vault in your editor. | Yes |
+| `mmx secrets edit` | Opens the whole vault in your editor, to view or reorganize it. Creates the vault if there is none. | Yes |
 | `mmx secrets passwd` | Encrypts the vault with a new passphrase. | Yes |
 | `mmx secrets add-random KEY` | Adds a secret key with a random value. | Yes |
-| `mmx secrets set KEY` | Adds a secret key with a value from standard input. | Yes |
+| `mmx secrets set KEY` | Adds a secret key with a value from standard input, or asks for the value at a terminal. | Yes |
 | `mmx secrets list-keys` | Prints the vault's secret keys. | Yes |
 | `mmx secrets diff-keys` | Compares the vault's secret keys with the last Git commit. | Yes |
 | `mmx secrets usage [KEY]` | Lists where each secret key is read. | Only when the vault file exists |

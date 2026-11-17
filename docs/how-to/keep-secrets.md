@@ -89,34 +89,24 @@ from environment variables, and keep a separate vault for staging.
 2. **Create the vault with your first secret.**
 
    ```sh
-   mmx secrets edit
+   mmx secrets set database_password
    ```
 
-   MMX opens your editor: the editor that `VISUAL` names, else the one that
-   `EDITOR` names, else `vi`. A new vault starts with two comment lines:
-
-   ```yaml
-   # Named secret values, one per line, such as:
-   # database_password: "the password"
-   ```
-
-   Add one line with your database's password, then save and close the
-   editor:
-
-   ```yaml
-   database_password: "the password of your database"
-   ```
-
-   MMX encrypts the text and writes the vault:
+   MMX asks for the value and hides what you type:
 
    ```text
-   Saved encrypted vault: secrets_vault.age
+   Value of database_password:
    ```
 
-   [`mmx secrets edit`](../reference/secrets.md#mmx-secrets-edit) says how
-   MMX handles the editor's file. A coding agent does not use an editor: the commands in step 3 and in
+   Type or paste your database's password, then press Enter. MMX creates
+   the vault, encrypts the value, and prints nothing. The command takes
+   the value from a file or a pipe too, as
    [Add or change a secret without showing it](#add-or-change-a-secret-without-showing-it)
-   create the vault too.
+   shows. A coding agent uses that form.
+
+   To see or reorganize the whole vault, use
+   [`mmx secrets edit`](../reference/secrets.md#mmx-secrets-edit), which
+   opens the vault's text in your editor.
 
    **Check:** `mmx secrets list-keys` prints `database_password`, and
    `head -n 1 secrets_vault.age` prints `age-encryption.org/v1`, the first
@@ -340,8 +330,9 @@ project has none.
    ```
 
    Without `--replace`, both commands refuse a secret key that the vault
-   has, and change nothing. To change a value by hand, use
-   `mmx secrets edit`.
+   has, and change nothing. To type the new value instead, run
+   `mmx secrets set mail_api_token --replace` at a terminal: MMX asks for
+   the value and hides what you type.
 
    **Check:** `mmx secrets diff-keys` lists the secret keys that you added
    or changed since the last commit:

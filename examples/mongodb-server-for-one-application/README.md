@@ -115,8 +115,9 @@ instructions](../../official_extra_modules/mongodb_user/README.md#set-up).
 secrets `mongodb_admin_password` and `shop_mongodb_password` to the two
 environment variables. To keep `mongodb_admin_password` and
 `shop_mongodb_password` in the project's encrypted vault instead, remove
-`secrets_from_env` from `mmx_project_settings.yml`. Write the secrets with
-`mmx secrets edit`. The passwords reach MongoDB's shell
+`secrets_from_env` from `mmx_project_settings.yml`. Store each password with
+`mmx secrets set mongodb_admin_password` and
+`mmx secrets set shop_mongodb_password`. The passwords reach MongoDB's shell
 through its standard input, and are in no command line and in none of MMX's
 records.
 

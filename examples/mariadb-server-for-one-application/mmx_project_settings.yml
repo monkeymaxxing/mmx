@@ -3,6 +3,6 @@ default_inventory: example
 
 # The application's database password comes from the controller machine's
 # environment. Remove these two lines to keep it in the project's encrypted
-# vault instead (mmx secrets edit).
+# vault instead (mmx secrets set shop_database_password).
 secrets_from_env:
   shop_database_password: SHOP_DATABASE_PASSWORD

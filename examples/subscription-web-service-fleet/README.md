@@ -199,7 +199,8 @@ secrets_from_env:
 ```
 
 The guest suite sets those five variables to test values. A production
-project keeps its secrets in the encrypted vault instead (`mmx secrets edit`)
+project keeps its secrets in the encrypted vault instead (`mmx secrets set KEY`
+for each one)
 and removes the bindings; see
 [Keep secrets](../../docs/how-to/keep-secrets.md#create-the-vault-and-use-a-secret).
 

@@ -46,7 +46,8 @@ Each page lists the module's inputs and what its errors mean.
 `shop_rabbitmq_password` from the environment variable
 `SHOP_RABBITMQ_PASSWORD`. To keep `shop_rabbitmq_password` in the project's
 encrypted vault instead, remove `secrets_from_env` from
-`mmx_project_settings.yml`. Write the secret with `mmx secrets edit`. The
+`mmx_project_settings.yml`. Store the secret with
+`mmx secrets set shop_rabbitmq_password`. The
 application's own configuration file reads `shop_rabbitmq_password`. The
 password reaches RabbitMQ's program only through its standard input: it is
 on no command line and in no log. The password must not start or end with

@@ -57,8 +57,8 @@ a password. So the playbook holds no administrator password.
 **The password comes from a secret.** `mmx_project_settings.yml` binds the
 secret `shop_database_password` to the environment variable
 `SHOP_DATABASE_PASSWORD`. To keep the password in the project's encrypted
-vault instead, remove those two lines, run `mmx secrets edit`, and enter
-`shop_database_password: your-value`; the playbook stays the same. MMX never
+vault instead, remove those two lines and run
+`mmx secrets set shop_database_password`; the playbook stays the same. MMX never
 sends the password itself to the server: it computes the form in which
 PostgreSQL stores a password and sends that.
 

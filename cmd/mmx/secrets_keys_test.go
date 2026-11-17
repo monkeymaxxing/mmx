@@ -285,7 +285,7 @@ func TestSecretsEditAndPasswdNameTheVaultFromTheWorkingDirectory(t *testing.T) {
 		"missing/other.age":             {"passwd", "--vault", "missing/other.age", "--vault-password-file", passwordFile, "--new-vault-password-file", next, "--json"},
 	} {
 		stdout, stderr, code := secretsOutput(t, args...)
-		if code != 4 || stdout != "" || stderr != "mmx: the vault "+vault+" does not exist; create it with mmx secrets edit, mmx secrets add-random KEY, or mmx secrets set KEY\n" {
+		if code != 4 || stdout != "" || stderr != "mmx: the vault "+vault+" does not exist; create it with mmx secrets set KEY, which asks for one secret's value, or mmx secrets add-random KEY\n" {
 			t.Fatalf("exit code %d\n%s%s", code, stdout, stderr)
 		}
 	}
@@ -316,7 +316,7 @@ func TestSecretsListKeysPrintsKeysAndNeverWrites(t *testing.T) {
 	root, passwordFile := secretsProject(t)
 	// No vault yet: the message says how to make one.
 	_, stderr, code := secretsOutput(t, "list-keys", "--vault-password-file", passwordFile)
-	if code != 4 || !strings.Contains(stderr, "the vault secrets_vault.age does not exist; create it with mmx secrets edit, mmx secrets add-random KEY, or mmx secrets set KEY") {
+	if code != 4 || !strings.Contains(stderr, "the vault secrets_vault.age does not exist; create it with mmx secrets set KEY, which asks for one secret's value, or mmx secrets add-random KEY") {
 		t.Fatal(code, stderr)
 	}
 	vault := filepath.Join(root, "secrets_vault.age")

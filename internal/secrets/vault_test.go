@@ -19,16 +19,20 @@ func cleanEnvironment(t *testing.T) {
 	}
 }
 
-// A person who opens a new vault adds a secret below its starting text, and a
-// new vault saved unchanged holds no secret key.
+// A new vault opens with an uncommented example line, so an editor that
+// continues comments does not turn a typed secret into a comment. The
+// person replaces the example or adds a line below; saved unchanged, the
+// vault holds only the example key, which nothing reads.
 func TestANewVaultTakesALineAddedBelowItsStartingText(t *testing.T) {
 	const password = "test editor passphrase"
+	const example = "replace this line with your own secret key and value"
 	for name, tc := range map[string]struct {
 		editorScript string
 		want         map[string]any
 	}{
-		"a line added below":  {"#!/bin/sh\nprintf 'join_code: \"added-by-a-person\"\\n' >> \"$1\"\n", map[string]any{"join_code": "added-by-a-person"}},
-		"saved without a key": {"#!/bin/sh\nexit 0\n", map[string]any{}},
+		"a line added below":     {"#!/bin/sh\nprintf 'join_code: \"added-by-a-person\"\\n' >> \"$1\"\n", map[string]any{"example_secret_key": example, "join_code": "added-by-a-person"}},
+		"the example replaced":   {"#!/bin/sh\nsed 's/^example_secret_key: .*/join_code: \"typed\"/' \"$1\" > \"$1.new\" && mv \"$1.new\" \"$1\"\n", map[string]any{"join_code": "typed"}},
+		"saved without a change": {"#!/bin/sh\nexit 0\n", map[string]any{"example_secret_key": example}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "secrets.age")
@@ -36,6 +40,13 @@ func TestANewVaultTakesALineAddedBelowItsStartingText(t *testing.T) {
 			writeProgramFileThroughShellChild(t, editor, tc.editorScript)
 			if err := Edit(context.Background(), path, password, editor, nil); err != nil {
 				t.Fatal(err)
+			}
+			if name == "saved without a change" {
+				text, err := decrypt(path, password)
+				if err != nil || !strings.Contains(string(text), "\n# Easier for one secret: close this editor and run mmx secrets set KEY.") ||
+					!strings.Contains(string(text), "\n# To save and close: in vim, press Esc, type :wq, and press Enter. In other editors, save and close.\n") {
+					t.Fatalf("the starting text does not point to mmx secrets set or say how to save: %q, %v", text, err)
+				}
 			}
 			values, err := Read(path, password)
 			if err != nil || !reflect.DeepEqual(values, tc.want) {

@@ -176,7 +176,7 @@ func (o secretsOptions) saved(vault, line string) (int, error) {
 // A file that a secrets command names in output for people goes through
 // displayPath; JSON keeps the path as the command has it.
 func vaultDoesNotExist(vault string) error {
-	return fmt.Errorf("the vault %s does not exist; create it with mmx secrets edit, mmx secrets add-random KEY, or mmx secrets set KEY", displayPath(vault))
+	return fmt.Errorf("the vault %s does not exist; create it with mmx secrets set KEY, which asks for one secret's value, or mmx secrets add-random KEY", displayPath(vault))
 }
 
 // environmentBindings returns the project's secrets_from_env: for
