@@ -1275,8 +1275,11 @@ rpmbuild -bb --define "_rpmdir /var/tmp/mmx-range/repo" --define "_topdir /var/t
 
             tasks([{'dnf_package': {'upgrade_all_packages_within_their_version_rules': True}}])
             preview = first(run('dryrun'))
-            assert preview['status'] == 'succeeded' and all({'name', 'to'} <= set(c) for c in preview.get('value', [])), preview
-            mark('dnf_package upgrade_all_packages_within_their_version_rules: true previews the whole-node upgrade as name, from, and to without changing anything')
+            # A package that an upgraded package obsoletes is removed: it has
+            # a from and no to.
+            assert preview['status'] == 'succeeded' and all('name' in c and ('to' in c or 'from' in c) for c in preview.get('value', [])), preview
+            mark('dnf_package upgrade_all_packages_within_their_version_rules: true previews the whole-node upgrade as name, from, and to, '
+                 'and a package that it removes as name and from, without changing anything')
 
             # Refresh before capturing the selection so preview and apply use
             # the same metadata. No general upgrade runs before this case.
