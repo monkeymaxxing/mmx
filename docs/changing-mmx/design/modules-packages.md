@@ -688,7 +688,7 @@ concrete workflow that the decision fails to support.
 | | pip reads the actual installed version from Python metadata when `pip freeze` records a URL. | Keeping a URL-installed package needs its distribution version; source text cannot form a version constraint. |
 | | Language installers require `run_as_user_account`, including `root`. | The account runs package code; MMX cannot safely guess which account the project intends. |
 | | Installation records hash both the lock file and its manifest. | A changed manifest must reach the installer's lock-file checks instead of returning unchanged. |
-| | uv passes `--group dev` or `--no-group dev`; other groups follow the application's uv settings. | A task's explicit development choice must override uv's default-group settings. |
+| | uv passes `--dev` or `--no-dev`; other groups follow the application's uv settings. | A task's explicit development choice must override uv's default-group settings, and a project without a `dev` group must still install: uv refuses `--group dev` and `--no-group dev` for such a project. |
 | | A written installer program path is absolute; omission finds the program on the standard path. | A bare program name shown as a default must not look like an accepted written path. |
 | | The lock file modules name their directory `lock_file_dir`, not `project_dir`. | In MMX, "project" means the MMX project on the control machine. The directory on the node is the one that holds the lock file, and the name says so. |
 

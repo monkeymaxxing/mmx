@@ -58,11 +58,12 @@ shows.
 ```
 
 `include_development_dependencies` is required: `false` leaves out the
-`dev` group with `--no-group dev`, and `true` installs the `dev` group with
-`--group dev`. Other groups follow the application's uv settings.
+`dev` group with `--no-dev`, and `true` installs the `dev` group with
+`--dev`. A project without a `dev` group works with both values. Other
+groups follow the application's uv settings.
 
 On the node, MMX runs
-`uv sync --locked --no-python-downloads --no-group dev` in
+`uv sync --locked --no-python-downloads --no-dev` in
 `/srv/myapp/releases/v1.4.2` as the account `myapp`. uv creates `.venv` in
 that directory with a Python it finds on the node, installs exactly what
 `uv.lock` lists, and removes from `.venv` what the lock file does not list.
@@ -134,9 +135,10 @@ from `uv python install`, named in `python_program_path`.
   `--frozen` also installs from a lock file that no longer fits
   `pyproject.toml`; `--locked` fails, as `npm ci` does.
 
-- **The development group is explicit.** Passing `--group dev` or
-  `--no-group dev` makes the task's choice apply even when uv's configured
-  default groups leave `dev` out.
+- **The development group is explicit.** Passing `--dev` or `--no-dev`
+  makes the task's choice apply even when uv's configured default groups
+  leave `dev` out. uv's `--group dev` and `--no-group dev` would refuse a
+  project that has no `dev` group; `--dev` and `--no-dev` accept it.
 
 - **A changed manifest reaches the installer's lock-file check.** The shared
   [installation record](../../docs/changing-mmx/design/modules-packages.md#what-the-lock-file-modules-share)

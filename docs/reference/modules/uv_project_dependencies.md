@@ -50,7 +50,7 @@ shows.
 
 - `lock_file_dir` (string; required): the directory on the node that holds pyproject.toml and uv.lock, usually a release directory or a checkout; the virtual environment is its .venv
 - `run_as_user_account` (string; required): the application's account, which runs uv: uv runs code from the packages it builds
-- `include_development_dependencies` (boolean; required): false passes --no-group dev; true passes --group dev; other groups follow the application's uv settings
+- `include_development_dependencies` (boolean; required): false passes --no-dev; true passes --dev; other groups follow the application's uv settings
 - `uv_program_path` (string; default found on the standard path): a written value must be absolute; the uv program to run when it is not uv on the standard path, such as uv unpacked under /opt
 - `python_program_path` (string; optional): absolute path to the Python executable for the virtual environment, such as a Python installed under /opt with uv python install. When python_program_path is omitted, uv chooses an installed Python version accepted by the project
 - `env` (mapping; optional): environment variables for uv, such as UV_INDEX_URL or a token for a private package index; values may be secrets
@@ -86,11 +86,12 @@ The node task takes the time limits `time_limit` and `time_limit_per_try`; witho
 ```
 
 `include_development_dependencies` is required: `false` leaves out the
-`dev` group with `--no-group dev`, and `true` installs the `dev` group with
-`--group dev`. Other groups follow the application's uv settings.
+`dev` group with `--no-dev`, and `true` installs the `dev` group with
+`--dev`. A project without a `dev` group works with both values. Other
+groups follow the application's uv settings.
 
 On the node, MMX runs
-`uv sync --locked --no-python-downloads --no-group dev` in
+`uv sync --locked --no-python-downloads --no-dev` in
 `/srv/myapp/releases/v1.4.2` as the account `myapp`. uv creates `.venv` in
 that directory with a Python it finds on the node, installs exactly what
 `uv.lock` lists, and removes from `.venv` what the lock file does not list.
@@ -162,9 +163,10 @@ from `uv python install`, named in `python_program_path`.
   `--frozen` also installs from a lock file that no longer fits
   `pyproject.toml`; `--locked` fails, as `npm ci` does.
 
-- **The development group is explicit.** Passing `--group dev` or
-  `--no-group dev` makes the task's choice apply even when uv's configured
-  default groups leave `dev` out.
+- **The development group is explicit.** Passing `--dev` or `--no-dev`
+  makes the task's choice apply even when uv's configured default groups
+  leave `dev` out. uv's `--group dev` and `--no-group dev` would refuse a
+  project that has no `dev` group; `--dev` and `--no-dev` accept it.
 
 - **A changed manifest reaches the installer's lock-file check.** The shared
   [installation record](../../changing-mmx/design/modules-packages.md#what-the-lock-file-modules-share)

@@ -173,7 +173,8 @@ func (run Runtime) NpmGlobalPackage(ctx context.Context, n NpmGlobalPackage, s v
 				arguments = append(arguments, name)
 			}
 		case isVersionRule(version):
-			if current != version {
+			// npm lists v5.4.3, which the input rule accepts, as 5.4.3.
+			if current != strings.TrimPrefix(version, "v") {
 				planned = append(planned, installedChange(name, nilWhenEmpty(current), version))
 				arguments = append(arguments, name+"@"+version)
 			}

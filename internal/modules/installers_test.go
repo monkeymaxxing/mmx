@@ -138,6 +138,11 @@ func TestNpmGlobalPackage(t *testing.T) {
 	if r := (Runtime{}).NpmGlobalPackage(ctx, pinned, value.Scope{}); r.Change != "changed" || !reflect.DeepEqual(r.Value, []any{installedChange("pm2", "5.0.0", "5.4.3")}) {
 		t.Fatalf("%+v", r)
 	}
+	// npm lists 5.4.3 for a version written as v5.4.3, as npm's release notes write it.
+	pinned.Packages[0].Version = "v5.4.3"
+	if r := noMutation(t).NpmGlobalPackage(ctx, pinned, value.Scope{}); r.Change != "unchanged" {
+		t.Fatalf("%+v", r)
+	}
 	writeState(t, filepath.Join(dir, "outdated"), `{"pm2": {"current": "5.4.3", "wanted": "5.4.3", "latest": "6.0.0"}}`)
 	up := NpmGlobalPackage{RunAsUserAccount: currentInstallerAccount(t), Packages: []InstallerPackage{{Name: "pm2", Version: newestOnEveryRun}, {Name: "@angular/cli", Version: newestOnEveryRun}}, NpmProgramPath: n.NpmProgramPath}
 	if r := (Runtime{}).NpmGlobalPackage(ctx, up, value.Scope{}); r.Change != "changed" || !reflect.DeepEqual(r.Value, []any{installedChange("pm2", "5.4.3", "6.0.0")}) {
@@ -388,7 +393,7 @@ func TestUvProjectDependenciesFollowTheirRecord(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 	r := (Runtime{}).installProjectDependencies(ctx, u.task(value.Scope{}))
-	if r.Status != "succeeded" || r.Change != "changed" || readState(t, filepath.Join(dir, "sync")) != "sync --locked --no-python-downloads --no-group dev --python "+python+"\n" {
+	if r.Status != "succeeded" || r.Change != "changed" || readState(t, filepath.Join(dir, "sync")) != "sync --locked --no-python-downloads --no-dev --python "+python+"\n" {
 		t.Fatalf("%+v %q", r, readState(t, filepath.Join(dir, "sync")))
 	}
 	record, _ := u.ReadState(ctx, nil)
@@ -411,7 +416,7 @@ func TestUvProjectDependenciesFollowTheirRecord(t *testing.T) {
 	if r := (Runtime{}).installProjectDependencies(ctx, u.task(value.Scope{})); r.Change != "changed" {
 		t.Fatalf("%+v", r)
 	}
-	if calls := strings.Split(strings.TrimSpace(readState(t, filepath.Join(dir, "sync"))), "\n"); calls[len(calls)-1] != "sync --locked --no-python-downloads --group dev" {
+	if calls := strings.Split(strings.TrimSpace(readState(t, filepath.Join(dir, "sync"))), "\n"); calls[len(calls)-1] != "sync --locked --no-python-downloads --dev" {
 		t.Fatal(calls)
 	}
 	for _, missing := range []UvProjectDependencies{{RunAsUserAccount: "app", IncludeDevelopmentDependencies: &production}, {LockFileDir: "/srv/app", IncludeDevelopmentDependencies: &production}, {LockFileDir: "/srv/app", RunAsUserAccount: "app"}} {

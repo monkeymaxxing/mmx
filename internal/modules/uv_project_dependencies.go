@@ -26,7 +26,7 @@ var uvProjectDependenciesDescription = Description{
 	Fields: []Field{
 		{Name: "lock_file_dir", Required: true, Notes: "the directory on the node that holds pyproject.toml and uv.lock, usually a release directory or a checkout; the virtual environment is its .venv"},
 		{Name: "run_as_user_account", Required: true, Notes: "the application's account, which runs uv: uv runs code from the packages it builds"},
-		{Name: "include_development_dependencies", Required: true, Notes: "false passes --no-group dev; true passes --group dev; other groups follow the application's uv settings"},
+		{Name: "include_development_dependencies", Required: true, Notes: "false passes --no-dev; true passes --dev; other groups follow the application's uv settings"},
 		{Name: "uv_program_path", Default: "found on the standard path", Notes: "a written value must be absolute; the uv program to run when it is not uv on the standard path, such as uv unpacked under /opt"},
 		{Name: "python_program_path", Notes: "absolute path to the Python executable for the virtual environment, such as a Python installed under /opt with uv python install. When python_program_path is omitted, uv chooses an installed Python version accepted by the project"},
 		{Name: "env", Notes: "environment variables for uv, such as UV_INDEX_URL or a token for a private package index; values may be secrets"},
@@ -80,9 +80,9 @@ func (u *UvProjectDependencies) task(s value.Scope) projectDependencies {
 			// account's home directory, outside every node task.
 			arguments := []string{"sync", "--locked", "--no-python-downloads"}
 			if development {
-				arguments = append(arguments, "--group", "dev")
+				arguments = append(arguments, "--dev")
 			} else {
-				arguments = append(arguments, "--no-group", "dev")
+				arguments = append(arguments, "--no-dev")
 			}
 			if u.PythonProgramPath != "" {
 				arguments = append(arguments, "--python", u.PythonProgramPath)
