@@ -131,6 +131,13 @@ def playbook_args(command, name="configure"):
     return [name] if command in ("validate", "explain", "nodes", "dryrun", "run") else []
 
 
+def https_setup_notice(node, inventory):
+    """The line mmx prints when a run sets up MMX's HTTPS service on a node
+    that has none. A dryrun there uses SSH and prints nothing of it."""
+    return (f"setting up MMX's HTTPS service on {node} (mmx-https-api.service, TCP port 7443 on every network address); "
+            f"mmx remove-mmx-from-node {node} --inventory {inventory} removes it")
+
+
 def success_codes(command):
     """Resource suites inspect preview details; diagnostics.py checks exact codes."""
     return (0, 2, 3) if command == 'dryrun' else (0,)

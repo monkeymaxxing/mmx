@@ -65,11 +65,12 @@ def main():
     def as_root(script, name=machine):
         return vm.console(script, name)
 
-    def mmx(command, *arguments, expected=0, timeout=120):
+    def mmx(command, *arguments, expected=0, timeout=120, said=None):
         """Run an mmx command on the controller machine, in the project;
-        return its JSON."""
+        return its JSON. said, when set, is a line the command must print."""
         p = as_account('cd ' + PROJECT + ' && ./mmx ' + shlex.join([command, *arguments, '--json']), check=False, timeout=timeout)
         assert p.returncode == expected, f'mmx {command} {arguments}: exit code {p.returncode}, expected {expected}\n{p.stdout}\n{p.stderr}'
+        assert said is None or said in p.stderr, (said, p.stderr)
         return json.loads(p.stdout)
 
     def entries(record):
@@ -151,10 +152,12 @@ def main():
 
         for inventory, connection_used in (('through_ssh', 'ssh'), ('through_https', 'https')):
             as_root(f'rm -f {MARKERS}/managed {MARKERS}/started {MARKERS}/release {MARKERS}/completed')
+            # Until a run sets up MMX's HTTPS service, a dryrun uses SSH.
             preview = mmx('dryrun', 'configure', '--inventory', inventory, expected=2)['entries'][0]
-            assert preview['connection_used'] == connection_used and preview['response']['change'] == 'would_change', preview
+            assert preview['connection_used'] == 'ssh' and preview['response']['change'] == 'would_change', preview
             as_root(f'test ! -e {MARKERS}/managed')
-            applied = mmx('run', 'configure', '--inventory', inventory)['entries'][0]
+            notice = vm.https_setup_notice('controller_machine', inventory) if connection_used == 'https' else None
+            applied = mmx('run', 'configure', '--inventory', inventory, said=notice)['entries'][0]
             assert applied['connection_used'] == connection_used and applied['response']['change'] == 'changed', applied
             # The node runner executable wrote the file as root, and the
             # controller process ran as the administrative account.
@@ -163,6 +166,8 @@ def main():
             again = mmx('run', 'configure', '--inventory', inventory)
             assert again['status'] == 'succeeded' and again['entries'][0]['response']['change'] == 'unchanged', again
             assert again['entries'][0]['connection_used'] == connection_used
+            preview = mmx('dryrun', 'configure', '--inventory', inventory)['entries'][0]
+            assert preview['connection_used'] == connection_used and preview['response']['change'] == 'unchanged', preview
 
             # The controller process is killed while the node job runs. The
             # node job is another process of the same machine and goes on.
@@ -180,7 +185,7 @@ def main():
             entry = resumed['entries'][0]
             assert resumed['status'] == 'succeeded' and entry['node_job_attempt'] == 1 and entry['response']['status'] == 'succeeded', resumed
             assert as_root(f'cat {MARKERS}/started {MARKERS}/completed') == 'started\ncompleted\n'
-            mark(f'through {connection_used} to 127.0.0.1: a dryrun, a first run, and an unchanged second run; '
+            mark(f'through {connection_used} to 127.0.0.1: a dryrun over SSH, a first run, an unchanged second run and dryrun; '
                  'after the controller process is killed, the node job finishes and mmx resume takes its result without running it again')
 
         # The controller's state and the node's state are apart on the one machine.

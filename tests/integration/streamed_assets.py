@@ -91,6 +91,16 @@ def main():
                                + ' || exit 0; sleep 0.5; done; exit 1')
                     return folder
 
+                if transport == 'https':
+                    # A dryrun uses SSH until a run has set up MMX's HTTPS
+                    # service, so a first run of another playbook sets it up and
+                    # every command below goes over HTTPS.
+                    vm.write_playbook(workspace, 'set_up_https', [{'id': 'set_up_https', 'nodes': 'all', 'node_tasks': [
+                        {'file': {'permissions_mode': '0644', 'path': base + '/https', 'content': 'set up'}}]}])
+                    vm.write_settings(workspace, {'project_name': 'streamed_assets', 'default_inventory': 'example'})
+                    set_up = vm.cmd([mmx, 'run', 'set_up_https', '--json'], cwd=workspace)
+                    assert vm.https_setup_notice('app', 'example') in set_up.stderr, set_up.stderr
+                    assert json.loads(set_up.stdout)['entries'][0]['connection_used'] == 'https', set_up.stdout
                 project()
                 preview = run('dryrun')
                 assert 'file exceeds 64 KiB' in json.dumps(preview)

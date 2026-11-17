@@ -141,8 +141,10 @@ def main():
         assert url in corrupt['entries'][0]['response']['error'], corrupt
         assert remote("find /opt/mmx/bin -name mmx-runner -o -name '.upload.*'") == ''
         vm.copy(runner, f'{mirror}/mmx/mmx-runner-{digest}')
+        # A dryrun on a node without MMX's HTTPS service installs only the runner
+        # and uses SSH.
         mirrored = run('dryrun')
-        assert mirrored['entries'][0]['connection_used'] == 'https'
+        assert mirrored['entries'][0]['connection_used'] == 'ssh'
         assert remote(f'sha256sum /opt/mmx/bin/{digest}/mmx-runner').split()[0] == digest
         remote(f'test ! -f {managed}')
         mark('mmx_runner_download_url installs only the runner whose hash the controller sent; a missing or damaged download fails naming its URL')
@@ -169,9 +171,9 @@ os.execv("/usr/bin/ssh", ["ssh", *sys.argv[1:]])
         assert 'setup of the node runner executable' in failed['entries'][0]['response']['error']
         assert remote("find /opt/mmx/bin -name mmx-runner -o -name '.upload.*'") == ''
         first = run('dryrun')
-        assert first['entries'][0]['connection_used'] == 'https'
+        assert first['entries'][0]['connection_used'] == 'ssh'
         remote(f'test ! -f {managed}')
-        mark('incomplete upload installs no executable; repeating setup reaches HTTPS without applying dryrun resources')
+        mark('incomplete upload installs no executable; repeating setup installs the runner, and the dryrun applies no resources')
 
         for account in [user, other]:
             remote(f'useradd -m -s /bin/bash {account}')
@@ -208,19 +210,29 @@ os.execv("/usr/bin/ssh", ["ssh", *sys.argv[1:]])
 
         write_project(password_node)
         vm.ENV.update(credential_env)
-        installed = run('dryrun')
+        # Before MMX's HTTPS service exists, a dryrun uses the passwords over
+        # SSH and enrolls no key; the first run sets the service up and
+        # enrolls one key.
+        previewed = run('dryrun')
+        assert previewed['entries'][0]['connection_used'] == 'ssh'
+        assert not generated_key.exists()
+        remote(f'test ! -e /home/{user}/.ssh/authorized_keys')
+        remote(f'test ! -f {managed}')
+        installed = run('run')
         assert installed['entries'][0]['connection_used'] == 'https'
         assert generated_key.exists() and generated_key.stat().st_mode & 0o777 == 0o600
         authorized = remote(f'cat /home/{user}/.ssh/authorized_keys')
         assert authorized.count('ssh-ed25519') == 1
-        remote(f'test ! -f {managed}')
+        assert remote(f'cat {managed}') == 'configured'
+        remote(f'rm {managed}')
         for name in credential_env:
             vm.ENV.pop(name, None)
+        assert run('dryrun')['entries'][0]['connection_used'] == 'https'
         applied = run('run')
         assert applied['entries'][0]['connection_used'] == 'https'
         assert remote(f'cat {managed}') == 'configured'
         assert remote(f'cat /home/{user}/.ssh/authorized_keys') == authorized
-        mark('password-only setup accepts distinct SSH/sudo passwords, enrolls one key, and subsequent HTTPS needs neither password')
+        mark('password-only setup accepts distinct SSH/sudo passwords, enrolls one key in the first run, and subsequent HTTPS needs neither password')
 
         # Current sudo authority is checked, not merely copied during setup.
         # Removing the user's sudoers file takes the authority away, unless the

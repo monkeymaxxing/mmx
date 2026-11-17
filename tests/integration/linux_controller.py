@@ -78,20 +78,54 @@ def main():
         env = dict(vm.ENV, SSH_AUTH_SOCK=sock)
         subprocess.run(['ssh-add', str(identity)], env=env, stdin=subprocess.DEVNULL,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True, timeout=10)
-        for command in ('dryrun', 'run', 'run'):
+        def mmx(arguments):
             result = subprocess.run([*map(str, vm.unshared(ssh[:-1])), '-A', '-o', 'IdentityAgent=' + sock, ssh[-1],
-                'cd ' + shlex.quote(remote_dir) + '; ./mmx ' + command + ' configure --json'], env=env,
+                'cd ' + shlex.quote(remote_dir) + '; ./mmx ' + arguments], env=env,
                 capture_output=True, text=True, timeout=120)
-            assert result.returncode in vm.success_codes(command), (result.stdout, result.stderr)
-            record = json.loads(result.stdout)
-            assert record['entries'][0]['connection_used'] == 'https', record
-            if command == 'dryrun':
-                vm.console('test ! -e /var/tmp/mmx-integration/linux-controller', target)
-            else:
-                assert record['status'] == 'succeeded'
-        assert record['entries'][0]['response']['change'] == 'unchanged'
+            assert result.returncode in vm.success_codes(arguments.split()[0]), (result.stdout, result.stderr)
+            return result
+
+        def record_of(command):
+            record = json.loads(mmx(command + ' configure --json').stdout)
+            if command == 'run':
+                assert record['status'] == 'succeeded', record
+            return record
+
+        # What MMX's HTTPS service would leave on the target: its unit, its
+        # listener, its TLS key; and the login account's authorized_keys,
+        # which HTTPS setup may add a key to.
+        https_service = ('systemctl cat mmx-https-api.service >/dev/null 2>&1 && echo unit; '
+                         "ss -Hltn 'sport = :7443' | grep -q . && echo listener; "
+                         'test -e /var/lib/mmx/tls.key && echo tls_key; true')
+        authorized_keys = f"sha256sum < ~{node['ssh_user']}/.ssh/authorized_keys"
+        keys_before = vm.console(authorized_keys, target)
+        # A dryrun on a node without MMX's HTTPS service installs only the node
+        # runner executable and uses SSH, so a person can look before agreeing
+        # to change the server; repeating it changes nothing more.
+        for _ in range(2):
+            record = record_of('dryrun')
+            assert record['entries'][0]['connection_used'] == 'ssh', record
+            vm.console('test ! -e /var/tmp/mmx-integration/linux-controller && test -x /opt/mmx/bin/' +
+                       record['entries'][0]['runner_hash'] + '/mmx-runner', target)
+            assert vm.console(https_service, target) == '', vm.console(https_service, target)
+            assert vm.console(authorized_keys, target) == keys_before
+        # The first run says that it sets up the service before the node job
+        # changes anything, then applies over HTTPS.
+        said = mmx('run configure 2>&1').stdout
+        notice = said.find(vm.https_setup_notice('target', 'example'))
+        assert notice >= 0 and notice < said.index('configure / target:'), said
+        record = json.loads(mmx('results --json').stdout)
+        assert record['dryrun'] is False and record['status'] == 'succeeded', record
+        assert record['entries'][0]['connection_used'] == 'https', record
+        assert vm.console('systemctl is-active mmx-https-api.service', target).strip() == 'active'
+        assert vm.console(https_service, target).split() == ['unit', 'listener', 'tls_key']
         assert vm.console('cat /var/tmp/mmx-integration/linux-controller', target) == 'native Linux controller'
-        print('PASS Linux ' + architecture + ' controller: verified SSH setup, HTTPS apply, unchanged rerun', flush=True)
+        for command in ('dryrun', 'run'):
+            record = record_of(command)
+            assert record['entries'][0]['connection_used'] == 'https', record
+            assert record['entries'][0]['response']['change'] == 'unchanged', record
+        print('PASS Linux ' + architecture + ' controller: dryruns over SSH leave no HTTPS service, '
+              'the first run announces and sets it up, then dryrun and run use HTTPS', flush=True)
         (directory / 'results.json').write_text(json.dumps({'architecture': architecture,
             'controller_sha256': hashlib.sha256(controller.read_bytes()).hexdigest(), 'passed': True}, indent=2))
 
