@@ -27,6 +27,11 @@ Choose a related module where it fits better:
 A sudo rule or a log rotation configuration is a `file` with
 `check_new_file`; MMX has no separate module for either.
 
+MMX trusts the directories above a file's `path`: it follows a symlink in
+them, as Ansible does. An account that can write such a directory can
+point root's write elsewhere, so keep directories above a root-managed
+file writable only by root.
+
 ## Examples
 
 ### Write a file
