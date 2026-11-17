@@ -302,6 +302,32 @@ func TestSecretUsageReadsTheSelectedInventory(t *testing.T) {
 	}
 }
 
+// A download URL that reads a command-line variable without a default
+// needs the value only for a run; mmx validate and secrets usage read the
+// playbook without it.
+func TestSecretUsageReadsAPlaybookWhoseDownloadNeedsACommandLineValue(t *testing.T) {
+	settings := secretUsageFixture(t)
+	write(t, filepath.Join(filepath.Dir(settings), "playbooks/release.yml"), `command_line_vars:
+  release: {type: string}
+fleet_stages:
+  - id: release
+    nodes: web01
+    node_tasks:
+      - {download: {url: "https://downloads.example.com/app-{{ .vars.release }}", sha256: `+strings.Repeat("a", 64)+`, path: /usr/local/bin/app, permissions_mode: "0755"}}
+      - {shell: {script: "true", env: {TOKEN: "{{ .secrets.release_token }}"}}}
+`)
+	if _, err := ValidateProject(settings); err != nil {
+		t.Fatal(err)
+	}
+	usage, err := SecretUsageOf(settings, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := usageLines(usage.Uses["release_token"], ""); !reflect.DeepEqual(got, []string{"playbooks/release.yml:8  shell env TOKEN"}) {
+		t.Fatal(got)
+	}
+}
+
 // A project file that does not load is an error, never a shorter answer.
 func TestSecretUsageFailsOnAPlaybookThatDoesNotLoad(t *testing.T) {
 	settings := secretUsageFixture(t)

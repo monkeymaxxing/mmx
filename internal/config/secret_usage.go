@@ -84,7 +84,9 @@ func SecretUsageOf(settingsFile, inventory string) (SecretUsage, error) {
 		}
 	}
 	for _, playbook := range append(playbooks, oneTime...) {
-		p, inv, err := Load(settingsFile, playbook, inventory, nil)
+		// Read each playbook as mmx validate does: a source field that
+		// reads a command-line value given only at run time names no secret.
+		p, inv, err := load(settingsFile, playbook, inventory, nil, nil, true)
 		if err != nil {
 			return SecretUsage{}, err
 		}
