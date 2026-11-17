@@ -113,18 +113,7 @@ func (s *Store) Password(confirm bool) (string, error) {
 			if !s.Interactive || s.Prompt == nil {
 				return "", fmt.Errorf("vault passphrase required; use --vault-password-file, MMX_VAULT_PASSWORD_FILE, or MMX_VAULT_PASSWORD (prompts are disabled)")
 			}
-			label := "Vault passphrase: "
-			if confirm {
-				label = newVaultPassphrasePrompt
-			}
-			password, err = s.Prompt(label)
-			if err == nil && confirm {
-				var again string
-				again, err = s.Prompt("Confirm new vault passphrase: ")
-				if err == nil && password != again {
-					err = fmt.Errorf("vault passphrases do not match")
-				}
-			}
+			password, err = AskForPassphrase(s.Prompt, confirm)
 		}
 	}
 	if err != nil {
@@ -134,6 +123,26 @@ func (s *Store) Password(confirm bool) (string, error) {
 		return "", fmt.Errorf("vault passphrase must be nonempty and contain no line breaks")
 	}
 	s.password = password
+	return password, nil
+}
+
+// AskForPassphrase asks for the vault passphrase at prompt: once for a vault
+// that exists, and twice, with advice on choosing it, for a new vault.
+func AskForPassphrase(prompt func(string) (string, error), newVault bool) (string, error) {
+	if !newVault {
+		return prompt("Vault passphrase: ")
+	}
+	password, err := prompt(newVaultPassphrasePrompt)
+	if err != nil {
+		return "", err
+	}
+	again, err := prompt("Confirm new vault passphrase: ")
+	if err != nil {
+		return "", err
+	}
+	if password != again {
+		return "", fmt.Errorf("vault passphrases do not match")
+	}
 	return password, nil
 }
 func (s *Store) NewPassword(path string) (string, error) {
@@ -291,12 +300,14 @@ const newVaultText = "example_secret_key: \"replace this line with your own secr
 // Edit opens the vault's text in an editor. When the edited text is rejected,
 // editAgain (nil: never) is told why and says whether to reopen the editor
 // with that text, as visudo does; the text stays in the editor's temporary file.
+// A vault that is empty, such as one that mmx secrets write-passphrase-file
+// created, shows the same example as a vault that does not exist yet.
 func Edit(ctx context.Context, path, password, editor string, editAgain func(rejection error) bool) error {
 	plaintext, err := decrypt(path, password)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if len(plaintext) == 0 {
 		plaintext = []byte(newVaultText)
 	}
 	dir, err := os.MkdirTemp("", "mmx-vault-")

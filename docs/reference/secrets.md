@@ -151,21 +151,22 @@ set:
 | `mmx secrets list-keys` | Prints the vault's secret keys. | Yes |
 | `mmx secrets diff-keys` | Compares the vault's secret keys with the last Git commit. | Yes |
 | `mmx secrets usage [KEY]` | Lists where each secret key is read. | Only when the vault file exists |
+| `mmx secrets write-passphrase-file` | Asks for the vault passphrase and writes the passphrase to a file outside the project, so that your coding agent can unlock the vault. | Yes; creates an empty vault if there is none |
 
-No `mmx secrets` command prints a secret's value, also not in an error
-message, except `mmx secrets show`, which prints one value to your
-terminal. `mmx secrets edit` shows the values in your editor.
+No `mmx secrets` command prints a secret's value or the vault passphrase,
+also not in an error message, except `mmx secrets show`, which prints one
+value to your terminal. `mmx secrets edit` shows the values in your editor.
 
 | Option | Commands | What the option does |
 | --- | --- | --- |
 | `--vault PATH` | all except `usage` | Works on this vault file. |
 | `--inventory NAME` | all | Works on the vault that this inventory's `vault_file` selects. |
-| `--vault-password-file PATH` | all | Reads the passphrase from this file. |
+| `--vault-password-file PATH` | all except `write-passphrase-file` | Reads the passphrase from this file. |
 | `--new-vault-password-file PATH` | `passwd` | Reads the new passphrase from this file. |
 | `--length N` | `add-random` | Makes a value of `N` characters. The default is 32. |
 | `--replace` | `add-random`, `set` | Changes the value of a secret key that the vault has. |
-| `--non-interactive` | all | Fails instead of asking a question. |
-| `--json` | all except `show` and `pipe-to` | Prints JSON, and asks no question. |
+| `--non-interactive` | all except `write-passphrase-file` | Fails instead of asking a question. |
+| `--json` | all except `show`, `pipe-to`, and `write-passphrase-file` | Prints JSON, and asks no question. |
 
 ### A name inside a secret key
 
@@ -508,6 +509,57 @@ Ctrl-C. `mmx secrets usage` also exits with code 1, as
   `file`, `line`, `used_by`, and, for a role call,
   `uses_inside_the_role`. A secret key that only left-out fleet stages
   read has `only_read_by_fleet_stages_left_out_before_the_run: true`.
+
+### mmx secrets write-passphrase-file
+
+- The command lets your coding agent unlock the vault without the
+  passphrase ever appearing in the agent's conversation. You run the
+  command once, yourself, in your own terminal. Your coding agent then
+  runs `mmx` with `MMX_VAULT_PASSWORD_FILE` set to the file.
+- The command runs only when standard input and standard output are a
+  terminal. In a pipe, in a file, or through a coding agent, the command
+  fails with exit code 4 and writes nothing:
+  `mmx secrets write-passphrase-file asks for the vault passphrase at a terminal. Run it yourself in your own terminal, not through your coding agent`.
+- The command always asks at a hidden prompt. It ignores
+  `MMX_VAULT_PASSWORD_FILE` and `MMX_VAULT_PASSWORD`, and accepts none of
+  `--vault-password-file`, `--non-interactive`, and `--json`.
+- **A vault that exists.** The command asks `Vault passphrase:` once and
+  checks that the passphrase opens the vault. A wrong passphrase fails with
+  exit code 4 and writes nothing:
+  `that passphrase does not open the vault secrets_vault.age. Nothing was written. Run mmx secrets write-passphrase-file again and type the vault's passphrase`.
+- **No vault yet.** The command asks for a new passphrase twice, with the
+  same advice as any new vault: make it new, not a password you use
+  anywhere else, and keep it in a password manager. The command then
+  creates an empty vault with that passphrase. The first
+  `mmx secrets set` then opens that vault with the file's passphrase and
+  asks for no other new passphrase.
+- **The file.** The command writes the passphrase as one line, with mode
+  `0600`, to `~/.config/mmx/vault-passphrase-PROJECT_NAME`, where
+  `PROJECT_NAME` is `project_name` in `mmx_project_settings.yml`. It
+  creates `~/.config/mmx` with mode `0700` when the directory does not
+  exist. The file is outside the project, so it is never committed. The
+  command runs only inside a project.
+- **Another vault.** A vault that an inventory's `vault_file` or `--vault`
+  selects, and that is not the project's own vault, can have its own
+  passphrase. Its file name adds the vault's file name without `.age`:
+  `--inventory staging` with `vault_file: staging_vault.age` writes
+  `~/.config/mmx/vault-passphrase-shop-staging_vault`.
+- **A file that exists** is replaced in one step, and only after the
+  passphrase check passes, so a wrong passphrase keeps the old file. The
+  output then starts with `Replaced the old ~/.config/mmx/vault-passphrase-shop.`
+- The output never holds the passphrase. It ends with two lines, here for
+  the project `shop`:
+
+  ```text
+  Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop.
+  When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop
+  ```
+
+  When the command created the vault, the output starts with
+  `Created the vault secrets_vault.age with this passphrase. The vault holds no secrets yet.`
+- Anyone who can read the file can open the vault, like anyone who knows
+  the passphrase. Delete the file when your coding agent no longer needs
+  it.
 
 ## Which secrets a run needs
 

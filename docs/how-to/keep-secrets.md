@@ -38,6 +38,7 @@ from environment variables, and keep a separate vault for staging.
 | --- | --- |
 | Start keeping secrets, and use one in a playbook | [Create the vault and use a secret](#create-the-vault-and-use-a-secret) |
 | Run from CI, a script, or a coding agent, with no one to type | [Run without a terminal](#run-without-a-terminal) |
+| Let your coding agent run `mmx` without the passphrase in its conversation | [Let your coding agent run mmx](#let-your-coding-agent-run-mmx) |
 | Add a secret that another program gives you, or change a secret's value | [Add or change a secret without showing it](#add-or-change-a-secret-without-showing-it) |
 | Read one secret's value yourself, such as to store it in a password manager | [Read one value once](#read-one-value-once) |
 | Give a secret to a program on your computer, such as `openssl` or `ssh` | [Give one value to a program](#give-one-value-to-a-program) |
@@ -296,6 +297,57 @@ says what happens when that source fails.
 MMX also asks nothing, and fails in the same way, when the command has no
 terminal or when the command has `--json`. [Unlocking the vault](../reference/secrets.md#unlocking-the-vault)
 lists which commands open the vault.
+
+## Let your coding agent run mmx
+
+A coding agent cannot type at a prompt, and a passphrase that you paste
+into its chat stays in the conversation. Instead, unlock the vault once
+yourself, and let the agent read the passphrase from a file.
+
+1. **Write the passphrase file, in your own terminal.** Run the command
+   yourself, not through your coding agent:
+
+   ```sh
+   mmx secrets write-passphrase-file
+   ```
+
+   MMX asks `Vault passphrase:` and hides what you type. With no vault
+   yet, MMX asks for a new passphrase twice and creates an empty vault.
+   Then MMX prints, for the project `shop`:
+
+   ```text
+   Your coding agent can now run mmx with MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop.
+   When you are done, delete the file: rm ~/.config/mmx/vault-passphrase-shop
+   ```
+
+   The file is outside the project, readable by you only, and never
+   committed. A wrong passphrase writes nothing.
+
+2. **Tell your coding agent the first line.** The agent then runs, for
+   example:
+
+   ```sh
+   MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop mmx dryrun write_shop_settings
+   ```
+
+   The agent never prints, reads, or copies the file, and never asks for
+   the passphrase in the chat.
+
+   **Check:** the agent's
+   `MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop mmx secrets list-keys --non-interactive`
+   prints the secret keys.
+
+3. **Delete the file when you are done.** Anyone who can read the file can
+   open the vault, so remove it when the agent no longer needs it:
+
+   ```sh
+   rm ~/.config/mmx/vault-passphrase-shop
+   ```
+
+For a vault of another inventory, add `--inventory NAME`; that vault gets
+its own file, as
+[mmx secrets write-passphrase-file](../reference/secrets.md#mmx-secrets-write-passphrase-file)
+says.
 
 ## Add or change a secret without showing it
 

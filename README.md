@@ -612,6 +612,17 @@ before moving on. Use one server first, then the rest.
 - Never put a secret's value in a YAML file, a command line, or the chat.
   Use `mmx secrets set KEY`, which reads the value from standard input, or
   `mmx secrets add-random KEY`.
+- To unlock the vault, ask the person to run
+  `mmx secrets write-passphrase-file` once, in their own terminal, not
+  through you. With no vault yet, that command creates the vault, so tell
+  the person first: "The passphrase is the one key to the encrypted secrets
+  file. It is yours alone: make it new, and save it in your password
+  manager." The command prints the line to use, such as
+  `MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop`. Then run
+  `MMX_VAULT_PASSWORD_FILE=~/.config/mmx/vault-passphrase-shop mmx dryrun PLAYBOOK`,
+  and `mmx run` the same way, yourself. Never print, read, or copy that
+  file, and never ask for the passphrase in the chat. The person still
+  approves the dryrun's changes before each run.
 - The first `mmx run` on a server starts MMX's HTTPS service,
   `mmx-https-api.service`, on TCP port 7443 on every network address. Tell
   the person before that run. If they want no listener, set

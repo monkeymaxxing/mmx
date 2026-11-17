@@ -41,7 +41,7 @@ project.)
 | [`mmx complete-one-time-playbook NAME`](#mmx-complete-one-time-playbook) | Moves a one-time playbook to `completed/` when no node needs it. | Yes |
 | [`mmx describe-module [NAME]`](#mmx-describe-module) | Lists the modules, or prints one module's page. | No |
 | [`mmx module-usage [PLAYBOOK]`](#mmx-module-usage) | Shows which modules the project uses, and where. | No |
-| [`mmx secrets ...`](#mmx-secrets) | Edits the vault of secrets and shows which secret keys exist and where they are used. | No |
+| [`mmx secrets ...`](#mmx-secrets) | Edits the vault of secrets, shows which secret keys exist and where they are used, and writes the vault passphrase to a file for your coding agent. | No |
 | [`mmx module-json ...`](#mmx-module-json) | Helper for a module that is an executable of your own. | No |
 | [`mmx version`](#mmx-version) | Prints the version. | No |
 | [`mmx help`](#mmx-help) | Prints the commands, the flags, and the exit codes. | No |
@@ -916,6 +916,7 @@ subcommand's flags, output, and exit codes.
 | [`mmx secrets list-keys`](secrets.md#mmx-secrets-list-keys) | Lists the vault's secret keys, never a value. |
 | [`mmx secrets diff-keys`](secrets.md#mmx-secrets-diff-keys) | Shows which secret keys changed since the last Git commit, never a value. |
 | [`mmx secrets usage [KEY]`](secrets.md#mmx-secrets-usage) | Shows where each secret key is used. |
+| [`mmx secrets write-passphrase-file`](secrets.md#mmx-secrets-write-passphrase-file) | Asks for the vault passphrase and writes the passphrase to `~/.config/mmx/`, so that your coding agent can run `mmx` with `MMX_VAULT_PASSWORD_FILE`. Run it yourself, in your own terminal. |
 
 ## mmx module-json
 

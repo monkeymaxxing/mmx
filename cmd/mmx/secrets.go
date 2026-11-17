@@ -16,7 +16,7 @@ import (
 	"mmx/internal/secrets"
 )
 
-const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | show KEY [NAME ...] | pipe-to KEY [NAME ...] -- COMMAND [ARGUMENT ...] | list-keys | diff-keys | usage [KEY]
+const secretsHelp = `mmx secrets edit | passwd | add-random KEY [NAME ...] | set KEY [NAME ...] | show KEY [NAME ...] | pipe-to KEY [NAME ...] -- COMMAND [ARGUMENT ...] | list-keys | diff-keys | usage [KEY] | write-passphrase-file
 
 Options: --inventory NAME  --vault PATH (not for usage)  --vault-password-file PATH
 Passphrase change: --new-vault-password-file PATH
@@ -26,6 +26,7 @@ A name inside a key: one word for each level, such as mmx secrets set mmwatchdog
 A key the vault already has: set and add-random change its value only with --replace
 show prints one value, only to a terminal; clear the terminal afterwards
 pipe-to writes one value to COMMAND's standard input; never use a COMMAND that prints its input, such as cat
+write-passphrase-file asks for the vault passphrase and writes it to ~/.config/mmx/, for your coding agent's MMX_VAULT_PASSWORD_FILE; run it yourself in your own terminal
 Automation: --non-interactive  --json`
 
 // secretsOptions are the options and arguments of one mmx secrets command.
@@ -56,15 +57,18 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 	}
 	o := secretsOptions{action: args[0]}
 	switch o.action {
-	case "edit", "passwd", "add-random", "set", "show", "pipe-to", "list-keys", "diff-keys", "usage":
+	case "edit", "passwd", "add-random", "set", "show", "pipe-to", "list-keys", "diff-keys", "usage", "write-passphrase-file":
 	default:
 		return 4, fmt.Errorf("unknown secrets command %q", o.action)
 	}
 	fs := flag.NewFlagSet("secrets "+o.action, flag.ContinueOnError)
 	fs.StringVar(&o.inventory, "inventory", "", "inventory whose vault setting applies, replacing the project's")
-	fs.StringVar(&o.passwordFile, "vault-password-file", "", "file on the controller machine containing the vault passphrase")
-	fs.BoolVar(&o.nonInteractive, "non-interactive", false, "do not prompt")
-	fs.BoolVar(&o.asJSON, "json", false, "structured output; do not prompt")
+	// write-passphrase-file always asks a person at a terminal.
+	if o.action != "write-passphrase-file" {
+		fs.StringVar(&o.passwordFile, "vault-password-file", "", "file on the controller machine containing the vault passphrase")
+		fs.BoolVar(&o.nonInteractive, "non-interactive", false, "do not prompt")
+		fs.BoolVar(&o.asJSON, "json", false, "structured output; do not prompt")
+	}
 	if o.action != "usage" {
 		fs.StringVar(&o.vault, "vault", "", "encrypted vault file (default: project selection or secrets_vault.age)")
 	}
@@ -117,6 +121,8 @@ func secretCommand(ctx context.Context, args []string) (int, error) {
 		return secretsDiffKeys(ctx, o)
 	case "usage":
 		return secretsUsage(ctx, o)
+	case "write-passphrase-file":
+		return secretsWritePassphraseFile(ctx, o)
 	}
 	if len(o.arguments) != 0 {
 		return 4, fmt.Errorf("mmx secrets edit and mmx secrets passwd take no positional arguments")

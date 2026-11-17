@@ -176,6 +176,7 @@ about a server.
 | `mmx secrets list-keys` | [List the vault's keys](#add-list-and-compare-secret-keys), never a value. |
 | `mmx secrets diff-keys` | [Show which keys were added, removed, or changed](#add-list-and-compare-secret-keys) since the last committed vault, never a value. |
 | `mmx secrets usage [KEY]` | [Show where each secret key is used](#find-where-a-secret-is-used), locally. |
+| `mmx secrets write-passphrase-file` | [Write the vault passphrase to a file for a coding agent](#create-and-edit-shared-secrets), at a terminal only. |
 | `mmx new-one-time-playbook WHAT_IT_DOES` | [Create a dated one-time playbook](#one-time-playbooks) in `one_time_playbooks/`. |
 | `mmx check-one-time-playbooks` | [Report which nodes still need each outstanding one-time playbook](#one-time-playbooks), changing nothing. |
 | `mmx complete-one-time-playbook NAME` | [Move a one-time playbook to `completed/`](#one-time-playbooks) when no node needs it any more. |
@@ -631,6 +632,25 @@ storage and is removed when the edit ends, including on
 Ctrl-C, SIGTERM, or a closed terminal. `mmx secrets passwd` changes the
 passphrase without changing the values; `--new-vault-password-file PATH` makes
 it noninteractive.
+
+`mmx secrets write-passphrase-file` lets a person unlock the vault once for
+a coding agent, so that the passphrase never enters the agent's
+conversation. It runs only when standard input and standard output are a
+terminal, always asks at the hidden prompt, and writes the passphrase as one
+line, mode `0600`, to `~/.config/mmx/vault-passphrase-PROJECT_NAME` in one
+atomic step, creating `~/.config/mmx` with mode `0700`. The agent then sets
+`MMX_VAULT_PASSWORD_FILE` to that file. The file lives outside the project
+so that it is never committed, and it is named after the project so that
+several projects on one controller machine keep apart. A vault that is not
+the project's own, selected by an inventory's `vault_file` or `--vault`, can
+have another passphrase, so its file name adds the vault's file name without
+`.age`; two such vaults with the same file name in different directories
+share one file, and the second write replaces the first, which a later
+command reports as a wrong passphrase. For an existing vault the command
+writes only a passphrase that opens the vault. With no vault yet it asks for
+a new passphrase twice and creates an empty vault with it: a vault created
+later by `mmx secrets set` at a prompt could get a different new passphrase
+than the file holds.
 
 `secrets_vault.age` at the project root is the default vault; project or
 inventory `vault_file: PATH`, or `--vault PATH` on the secrets commands, selects

@@ -22,20 +22,28 @@ func cleanEnvironment(t *testing.T) {
 // A new vault opens with an uncommented example line, so an editor that
 // continues comments does not turn a typed secret into a comment. The
 // person replaces the example or adds a line below; saved unchanged, the
-// vault holds only the example key, which nothing reads.
+// vault holds only the example key, which nothing reads. An empty vault, as
+// mmx secrets write-passphrase-file creates, starts the same way.
 func TestANewVaultTakesALineAddedBelowItsStartingText(t *testing.T) {
 	const password = "test editor passphrase"
 	const example = "replace this line with your own secret key and value"
 	for name, tc := range map[string]struct {
 		editorScript string
 		want         map[string]any
+		emptyVault   bool
 	}{
-		"a line added below":     {"#!/bin/sh\nprintf 'join_code: \"added-by-a-person\"\\n' >> \"$1\"\n", map[string]any{"example_secret_key": example, "join_code": "added-by-a-person"}},
-		"the example replaced":   {"#!/bin/sh\nsed 's/^example_secret_key: .*/join_code: \"typed\"/' \"$1\" > \"$1.new\" && mv \"$1.new\" \"$1\"\n", map[string]any{"join_code": "typed"}},
-		"saved without a change": {"#!/bin/sh\nexit 0\n", map[string]any{"example_secret_key": example}},
+		"a line added below":                    {"#!/bin/sh\nprintf 'join_code: \"added-by-a-person\"\\n' >> \"$1\"\n", map[string]any{"example_secret_key": example, "join_code": "added-by-a-person"}, false},
+		"the example replaced":                  {"#!/bin/sh\nsed 's/^example_secret_key: .*/join_code: \"typed\"/' \"$1\" > \"$1.new\" && mv \"$1.new\" \"$1\"\n", map[string]any{"join_code": "typed"}, false},
+		"saved without a change":                {"#!/bin/sh\nexit 0\n", map[string]any{"example_secret_key": example}, false},
+		"a line added below, in an empty vault": {"#!/bin/sh\nprintf 'join_code: \"added-by-a-person\"\\n' >> \"$1\"\n", map[string]any{"example_secret_key": example, "join_code": "added-by-a-person"}, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "secrets.age")
+			if tc.emptyVault {
+				if err := Write(path, password, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
 			editor := filepath.Join(t.TempDir(), "editor")
 			writeProgramFileThroughShellChild(t, editor, tc.editorScript)
 			if err := Edit(context.Background(), path, password, editor, nil); err != nil {
