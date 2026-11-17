@@ -170,7 +170,8 @@ addresses and accounts.
      - id: show_web_settings
        nodes: web_servers
        node_tasks:
-         - show: "{{ .vars.site_name }}: port {{ .vars.http_port }}, {{ .vars.worker_count }} workers, log level {{ .vars.log_level }}"
+         - id: show_the_settings
+           show: "{{ .vars.site_name }}: port {{ .vars.http_port }}, {{ .vars.worker_count }} workers, log level {{ .vars.log_level }}"
    ```
 
    Then `mmx explain show_settings --limit web01` shows the value for
@@ -179,10 +180,10 @@ addresses and accounts.
 
    ```text
    show_web_settings → web01
-     web01 / show_web_settings/task_1: show (ready)
+     web01 / show_web_settings/show_the_settings: show (ready)
        at playbooks/show_settings.yml:6:9 (fleet_stages[0].node_tasks[0])
        show = "shop: port 8080, 4 workers, log level info"
-         from playbooks/show_settings.yml:6:15 (fleet_stages[0].node_tasks[0].show)
+         from playbooks/show_settings.yml:7:15 (fleet_stages[0].node_tasks[0].show)
          value from inventories/example.yml:22:18 (groups.web_servers.vars.http_port)
          value from inventories/example.yml:3:14 (vars.log_level)
          value from mmx_project_settings.yml:5:14 (vars.site_name)
@@ -192,9 +193,9 @@ addresses and accounts.
    `mmx run show_settings` shows each server's own values:
 
    ```text
-     show_web_settings / web01 / task_1: succeeded, unchanged
+     show_web_settings / web01 / show_the_settings: succeeded, unchanged
        "shop: port 8080, 4 workers, log level info"
-     show_web_settings / web02 / task_1: succeeded, unchanged
+     show_web_settings / web02 / show_the_settings: succeeded, unchanged
        "shop: port 8080, 8 workers, log level info"
    ```
 
@@ -262,7 +263,7 @@ addresses and accounts.
    Project: mmx_example   Playbook: show_settings
    Inventory: staging (1 node)   Selected: 1 node
    ...
-     show_web_settings / web01 / task_1: succeeded, unchanged
+     show_web_settings / web01 / show_the_settings: succeeded, unchanged
        "shop: port 8080, 2 workers, log level debug"
    ```
 

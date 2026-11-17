@@ -78,7 +78,8 @@ mark the one-time playbook as completed when no server needs the work.
 
        node_tasks:
          # An example node task that changes nothing. Replace it with the work.
-         - show: "Replace this example node task with the work of this one-time playbook."
+         - id: example_node_task
+           show: "Replace this example node task with the work of this one-time playbook."
    ```
 
    **Check:** `mmx validate` prints `Valid: mmx_example`. If

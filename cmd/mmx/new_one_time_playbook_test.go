@@ -53,6 +53,8 @@ func TestNewOneTimePlaybookCreatesADatedPlaybookThatIsValidAsItIs(t *testing.T) 
 			"# Check which nodes still need it:   mmx check-one-time-playbooks\n" +
 			"# Complete it when no node needs it: mmx complete-one-time-playbook " + name + "\n",
 		"\nfleet_stages:\n  - id: remove_old_ruby_manager\n    nodes: all\n\n    node_tasks:\n",
+		// A descriptive ID, so the output never names the node task task_1.
+		"      - id: example_node_task\n        show: ",
 	} {
 		if !strings.Contains(string(text), want) {
 			t.Fatalf("missing %q in\n%s", want, text)

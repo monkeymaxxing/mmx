@@ -565,7 +565,8 @@ func initialize() (int, error) {
     nodes: all
 
     node_tasks:
-      - file:
+      - id: create_example_file
+        file:
           path: /etc/mmx-example
           content: "Managed by MMX.\n"
           owner: root

@@ -31,6 +31,11 @@ func TestInitHelpDoesNotCreateFilesAndInitPreservesExistingWork(t *testing.T) {
 	if code != 0 || err != nil {
 		t.Fatal(code, err)
 	}
+	// The example node task has a descriptive ID, so the output names it
+	// instead of task_1.
+	if playbook, _ := os.ReadFile("playbooks/example.yml"); !strings.Contains(string(playbook), "    node_tasks:\n      - id: create_example_file\n        file:\n") {
+		t.Fatalf("the example node task has no descriptive ID:\n%s", playbook)
+	}
 	ignore, _ := os.ReadFile(".gitignore")
 	if !strings.Contains(string(ignore), "existing-rule\n/.mmx/\n") {
 		t.Fatal("ignore rule did not preserve existing content")

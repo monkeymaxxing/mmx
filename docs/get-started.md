@@ -157,8 +157,8 @@ your own server's address and account.
    Progress: 1 running
      welcome / web01: connecting
    welcome / web01: succeeded
-     welcome / web01 / task_1: succeeded, would_change
-     welcome / web01 / task_1: would create "/etc/mmx-example"
+     welcome / web01 / create_example_file: succeeded, would_change
+     welcome / web01 / create_example_file: would create "/etc/mmx-example"
        absent -> 16 bytes, permissions_mode 0644, uid 0, gid 0
    Run fbe759f2: succeeded
    1 finished

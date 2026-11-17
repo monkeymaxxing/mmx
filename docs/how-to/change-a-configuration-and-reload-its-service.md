@@ -745,7 +745,8 @@ fleet_stages:
   - id: upgrade_shop
     nodes: web_servers
     node_tasks:
-      - directory:
+      - id: create_backup_directory
+        directory:
           path: /var/backups/shop
           owner: root
           group: root
@@ -764,10 +765,12 @@ fleet_stages:
         task_block:
           id: upgrade
           changes:
-            - systemd_service:
+            - id: stop_shop
+              systemd_service:
                 name: shop.service
                 state: stopped
-            - shell:
+            - id: back_up_release_and_data
+              shell:
                 script: |
                   set -eu
                   rm -rf "$BACKUP"
@@ -777,25 +780,30 @@ fleet_stages:
                   touch "$BACKUP/complete"
                 env:
                   BACKUP: "/var/backups/shop/before-{{ .vars.release }}"
-            - file:
+            - id: install_new_release
+              file:
                 path: /usr/local/bin/shop
                 source: "files/shop-{{ .vars.release }}"
                 owner: root
                 group: root
                 permissions_mode: "0755"
-            - shell:
+            - id: migrate_data
+              shell:
                 script: /usr/local/bin/shop migrate
                 run_as_user_account: shop
           activate:
-            - systemd_service:
+            - id: start_shop
+              systemd_service:
                 name: shop.service
                 state: running
           verify:
-            - wait_for:
+            - id: check_shop_answers
+              wait_for:
                 tcp_port_accepts_connections: 8080
                 wait_at_most: 30s
           on_failure:
-            - shell:
+            - id: restore_data
+              shell:
                 script: |
                   set -eu
                   test -f "$BACKUP/complete"
@@ -804,13 +812,15 @@ fleet_stages:
                   tar -C /var/lib/shop -xpf "$BACKUP/data.tar"
                 env:
                   BACKUP: "/var/backups/shop/before-{{ .vars.release }}"
-            - file:
+            - id: restore_old_release
+              file:
                 path: /usr/local/bin/shop
                 content_from_node_paths: ["/var/backups/shop/before-{{ .vars.release }}/shop"]
                 owner: root
                 group: root
                 permissions_mode: "0755"
-            - systemd_service:
+            - id: start_old_release
+              systemd_service:
                 name: shop.service
                 state: running
 ```
