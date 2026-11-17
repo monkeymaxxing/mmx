@@ -84,6 +84,39 @@ two plugins of dnf that the tasks after it need:
   dnf_package: {packages: [{name: zfs, version: newest_when_first_installed}]}
 ```
 
+### When zfs-kmod has no build for the node's kernel
+
+The repository `zfs-kmod` fits only the kernels of the Red Hat minor
+releases, such as 10.2, that OpenZFS has built it for. On a newer minor
+release, the last task above fails with `nothing provides kernel(...)
+needed by kmod-zfs`. Then use the repository `zfs` instead: in place of
+the last three tasks above, these tasks build the kernel module on the
+node, for the kernel that runs, in about three minutes, and build it again
+for each new kernel. The package that builds it, `dkms`, comes from EPEL,
+the Fedora project's extra packages for Enterprise Linux. The package
+`kernel-devel` must match the kernel that runs, and the repositories keep
+only the newest, so update the kernel and reboot first if the node does
+not run the newest one:
+
+```yaml
+- when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
+  dnf_package: {packages: [{name: epel-release, version: newest_when_first_installed}]}
+
+- when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
+  dnf_repository: {existing_repository: zfs-kmod, enabled: false}
+
+- when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
+  dnf_repository: {existing_repository: zfs, enabled: true}
+
+- when: {matches: ["{{ .node.distribution.id }}", "^(rocky|almalinux)$"]}
+  dnf_package:
+    packages:
+      - {name: "kernel-devel-{{ .node.kernel.release }}", version: newest_when_first_installed}
+      - {name: zfs, version: newest_when_first_installed}
+```
+
+### Notes for every distribution
+
 No service has to be started: a `zfs` command loads the kernel module by
 itself.
 
@@ -263,7 +296,7 @@ error after the creation.
 
 The suite `tests/integration/zfs_datasets.py` runs the whole test where the
 tasks under [Set up](#set-up) install ZFS in under two minutes, and on
-Debian 13 with its build of the kernel module. It runs in a virtual
+Debian 13 and AlmaLinux 10 with a build of the kernel module on the node. It runs in a virtual
 machine, with Secure Boot off, on a pool that is a file:
 
 | Distribution | ZFS | Kernel module | The tasks under "Set up" take |
@@ -271,7 +304,7 @@ machine, with Secure Boot off, on a pool that is a file:
 | Ubuntu 24.04 | 2.2.2 | comes with the kernel | about 25 seconds |
 | Ubuntu 26.04 | 2.4.1 | comes with the kernel | about 30 seconds |
 | Rocky Linux 9 | 2.2.11 | prebuilt, from the OpenZFS project's repository `zfs-kmod` | about 90 seconds |
-| AlmaLinux 10 | 2.2.11 | prebuilt, from the same repository | about 60 seconds |
+| AlmaLinux 10.3 | 2.2.11 | built on the node by the package `zfs-dkms`, because `zfs-kmod` has no build for 10.3's kernel | about 5 minutes |
 | Debian 13 | 2.3.9 | built on the node by the package `zfs-dkms` | about 5 minutes |
 
 `sharenfs` with an NFS server on the node was tried by hand on Ubuntu

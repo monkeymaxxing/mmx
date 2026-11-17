@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """zfs_dataset through the public CLI, on a ZFS pool that is a file inside the node; checked with zfs get, zfs list, and findmnt, never through MMX.
 
-The suite runs the whole test where ZFS installs in under two minutes, and on Debian 13 with its build of the kernel module: Ubuntu 24.04 and 26.04 (the module comes with the kernel), Rocky Linux 9 and AlmaLinux 10 (the OpenZFS project's prebuilt module), and Debian 13 (built on the node, about five minutes). There it needs a virtual machine, because a container cannot load a kernel module, and it installs ZFS with the node tasks that the module's page shows under "Set up". On Debian 12 it runs the test without the tool, in a container: a dryrun reports the task not checked, and a run fails once and names the program and its package. A build of ZFS there takes four to seven minutes and breaks whenever the distribution's kernel is newer than ZFS supports."""
+The suite runs the whole test where ZFS installs in under two minutes, and on Debian 13 with its build of the kernel module: Ubuntu 24.04 and 26.04 (the module comes with the kernel), Rocky Linux 9 and AlmaLinux 10 (the OpenZFS project's prebuilt module, or, where it has no build for the node's kernel, built on the node as the page says), and Debian 13 (built on the node, about five minutes). There it needs a virtual machine, because a container cannot load a kernel module, and it installs ZFS with the node tasks that the module's page shows under "Set up". On Debian 12 it runs the test without the tool, in a container: a dryrun reports the task not checked, and a run fails once and names the program and its package. A build of ZFS there takes four to seven minutes and breaks whenever the distribution's kernel is newer than ZFS supports."""
 import json
+import re
 import shlex
 import shutil
 import sys
@@ -31,14 +32,29 @@ LEFT_BY_ZFS = ['/etc/zfs', '/etc/exports.d', '/var/lib/dkms', '/etc/yum.repos.d/
                '/etc/modprobe.d/mmx-test-no-zfs.conf', '/etc/default/zfs', '/etc/sudoers.d/zfs']
 
 
-def set_up_playbook(module):
-    """A playbook of the node tasks that the module's page shows under "Set up", so that the page is what the suite runs."""
-    page = (vm.REPO / 'official_extra_modules' / module / 'README.md').read_text()
+# The page's heading over the tasks that replace the last three of the
+# Red Hat family's tasks when OpenZFS's repository zfs-kmod has no build for
+# the node's kernel, and the error that says so.
+WITHOUT_KMOD_BUILD = "\n### When zfs-kmod has no build for the node's kernel\n"
+NO_KMOD_BUILD_ERROR = re.compile(r'nothing provides kernel\([^)]*\) = \w+ needed by kmod-zfs-')
+
+
+def set_up_playbook(build_on_the_node=False):
+    """A playbook of the node tasks that the zfs_dataset page shows under "Set up", so that the page is what the suite runs.
+    build_on_the_node: the page's tasks for a node whose kernel zfs-kmod has no build for, in place of the last three."""
+    page = (vm.REPO / 'official_extra_modules/zfs_dataset/README.md').read_text()
     section = page.split('\n## Set up\n', 1)[1].split('\n## ', 1)[0]
-    blocks = [block.split('```', 1)[0] for block in section.split('```yaml\n')[1:]]
-    assert blocks and all(block.startswith('- ') for block in blocks), blocks
-    tasks = ''.join('      ' + line if line.strip() else line for block in blocks for line in block.splitlines(keepends=True))
-    return 'fleet_stages:\n  - id: set_up\n    nodes: all\n    node_tasks:\n' + tasks
+    usual, alternative = section.split(WITHOUT_KMOD_BUILD, 1)
+    alternative = alternative.split('\n### ', 1)[0]
+
+    def tasks(text):
+        """Each node task of the text's YAML blocks, each ending in a blank line."""
+        blocks = [block.split('```', 1)[0] for block in text.split('```yaml\n')[1:]]
+        assert blocks and all(block.startswith('- ') for block in blocks), blocks
+        return ['- ' + task.rstrip('\n') + '\n\n' for block in blocks for task in ('\n' + block).split('\n- ')[1:]]
+    chosen = tasks(usual)[:-3] + tasks(alternative) if build_on_the_node else tasks(usual)
+    indented = ''.join('      ' + line if line.strip() else line for task in chosen for line in task.splitlines(keepends=True))
+    return 'fleet_stages:\n  - id: set_up\n    nodes: all\n    node_tasks:\n' + indented
 
 
 def main():
@@ -139,15 +155,25 @@ fi""")
         # ZFS from the page's "Set up" tasks.
         vm.write_settings(workspace, {'project_name': 'zfs_datasets', 'default_inventory': 'example'})
         (workspace / 'playbooks').mkdir(parents=True, exist_ok=True)
-        (workspace / 'playbooks/set_up_zfs.yml').write_text(set_up_playbook('zfs_dataset'))
+        (workspace / 'playbooks/set_up_zfs.yml').write_text(set_up_playbook())
         started = time.monotonic()
-        run('run', playbook='set_up_zfs', timeout=1500)
+        how = 'install'
+        first = vm.cmd([mmx, 'run', 'set_up_zfs', '--json'], cwd=workspace, check=False, timeout=1500)
+        if first.returncode == 1 and distribution in ('rocky', 'almalinux') and NO_KMOD_BUILD_ERROR.search(first.stdout):
+            # As the page says: zfs-kmod has no build for this kernel, so the
+            # page's tasks for that case build the module on the node.
+            print(f"{label}: zfs-kmod has no build for kernel {remote('uname -r')}; the page's tasks for that case build the module on the node", flush=True)
+            how = "for a kernel that zfs-kmod has no build for, which build the module on the node, install"
+            (workspace / 'playbooks/set_up_zfs.yml').write_text(set_up_playbook(build_on_the_node=True))
+            run('run', playbook='set_up_zfs', timeout=1500)
+        else:
+            assert first.returncode == 0, (first.returncode, first.stdout, first.stderr)
         seconds = time.monotonic() - started
         assert run('run', playbook='set_up_zfs')['entries'][0]['response']['change'] == 'unchanged'
         zfs_version = remote('zfs version').splitlines()
         release = tuple(int(part) for part in zfs_version[0].removeprefix('zfs-').split('-')[0].split('.')[:2])
         print(f"{label}: {' with '.join(zfs_version)}; Secure Boot: {remote('mokutil --sb-state 2>&1 | head -n 1 || true')}", flush=True)
-        mark(f'the node tasks of the page\'s "Set up" install ZFS {release[0]}.{release[1]} with its kernel module in {seconds:.0f} s and run unchanged the second time')
+        mark(f'the node tasks of the page\'s "Set up" {how} ZFS {release[0]}.{release[1]} with its kernel module in {seconds:.0f} s and run unchanged the second time')
 
         # No pool yet: an earlier node task may create it.
         no_pool = f'zfs_dataset: the ZFS pool {POOL} does not exist; create it in an earlier node task'
