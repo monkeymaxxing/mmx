@@ -54,7 +54,8 @@ type Connection struct {
 }
 
 // ConnectionUsed is the node job result's record of how the node was reached:
-// https, ssh for a node whose inventory says ssh_only, or ssh_fallback.
+// https; ssh for a node whose inventory says ssh_only, or for a dryrun on a
+// node where MMX's HTTPS service is not set up; or ssh_fallback.
 func (c *Connection) ConnectionUsed() string {
 	if c.Transport == "ssh" && c.FallbackReason != "" {
 		return "ssh_fallback"
@@ -402,12 +403,16 @@ func (c Controller) probeInventorySSH(ctx context.Context, run *Run, name string
 	return bootedMachine{nodeID, bootID}, nil
 }
 
-// connect reaches the node over HTTPS with its saved identity, or sets MMX up
-// through verified SSH. The saved identity only records what verified SSH
-// reported, so a mismatch sends the node back to SSH: OpenSSH's host-key check
-// decides whether a replaced server is trusted, then its identity is saved again.
+// connect reaches the inventory node name over HTTPS with its saved identity,
+// or sets MMX up through verified SSH. The saved identity only records what
+// verified SSH reported, so a mismatch sends the node back to SSH: OpenSSH's
+// host-key check decides whether a replaced server is trusted, then its
+// identity is saved again. A dryrun never sets up MMX's HTTPS service on a node
+// that does not have its systemd unit: it uses verified SSH there, as
+// connection: ssh_only does, and the first run sets the service up.
 // recorded, when set, is the machine the node must be.
-func (c Controller) connect(ctx context.Context, run *Run, h config.Node, expected string, recorded machine) (*Connection, error) {
+func (c Controller) connect(ctx context.Context, run *Run, name string, expected string, recorded machine) (*Connection, error) {
+	h := run.Inventory.Nodes[name]
 	settings, err := resolveSSH(ctx, h)
 	if err != nil {
 		return nil, err
@@ -560,6 +565,9 @@ func (c Controller) connect(ctx context.Context, run *Run, h config.Node, expect
 	conn.httpsURL = httpsURL
 	var current endpoint.Info
 	stale := "" // why the saved identity no longer describes this node
+	// apiState is systemd's state of the node HTTPS API process once verified
+	// SSH has asked, "not-found" when its unit does not exist.
+	apiState := ""
 	if known.NodeID != "" && len(signers) > 0 {
 		// started: this connect has started the node HTTPS API process, so
 		// HTTPS gets one more check and the process no second start.
@@ -610,6 +618,7 @@ func (c Controller) connect(ctx context.Context, run *Run, h config.Node, expect
 				break
 			}
 			state := conn.native.checkHTTPS(ctx)
+			apiState = state.apiState
 			if state.checkErr == nil && state.apiState == "not-found" {
 				// The node was removed from MMX's management and added back:
 				// its unit is gone, so only setup brings the HTTPS service
@@ -640,14 +649,35 @@ func (c Controller) connect(ctx context.Context, run *Run, h config.Node, expect
 			return nil, err
 		}
 	}
+	conn.NodeID, conn.BootID = conn.native.NodeID, conn.native.BootID
+	if apiState == "" {
+		state := conn.native.checkHTTPS(ctx)
+		if state.checkErr != nil {
+			return nil, fmt.Errorf("checking over SSH whether MMX's HTTPS service is set up on the node: %w", state.checkErr)
+		}
+		apiState = state.apiState
+	}
 	// Say so only once verified SSH passed its first check: a node that fails
 	// it is not set up.
-	if stale != "" {
+	switch {
+	case apiState == "not-found" && run.Dryrun:
+		// A dryrun changes nothing that a run would have to undo: the node
+		// keeps only the node runner executable, and the first run starts the
+		// HTTPS service.
+		conn.Transport = "ssh"
+		complete = true
+		return conn, nil
+	case apiState == "not-found":
+		remove := "mmx remove-mmx-from-node " + name
+		if run.Inventory.Name != "" {
+			remove += " --inventory " + run.Inventory.Name
+		}
+		notify("setting up MMX's HTTPS service on " + name + " (" + endpoint.HTTPSAPIUnit + ", TCP port 7443 on every network address); " + remove + " removes it")
+	case stale != "":
 		notify("saved node HTTPS API identity is out of date (" + stale + "); setting up MMX again through verified SSH")
-	} else {
+	default:
 		notify("setting up MMX through verified SSH")
 	}
-	conn.NodeID, conn.BootID = conn.native.NodeID, conn.native.BootID
 	// SSH can unlock an encrypted key through askpass; reuse that passphrase for
 	// HTTPS signing. No passwords are included in this setup payload.
 	if keyErr != nil || len(signers) == 0 {

@@ -730,7 +730,6 @@ func (c Controller) Execute(ctx context.Context, r *Run, resume bool) error {
 }
 
 func (c Controller) executeEntry(ctx context.Context, r *Run, fleetStage config.FleetStage, en Entry, resume bool, checkpoint func(Entry) error) (Entry, error) {
-	managedNode := r.Inventory.Nodes[en.Node]
 	expected, recorded := "", machine{}
 	if resume {
 		expected, recorded = en.RunnerHash, machine{en.NodeID, en.Architecture}
@@ -738,7 +737,7 @@ func (c Controller) executeEntry(ctx context.Context, r *Run, fleetStage config.
 			recorded = en.recorded
 		}
 	}
-	conn, err := c.connect(ctx, r, managedNode, expected, recorded)
+	conn, err := c.connect(ctx, r, en.Node, expected, recorded)
 	var replaced *replacedError
 	if errors.As(err, &replaced) {
 		return onReplacedMachine(en, replaced), nil
@@ -957,7 +956,7 @@ func (c Controller) factsOfNode(ctx context.Context, r *Run, en Entry, resume bo
 			recorded = en.recorded
 		}
 	}
-	conn, err := c.connect(ctx, r, r.Inventory.Nodes[en.Node], expected, recorded)
+	conn, err := c.connect(ctx, r, en.Node, expected, recorded)
 	if err != nil {
 		var replaced *replacedError
 		if errors.As(err, &replaced) {

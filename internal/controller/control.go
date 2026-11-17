@@ -119,7 +119,7 @@ func (c Controller) Inspect(ctx context.Context, r *Run, stop bool) error {
 }
 
 func (c Controller) inspectEntry(ctx context.Context, r *Run, en Entry, stop bool, save func(Entry) error) (Entry, error) {
-	conn, err := c.connect(ctx, r, r.Inventory.Nodes[en.Node], en.RunnerHash, machine{en.NodeID, en.Architecture})
+	conn, err := c.connect(ctx, r, en.Node, en.RunnerHash, machine{en.NodeID, en.Architecture})
 	if err == nil {
 		defer conn.Close()
 		var response protocol.Response

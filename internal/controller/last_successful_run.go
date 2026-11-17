@@ -106,7 +106,7 @@ func (c Controller) recordLastSuccessfulRuns(ctx context.Context, r *Run) error 
 // recordOnNode connects to the machine the node's last entry ran on, with the
 // runner build that entry used, and asks it to write the record.
 func (c Controller) recordOnNode(ctx context.Context, r *Run, en Entry, request protocol.LastSuccessfulRunRequest) error {
-	conn, err := c.connect(ctx, r, r.Inventory.Nodes[en.Node], en.RunnerHash, machine{en.NodeID, en.Architecture})
+	conn, err := c.connect(ctx, r, en.Node, en.RunnerHash, machine{en.NodeID, en.Architecture})
 	if err != nil {
 		return err
 	}

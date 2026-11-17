@@ -786,7 +786,7 @@ type connectFixture struct {
 	// over SSH.
 	runnerVersion string
 	// httpsCheck is the file whose content the node answers its HTTPS service
-	// check with.
+	// check with; without the file, the unit exists and runs.
 	httpsCheck string
 	// dropConnectionsBeforeSetup makes the HTTPS endpoint close every request
 	// until setup has run, as a node whose HTTPS service is not running does.
@@ -839,7 +839,7 @@ case "$command" in
 *machine-id*) printf 'Linux\nx86_64\n0\nroot\n0b0b0b0b-0000-4000-8000-000000000000\nsystemd\n0123456789abcdef0123456789abcdef\n\n10.0.0.1 5000 10.0.0.2 22\n';;
 *sha256sum*) echo `+f.info.RunnerHash+`;;
 *'systemctl start '*) echo "Failed to start mmx-https-api.service" >&2; exit 1;;
-*mmx-https-api.service*) if test -e "$(dirname "$0")/https-check"; then cat "$(dirname "$0")/https-check"; else echo "unexpected command" >&2; exit 1; fi;;
+*mmx-https-api.service*) if test -e "$(dirname "$0")/https-check"; then cat "$(dirname "$0")/https-check"; else printf 'active\n-\n'; fi;;
 *" setup"*) request=$(cat); printf '%s\n' "$request" >> `+quote(f.requests)+`; `+reply+`;;
 *) echo "unexpected command" >&2; exit 1;;
 esac
@@ -905,7 +905,8 @@ func (f *connectFixture) save(t *testing.T, info endpoint.Info) {
 }
 func (f *connectFixture) connect(t *testing.T) (*Connection, error) {
 	t.Helper()
-	conn, err := f.c.connect(context.Background(), f.run, f.managedNode, "", machine{})
+	f.run.Inventory.Nodes["a"] = f.managedNode
+	conn, err := f.c.connect(context.Background(), f.run, "a", "", machine{})
 	if conn != nil {
 		t.Cleanup(conn.Close)
 	}
@@ -983,7 +984,8 @@ func TestConnectRefusesRunnerOfAnotherRelease(t *testing.T) {
 		if err := os.WriteFile(retained, []byte("runner"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		_, err := f.c.connect(context.Background(), f.run, f.managedNode, f.info.RunnerHash, machine{})
+		f.run.Inventory.Nodes["a"] = f.managedNode
+		_, err := f.c.connect(context.Background(), f.run, "a", f.info.RunnerHash, machine{})
 		want := "this playbook run's recorded node job uses the node runner executable " + filepath.Join(f.c.State, "runners", f.info.RunnerHash) +
 			", which reports MMX version 0.0.9, but this mmx program is version " + release.Version +
 			". A recorded node job keeps the node runner executable it started with. Resume the run with mmx of that release, or start a new run with mmx run"
@@ -1093,7 +1095,8 @@ func TestConnectRefusesReplacedNodeForRecordedWork(t *testing.T) {
 		}
 		f.save(t, saved)
 		before, _ := os.ReadFile(f.saved)
-		_, err := f.c.connect(context.Background(), f.run, f.managedNode, "", machine{old.NodeID, old.Architecture})
+		f.run.Inventory.Nodes["a"] = f.managedNode
+		_, err := f.c.connect(context.Background(), f.run, "a", "", machine{old.NodeID, old.Architecture})
 		after, _ := os.ReadFile(f.saved)
 		var replaced *replacedError
 		if !errors.As(err, &replaced) || lines(t, f.requests) != nil || string(before) != string(after) {
@@ -1174,11 +1177,62 @@ func TestConnectSetsUpNodeWhoseHTTPSServiceUnitIsMissing(t *testing.T) {
 			if err != nil || conn.Transport != tt.transport || len(lines(t, f.requests)) != tt.setups || json.Unmarshal(data, &now) != nil {
 				t.Fatal(conn, err, *notices)
 			}
-			if tt.setups == 1 && (now != f.info || !strings.Contains(strings.Join(*notices, "\n"), "does not exist")) {
+			if tt.setups == 1 && (now != f.info || !strings.Contains(strings.Join(*notices, "\n"), "setting up MMX's HTTPS service on a")) {
 				t.Fatal(now, *notices)
 			}
 			if tt.setups == 0 && now != old {
 				t.Fatal("saved identity changed", now)
+			}
+		})
+	}
+}
+
+// A dryrun on a node without MMX's HTTPS service, a new node or one removed
+// from MMX's management and added back, uses verified SSH and never runs the
+// HTTPS setup, so the node gets no TLS key, systemd unit, listener, or key in
+// authorized_keys. A run sets the service up and first says so, with the unit,
+// the port, and the command that removes MMX again. A dryrun on a node whose
+// unit exists, such as one another controller machine set up, still sets up
+// and uses HTTPS.
+func TestDryrunUsesSSHOnANodeWithoutTheHTTPSService(t *testing.T) {
+	for _, tt := range []struct {
+		name, check, transport string
+		dryrun, savedIdentity  bool
+		setups                 int
+	}{
+		{"dryrun, new node", "not-found\n-\n", "ssh", true, false, 0},
+		{"dryrun, node added back", "not-found\n-\n", "ssh", true, true, 0},
+		{"dryrun, unit set up from another controller machine", "active\n-\n", "https", true, false, 1},
+		{"run, new node", "not-found\n-\n", "https", false, false, 1},
+		{"run, node added back", "not-found\n-\n", "https", false, true, 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newConnectFixture(t, false, false, currentInfo)
+			f.dropConnectionsBeforeSetup = true
+			f.run.Dryrun = tt.dryrun
+			f.run.Inventory.Name = "production"
+			if tt.savedIdentity {
+				f.save(t, f.info)
+			}
+			if err := os.WriteFile(f.httpsCheck, []byte(tt.check), 0600); err != nil {
+				t.Fatal(err)
+			}
+			notices := f.notices()
+			conn, err := f.connect(t)
+			if err != nil || conn.Transport != tt.transport || len(lines(t, f.requests)) != tt.setups {
+				t.Fatal(conn, err, *notices)
+			}
+			_, savedErr := os.Stat(f.saved)
+			if tt.setups == 0 && tt.savedIdentity != (savedErr == nil) {
+				t.Fatal("a dryrun changed the saved identity", savedErr)
+			}
+			got := strings.Join(*notices, "\n")
+			want := "a: setting up MMX's HTTPS service on a (mmx-https-api.service, TCP port 7443 on every network address); mmx remove-mmx-from-node a --inventory production removes it"
+			if (tt.check == "not-found\n-\n" && !tt.dryrun) != strings.Contains(got, want) {
+				t.Fatal(got)
+			}
+			if tt.dryrun && tt.setups == 0 && got != "" {
+				t.Fatal("a dryrun without setup says", got)
 			}
 		})
 	}
@@ -1383,6 +1437,7 @@ case "$1" in -G) printf 'hostname %s\nuser root\nport 22\n' "$command"; exit 0;;
 case "$command" in
 *machine-id*) printf 'Linux\nx86_64\n0\nroot\n0b0b0b0b-0000-4000-8000-000000000000\nsystemd\n`+machineID+`\n\n10.0.0.1 5000 10.0.0.2 22\n';;
 *sha256sum*) echo `+hex.EncodeToString(sum[:])+`;;
+*mmx-https-api.service*) printf 'active\n-\n';;
 *setup*) cat >/dev/null; echo `+quote(info)+`;;
 esac
 `)
@@ -1393,7 +1448,8 @@ esac
 	c := Controller{State: t.TempDir(), RunnerDir: dir, Credentials: credentials}
 	for _, address := range []string{"first", "second"} {
 		// The endpoint is unreachable, so each host continues over SSH after setup.
-		conn, err := c.connect(context.Background(), &Run{}, config.Node{Address: address, Endpoint: "https://127.0.0.1:1"}, "", machine{})
+		r := &Run{Inventory: config.Inventory{Nodes: map[string]config.Node{address: {Address: address, Endpoint: "https://127.0.0.1:1"}}}}
+		conn, err := c.connect(context.Background(), r, address, "", machine{})
 		if err != nil {
 			t.Fatal(address, err)
 		}
@@ -1568,7 +1624,7 @@ func TestSavedSSHOnlyInventoryConnectsOverSSHOnResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn, err := c.connect(context.Background(), saved, saved.Inventory.Nodes["a"], "", machine{})
+	conn, err := c.connect(context.Background(), saved, "a", "", machine{})
 	if err != nil {
 		t.Fatal(err)
 	}
