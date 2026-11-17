@@ -122,11 +122,11 @@ and owed restore.
 **MMX 0.1.0 is released. Every change keeps the promises in
 [Compatibility between releases](docs/changing-mmx/design/README.md#compatibility-between-releases).**
 
-- A patch release, such as 0.1.1, makes no incompatible change; fixes,
-  documentation changes, and additions go in one. An
-  incompatible change to a project file, a command, a flag, or a result field
-  makes the next release a minor release, such as 0.2.0, whose release notes
-  give the edit that a project needs.
+- A patch release, such as 0.1.1, holds fixes and documentation changes
+  and makes no incompatible change. New commands, modules, and fields make
+  the next release a minor release, such as 0.2.0, and so does an
+  incompatible change to a project file, a command, a flag, or a result
+  field; the minor release's notes give the edit that a project needs.
 - A new node runner executable reads the command records and service records
   that the node runner executables of all earlier releases wrote.
   If command or service record formats change, keep a reader of the old

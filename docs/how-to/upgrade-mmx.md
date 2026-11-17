@@ -336,13 +336,13 @@ MMX numbers its releases by [semantic versioning](https://semver.org/).
 The first release is 0.1.0. The version number of a new release says
 whether the upgrade can need an edit to your project:
 
-- **A patch release, such as 0.1.1 or 0.1.2, needs nothing from you.** It
-  holds fixes, documentation changes, and additions such as new commands,
-  modules, and fields. A project that works on the earlier release works
-  unchanged.
-- **A minor release, such as 0.2.0 or 0.3.0, is for changes you must act
-  on:** incompatible changes, or work an upgrade needs. Its release notes
-  list each one, with the edit that a project needs.
+- **A patch release, such as 0.1.1 or 0.1.2, holds fixes and
+  documentation changes.** A project that works on the earlier release
+  works unchanged.
+- **A minor release, such as 0.2.0 or 0.3.0, adds features or may make
+  incompatible changes.** New commands, modules, and fields come in minor
+  releases. Its release notes list each incompatible change, or work an
+  upgrade needs, with the edit that a project needs.
 
 A change is incompatible when, after it, a project file that was valid on
 the earlier release no longer validates or does something else, or when a

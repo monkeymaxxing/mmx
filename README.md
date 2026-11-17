@@ -25,11 +25,11 @@ list has the releases.
 [Limits on each distribution](docs/reference/limits-on-each-distribution.md) lists
 what is limited on each one, and why.
 
-MMX 0.1.0 is the first release. A patch release, such as 0.1.1, needs
-nothing from you: it holds fixes, documentation changes, and additions.
-Before 1.0.0, a minor release, such as 0.2.0, may still rename a
-field or a command, and its release notes give the edit that a project
-needs. [Compatibility between releases](docs/changing-mmx/design/README.md#compatibility-between-releases)
+MMX 0.1.0 is the first release. A patch release, such as 0.1.1, holds
+fixes and documentation changes and needs nothing from you. New features
+come in a minor release, such as 0.2.0. Before 1.0.0, a minor release may
+also rename a field or a command, and its release notes give the edit that
+a project needs. [Compatibility between releases](docs/changing-mmx/design/README.md#compatibility-between-releases)
 gives the details.
 
 The [examples](examples/) are working projects,

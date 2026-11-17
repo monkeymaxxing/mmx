@@ -539,13 +539,13 @@ MMX's version numbers follow
 version number of a new release tells a user whether the upgrade can need
 an edit to a project:
 
-- **A patch release, such as 0.1.1 or 0.1.2, needs nothing from you.** It
-  holds fixes, documentation changes, and additions such as new commands,
-  modules, and fields, and makes no incompatible change, so every project
-  works unchanged after a patch upgrade.
-- **A minor release, such as 0.2.0 or 0.3.0, is for changes you must act
-  on:** incompatible changes, or work an upgrade needs. A minor release's
-  notes list each one, with the edit that a project needs.
+- **A patch release, such as 0.1.1 or 0.1.2, holds fixes and
+  documentation changes.** It makes no incompatible change, so every
+  project works unchanged after a patch upgrade.
+- **A minor release, such as 0.2.0 or 0.3.0, adds features or may make
+  incompatible changes.** New commands, modules, and fields come in minor
+  releases. A minor release's notes list each incompatible change, or work
+  an upgrade needs, with the edit that a project needs.
 - **Version 1.0.0 comes once MMX's names and file formats have settled.**
   From 1.0.0 on, only a new major version, such as 2.0.0, may make an
   incompatible change.
