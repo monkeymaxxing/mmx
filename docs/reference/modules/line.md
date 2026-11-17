@@ -24,6 +24,8 @@ choose between a drop-in, a whole file, `line`, and `edit_file`.
 - `insert_after_first_line_matching` (string; optional): as insert_before_first_line_matching, directly after the first line it matches
 - `insert_after_last_line_matching` (string; optional): as insert_before_first_line_matching, directly after the last line it matches
 - `check_new_file` (mapping; optional): as for file
+- `secret_readable_by_group` (boolean; default `false`): allow the file's group to read a line that holds a secret; the file keeps its mode
+- `dangerously_let_every_account_read_secret` (boolean; default `false`): allow every account on the node to read a line that holds a secret; the file keeps its mode
 - `state` (`present` or `absent`; default `present`): absent removes the selected line and needs exactly one of match or line; it takes no placing setting
 
 ## Outputs
@@ -131,7 +133,18 @@ installation, may create it.
 The edit preserves owner, group, and mode and goes through the file
 installer: a temporary new file, the optional `check_new_file`, and an atomic
 replacement of the live file. Differences and service hashes treat the path
-like a `file` task. The check of a new file is shared with `file`,
+like a `file` task.
+
+A `line` that holds a secret, such as `API_TOKEN={{ .secrets.api_token }}`,
+follows the rule of [`file`](file.md#files-that-hold-secrets): the file
+keeps its mode, so when that mode lets the file's group read it, the node
+task needs `secret_readable_by_group: true`, and when every account can
+read it, `dangerously_let_every_account_read_secret: true`. Otherwise the
+node task fails and changes nothing. To keep the secret private instead,
+make the file readable only by its owner first, such as with a `file` node
+task that sets `permissions_mode: "0600"`.
+
+The check of a new file is shared with `file`,
 `download`, and `edit_file`, and
 [Check a new file before replacing the live one](../shared-module-behavior.md#check_new_file)
 and its [design](../../changing-mmx/design/modules.md#check-new-files-before-installing-them)
@@ -153,6 +166,11 @@ the whole contents.
   at the end of the file.
 - **A missing file** fails the node task in a run. Create the file first,
   such as with the package that installs it.
+- **`line: /etc/environment would hold a secret, and the file's mode 0644
+  lets every account on the node read it`**: the line holds a secret. Make
+  the file readable only by its owner first, or add
+  `dangerously_let_every_account_read_secret: true` if every account
+  should read it.
 
 ## Tested on
 

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"testing"
 
+	"mmx/internal/protocol"
 	"mmx/internal/value"
 )
 
@@ -234,5 +235,58 @@ func TestLineRequiresPlacementForPresentState(t *testing.T) {
 	}
 	if err := ValidateLine(Line{Match: "^value$", State: "absent"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// line and edit_file keep the file's mode. Text that holds a secret goes into
+// a file other accounts can read only with the acknowledgement file asks for.
+func TestLineAndEditFileKeepSecretsOutOfReadableFiles(t *testing.T) {
+	t.Parallel()
+	scope := value.Scope{"secrets": map[string]any{"token": &value.Secret{Name: "token", Data: "token-value", Available: true}}}
+	edits := map[string]func(Runtime, string, bool, bool) protocol.Result{
+		"line": func(run Runtime, path string, group, every bool) protocol.Result {
+			return run.Line(context.Background(), Line{Path: path, Match: "^API_TOKEN=", Text: "API_TOKEN={{ .secrets.token }}", InsertAtEndOfFile: true, SecretReadableByGroup: group, DangerouslyLetEveryAccountReadSecret: every}, scope)
+		},
+		"edit_file": func(run Runtime, path string, group, every bool) protocol.Result {
+			return run.EditFile(context.Background(), EditFile{Path: path, ContentFilter: &ContentFilter{Shell: &FilterShell{Script: `input=$(cat); printf '%s\n' "$input"; case "$input" in *API_TOKEN=*) ;; *) printf 'API_TOKEN=%s\n' "$TOKEN" ;; esac`, Env: map[string]any{"TOKEN": "{{ .secrets.token }}"}}}, SecretReadableByGroup: group, DangerouslyLetEveryAccountReadSecret: every}, scope)
+		},
+	}
+	for name, edit := range edits {
+		for _, tc := range []struct {
+			mode         os.FileMode
+			group, every bool
+			refusal      string
+		}{
+			{0644, false, false, "dangerously_let_every_account_read_secret"},
+			{0644, true, false, "dangerously_let_every_account_read_secret"},
+			{0640, false, false, "secret_readable_by_group"},
+			{0640, true, false, ""},
+			{0644, false, true, ""},
+			{0600, false, false, ""},
+		} {
+			path := filepath.Join(t.TempDir(), "environment")
+			if err := os.WriteFile(path, []byte("LANG=C.UTF-8\n"), tc.mode); err != nil {
+				t.Fatal(err)
+			}
+			os.Chmod(path, tc.mode)
+			for _, dryrun := range []bool{true, false} {
+				r := edit(Runtime{Dryrun: dryrun}, path, tc.group, tc.every)
+				written, _ := os.ReadFile(path)
+				switch {
+				case tc.refusal != "" && (r.Status != "failed" || !strings.Contains(r.Reason, tc.refusal) || strings.Contains(r.Reason, "token-value") || strings.Contains(string(written), "token-value")):
+					t.Errorf("%s %04o dryrun %v: %s: %s, file %q", name, tc.mode, dryrun, r.Status, r.Reason, written)
+				case tc.refusal == "" && (r.Status != "succeeded" || !dryrun && !strings.Contains(string(written), "API_TOKEN=token-value")):
+					t.Errorf("%s %04o dryrun %v: %s: %s, file %q", name, tc.mode, dryrun, r.Status, r.Reason, written)
+				}
+			}
+		}
+	}
+	// Text that reads no secret goes into any file, as before.
+	path := filepath.Join(t.TempDir(), "environment")
+	if err := os.WriteFile(path, []byte("LANG=C.UTF-8\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if r := (Runtime{}).Line(context.Background(), Line{Path: path, Match: "^EDITOR=", Text: "EDITOR=vim", InsertAtEndOfFile: true}, scope); r.Status != "succeeded" {
+		t.Fatalf("%+v", r)
 	}
 }

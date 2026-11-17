@@ -492,7 +492,11 @@ in saved records, so do not put a secret into a name or a path.
 
 - **In a file that a node task writes,** the value is in plain text, with
   the owner and permissions that the node task sets, because writing the
-  value there is the node task's purpose.
+  value there is the node task's purpose. `file`, `line`, and `edit_file`
+  refuse to put a secret into a file that the file's group or every account
+  can read, unless the node task says so with `secret_readable_by_group` or
+  `dangerously_let_every_account_read_secret`; see
+  [Files that hold secrets](modules/file.md#files-that-hold-secrets).
 - **In a `shell` node task,** give a secret through `env`, never inside
   `script`, because a command line can be read by other accounts on the
   node.

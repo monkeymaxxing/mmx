@@ -45,9 +45,18 @@ func (run Runtime) EditFile(ctx context.Context, e EditFile, s value.Scope) prot
 	if err != nil {
 		return protocol.Failed(err)
 	}
-	next, err := FilterText(ctx, e, s, current)
+	if s == nil {
+		s = value.Scope{}
+	}
+	filterScope, trace := s.TraceReads() // A filter that reads a secret may write it into the file.
+	next, err := FilterText(ctx, e, filterScope, current)
 	if err != nil {
 		return protocol.Failed(err)
+	}
+	if trace.Used {
+		if err := checkSecretInKeptMode("edit_file", e.Path, info.Mode(), e.SecretReadableByGroup, e.DangerouslyLetEveryAccountReadSecret); err != nil {
+			return protocol.ConfigurationError(err)
+		}
 	}
 	return run.fileAt(ctx, File{Path: e.Path, Literal: &next, CheckNewFile: e.CheckNewFile}, s, parent, 0644, nil)
 }
@@ -107,6 +116,10 @@ type EditFile struct {
 	Path          string         `yaml:"path" json:"path"`
 	ContentFilter *ContentFilter `yaml:"content_filter" json:"content_filter"`
 	CheckNewFile  *Check         `yaml:"check_new_file,omitempty" json:"check_new_file,omitempty"`
+	// The acknowledgements file asks for, for a filter that reads a secret
+	// and edits a file that other accounts can read (checkSecretInKeptMode).
+	SecretReadableByGroup                bool `yaml:"secret_readable_by_group,omitempty" json:"secret_readable_by_group,omitempty"`
+	DangerouslyLetEveryAccountReadSecret bool `yaml:"dangerously_let_every_account_read_secret,omitempty" json:"dangerously_let_every_account_read_secret,omitempty"`
 }
 
 // ContentFilter is edit_file's filter: a shell script with its environment.
@@ -141,6 +154,8 @@ var editFileDescription = Description{
 		{Name: "path", Required: true, Notes: "absolute; an existing regular file up to 1 MiB, whose owner, group, and permissions are kept"},
 		{Name: "content_filter", Required: true, Notes: "{shell: {script, env}}: the script runs as root, reads the file on standard input, and writes the wanted content to standard output; it must change nothing itself; MMX runs it again on its own output and fails the task when that changes the content again"},
 		{Name: "check_new_file", Notes: "as for file"},
+		{Name: "secret_readable_by_group", Default: "false", Notes: "allow the file's group to read the file when the filter's environment holds a secret; the file keeps its mode"},
+		{Name: "dangerously_let_every_account_read_secret", Default: "false", Notes: "allow every account on the node to read the file when the filter's environment holds a secret; the file keeps its mode"},
 	},
 	Example: "- edit_file:\n    path: /etc/fstab\n    content_filter:\n      shell:\n        script: sed -E 's/^([^#].*[[:space:]]swap[[:space:]].*)$/#\\1/'\n",
 	Results: resultBasic,
