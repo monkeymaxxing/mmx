@@ -385,6 +385,7 @@ old port, check new connections, and close the old port only then.
      ssh_settings / web02 / sshd_settings/activate/reload_sshd: succeeded, would_change — tracked input /etc/ssh/sshd_config.d/10-shop.conf changed after the service last started or reloaded
      ssh_settings / web02 / sshd_settings/verify/check_new_port: not_checked, unchanged — dial tcp 127.0.0.1:2222: connect: connection refused
      ssh_settings / web02 / sshd_settings: succeeded, would_change
+   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run bdced5d8: succeeded
    exit code 3
    ```

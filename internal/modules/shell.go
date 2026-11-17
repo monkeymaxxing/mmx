@@ -115,6 +115,12 @@ func (run Runtime) Shell(ctx context.Context, sh Shell, s value.Scope, inspectio
 	if r.Status == "failed" && r.Reason == "" {
 		r.Reason = fmt.Sprintf("shell command exited with unaccepted code %d", r.ExitCode)
 	}
+	// Bash exits with 127 for a command it cannot find. The process error
+	// says only "exit status 127", which reads as a crash; on a new node the
+	// usual cause is a program that an earlier node task has not installed yet.
+	if r.Status == "failed" && r.ExitCode == 127 && r.Reason == p.Result.Reason && !incomplete && ctx.Err() == nil {
+		r.Reason = "shell command exited with code 127: bash could not find a command in it, usually because its program is not installed yet"
+	}
 	// The marker is written only after success, so a failed or interrupted
 	// command runs again on the next run.
 	if marker != "" && r.Status == "succeeded" && !inspection && !run.Dryrun {

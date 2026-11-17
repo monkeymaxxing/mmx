@@ -38,6 +38,11 @@ func TestShellReportingAndGuardErrors(t *testing.T) {
 	if r.Status != "skipped" {
 		t.Fatal(r)
 	}
+	// A command that is not installed says so, not only "exit status 127".
+	r = run.Shell(context.Background(), Shell{Script: "a-program-that-is-not-installed --version"}, s, false)
+	if r.Status != "failed" || r.ExitCode != 127 || r.Reason != "shell command exited with code 127: bash could not find a command in it, usually because its program is not installed yet" {
+		t.Fatal("a missing program's failure does not say what is missing", r)
+	}
 }
 
 func TestShellOutputPredicatesAndTruncation(t *testing.T) {

@@ -147,6 +147,11 @@ set_up_nginx / web01 / shop_site/changes/write_site_file: not_checked, unknown â
 
 If the run then succeeds, the playbook is right as it is.
 
+A dryrun with `not_checked` work also prints one line before its outcome,
+`Run ...: succeeded`, that says why such work is normal on a new server.
+A `shell` check whose program is not installed yet says
+`shell command exited with code 127: bash could not find a command in it, usually because its program is not installed yet`.
+
 The same holds in three more cases, each after an earlier node task on the
 same server would change it, in the same fleet stage or an earlier one:
 

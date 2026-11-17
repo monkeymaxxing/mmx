@@ -170,6 +170,7 @@ another machine, from the application server `app01`.
      set_up_postgresql / db01 / wait_for_postgresql: not_checked, unchanged — dial tcp 127.0.0.1:5432: connect: connection refused
      set_up_postgresql / db01 / create_shop_role: not_checked, unknown — postgresql_role: psql is not installed; install the package that provides it in an earlier node task: postgresql-client (apt), postgresql (dnf, zypper), postgresql-libs (pacman). It comes with PostgreSQL's server package; for a server on another machine, install the client alone. The earlier node task install_postgresql would change this node first and may provide what is missing; if the run then succeeds, change nothing.
      set_up_postgresql / db01 / create_shop_database: not_checked, unknown — postgresql_database: psql is not installed; ...
+   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run cc8f6adb: succeeded
    ```
 

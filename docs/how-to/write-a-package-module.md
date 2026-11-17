@@ -223,6 +223,7 @@ MMX's own package modules.
      install_nginx / test01 / nginx/changes/install_nginx_package: not_checked, unknown — mytool_package: the program mytool is not installed; mytool_package works only on a node whose distribution is mydistro; give the node task a condition on the node fact distribution.id
      install_nginx / test01 / nginx/activate/start_nginx: skipped, unknown — service state can be checked after the node task block's proposed changes are applied
      install_nginx / test01 / nginx: succeeded, unknown
+   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run 55abc510: succeeded
    1 finished
    ```

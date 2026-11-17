@@ -77,6 +77,50 @@ func TestARunNamesItsOutputViewOnceAndLabelsItsProgress(t *testing.T) {
 	}
 }
 
+// A first dryrun on a new server reports many checks as not_checked. The
+// report says once, in plain words, why, so the lines do not read as
+// failures; a run, and a dryrun with nothing not_checked, print no such note.
+func TestADryrunExplainsNotCheckedWorkOnce(t *testing.T) {
+	report := func(dryrun bool, results ...protocol.Result) string {
+		t.Helper()
+		r := &controller.Run{ID: "20261028T000000.000000000-0123456789abcdef", Status: "succeeded", Dryrun: dryrun, Entries: []controller.Entry{
+			{Node: "web01", FleetStage: "set_up_nginx", NodeJobAttempt: 1, Response: protocol.Response{Status: "succeeded", Results: results}},
+			{Node: "web02", FleetStage: "set_up_nginx", NodeJobAttempt: 1, Response: protocol.Response{Status: "succeeded", Results: results}},
+		}}
+		r.Project.PlaybookName = "set_up_web_servers"
+		stdout, err := os.CreateTemp(t.TempDir(), "stdout")
+		if err != nil {
+			t.Fatal(err)
+		}
+		saved := os.Stdout
+		os.Stdout = stdout
+		_, err = output(r, false, false, &presentation{mode: "auto"}, nil)
+		os.Stdout = saved
+		stdout.Close()
+		text, _ := os.ReadFile(stdout.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(text)
+	}
+	notChecked := protocol.Result{Task: "check_nginx_config", Status: "not_checked", Change: "unknown", Reason: "an earlier node task, install_nginx, would change the node before the run reaches the check; the check failed against the node's current state: shell command exited with code 127"}
+	inALoop := protocol.Result{Task: "write_sites", Status: "succeeded", Change: "unknown", Items: []protocol.Result{{Status: "not_checked", Change: "unknown"}}}
+	checked := protocol.Result{Task: "write_home_page", Status: "succeeded", Change: "would_change"}
+	const note = "Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.\nRun 01234567: succeeded\n"
+	if text := report(true, checked, notChecked, notChecked); strings.Count(text, "not installed or created yet") != 1 || !strings.Contains(text, note) {
+		t.Fatalf("a dryrun with not_checked work does not explain it once before its outcome:\n%s", text)
+	}
+	if text := report(true, inALoop); !strings.Contains(text, note) {
+		t.Fatalf("a loop item that is not_checked is not explained:\n%s", text)
+	}
+	if text := report(true, checked); strings.Contains(text, "not_checked") {
+		t.Fatalf("a dryrun without not_checked work explains it:\n%s", text)
+	}
+	if text := report(false, checked); strings.Contains(text, "not_checked") {
+		t.Fatalf("a run explains not_checked work:\n%s", text)
+	}
+}
+
 func TestCanceledConnectionDoesNotImplyRemoteWork(t *testing.T) {
 	r := &controller.Run{StopRequested: true, Entries: []controller.Entry{{Node: "web", FleetStage: "setup", Response: protocol.Response{Status: "running"}}}}
 	var out bytes.Buffer

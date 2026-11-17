@@ -398,6 +398,7 @@ Debian 13 servers.
      set_up_nginx / web01 / shop_site/activate/reload_nginx: skipped, unknown — service state can be checked after the node task block's proposed changes are applied
      set_up_nginx / web01 / shop_site/verify/check_shop_site: not_checked, unchanged — Get "http://127.0.0.1:8080/": dial tcp 127.0.0.1:8080: connect: connection refused
    ...
+   Some node tasks are not_checked, usually because what they check is not installed or created yet: an earlier node task does that during the run. This is normal on a new server. mmx run checks them for real; change the playbook only if the run fails.
    Run 76f63216: succeeded
    2 finished
    Saved: /home/you/shop/.mmx/runs/20261115T073157.780081110-76f63216ed591b19
