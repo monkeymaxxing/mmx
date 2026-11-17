@@ -114,8 +114,8 @@ var (
 // certbotPathRule is the rule for a path that goes into certbot's renewal
 // file, which holds one value on one line.
 func certbotPathRule(field string) func(any) error {
-	return rule(field+" must be an absolute path on one line", func(s string) bool {
-		return filepath.IsAbs(s) && !strings.ContainsAny(s, "\x00\r\n")
+	return rule(field+" must be an absolute path on one line without .. parts", func(s string) bool {
+		return filepath.IsAbs(s) && !strings.ContainsAny(s, "\x00\r\n") && withoutParentPart(s)
 	})
 }
 

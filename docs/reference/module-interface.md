@@ -222,7 +222,9 @@ what the call would change:
 | `run_command_that_refreshes_a_package_index(arguments)` | Runs a package manager's index refresh, such as `["pacman", "-Sy"]`. The index is a cache, so the refresh is no change of the node task. In a dryrun, the program does not run. | `ran` (`False` in a dryrun), `exit_code`, `standard_output`, `standard_error` |
 | `http_request` with a method other than `GET` and `HEAD` | Sends the request. In a dryrun, the request is not sent. | As above, with `sent` `False` in a dryrun |
 
-- **Paths** are absolute. A relative path is an error.
+- **Paths** are absolute and have no `..` part. A relative path, or a
+  path such as `/srv/app/../etc`, is an error, so a path built from an
+  input stays below the directory the module names.
 - **Commands** run as root, in `/`, with no shell: `arguments` is a list.
   The environment is the one in
   [The environment of a command](shared-module-behavior.md#the-environment-of-a-command).

@@ -272,7 +272,7 @@ the controller machine, after the fleet stage's nodes finish.
 | --- | --- |
 | `output` | An output name of the fleet stage: one file for each node. |
 | `template` | A template file, rendered once from the whole output collection: one file. |
-| `path` | The file to write. A relative path starts at the project directory and must stay inside it. An absolute path may name any place on the controller machine. |
+| `path` | The file to write. A relative path starts at the project directory and must stay inside it. An absolute path may name any place on the controller machine. An output or a loop item in the path fills part of one file name: it cannot contain `/`, and the path cannot then have a `.` or `..` part. |
 | `permissions_mode` | The file's mode, such as `"0644"`; required. |
 | `secret_readable_by_group`, `dangerously_let_every_account_read_secret` | For an output that holds a secret: see [Secrets in files, output, and history](secrets.md#secrets-in-files-output-and-history). |
 
@@ -1157,6 +1157,13 @@ names are:
 - A reference inside other text, such as `listen {{ .vars.http_port }};`,
   makes text. MMX fills in a value once: a variable whose value is
   `"{{ .vars.site_name }}"` gives that text, not the site name.
+- A path on a node has no `..` part, also after MMX fills in its
+  references. A value such as another node's output may add directories
+  below the directory that a path names, as in
+  `/srv/sites/{{ .outputs.list_sites.web1.site }}`, but cannot climb out of
+  the directory: `../../etc` fails the node task with `path must be
+  absolute without null bytes or .. parts`. A reference at the start of a
+  path lets its value choose the whole path.
 - A value in the playbook's YAML takes references only, not function
   calls: `"{{ add .vars.http_port 1 }}"` fails with `reference must start
   with a dot`. Functions work in template files.

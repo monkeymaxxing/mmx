@@ -222,6 +222,9 @@ func explainControllerMachineFiles(s FleetStage, scope value.Scope, nodes []stri
 				written, err = value.Scalar(resolved)
 			}
 			if err == nil {
+				err = NodeValuesStayInOneFileName(e.Path, written, local)
+			}
+			if err == nil {
 				file, err = ControllerMachinePath(e.ProjectRoot, written)
 			}
 			if err != nil {

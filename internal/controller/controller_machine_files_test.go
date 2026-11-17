@@ -232,6 +232,54 @@ func TestSaveOnControllerMachineRefusesAPathLeavingTheProject(t *testing.T) {
 	}
 }
 
+// A value that came from a node fills part of one file name in a path: a
+// node cannot steer the controller machine's write to another directory,
+// such as the project's playbooks, or to an absolute path.
+func TestSaveOnControllerMachineRefusesANodeValueThatLeavesItsFileName(t *testing.T) {
+	name := "{{ .outputs.collect[.node.name].name }}"
+	for _, tc := range []struct{ name, path, refused string }{
+		{"../playbooks/deploy", "hosts/" + name + ".yml", `.outputs.collect[.node.name].name is "../playbooks/deploy"`},
+		{"/tmp/elsewhere", name + "-{{ .node.name }}", `.outputs.collect[.node.name].name is "/tmp/elsewhere"`},
+		{"..", "hosts/" + name + "/{{ .node.name }}", `has a ".." part`},
+		// Two values that are each one file name can still make "..".
+		{".", "hosts/" + name + "." + "{{ .outputs.collect[.node.name].empty }}/{{ .node.name }}", `has a ".." part`},
+	} {
+		root := t.TempDir()
+		if err := os.Mkdir(filepath.Join(root, "hosts"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		c, r := fleet(t, config.FleetStage{ID: "collect", Nodes: "a",
+			Outputs: map[string]any{"name": tc.name, "empty": "", "report": "report"},
+			SaveOnControllerMachine: []config.SaveOnControllerMachine{
+				{Output: "report", Path: tc.path, PermissionsMode: "0644", ProjectRoot: root},
+			}})
+		runLocally(&c, map[string]int{}, nil)
+		execute(t, c, r, false)
+		file := files(r)[0]
+		if r.Status != "failed" || file.Result.FileChange != nil || !strings.Contains(file.Result.Reason, tc.refused) {
+			t.Fatal(tc.name, r.Status, file)
+		}
+		if entries, _ := os.ReadDir(filepath.Join(root, "hosts")); len(entries) != 0 {
+			t.Fatal(tc.name, "a file was written in hosts")
+		}
+		if entries, _ := os.ReadDir(root); len(entries) != 1 {
+			t.Fatal(tc.name, "a file was written outside hosts", entries)
+		}
+	}
+	// A node value that is one file name writes as before.
+	root := t.TempDir()
+	c, r := fleet(t, config.FleetStage{ID: "collect", Nodes: "a",
+		Outputs: map[string]any{"name": "web-1.example", "report": "report"},
+		SaveOnControllerMachine: []config.SaveOnControllerMachine{
+			{Output: "report", Path: "hosts/" + name + ".yml", PermissionsMode: "0644", ProjectRoot: root},
+		}})
+	runLocally(&c, map[string]int{}, nil)
+	execute(t, c, r, false)
+	if text, _ := read(t, filepath.Join(root, "hosts", "web-1.example.yml")); r.Status != "succeeded" || text != "report" {
+		t.Fatal(r.Status, files(r))
+	}
+}
+
 // A fleet stage that --only-fleet-stages leaves out runs nowhere, so it saves
 // no file on the controller machine; a kept one saves its files.
 func TestOnlyFleetStagesSavesOnlyTheKeptFleetStagesFiles(t *testing.T) {

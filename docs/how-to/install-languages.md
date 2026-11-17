@@ -845,7 +845,7 @@ Each of these modules has its own page with its inputs:
 | What you see | What it means and what to do |
 | --- | --- |
 | `run_as_user_account is required: ...`, such as `run_as_user_account is required: the installer runs code from the packages it installs, which should not run as root unless the task says root` (lock file modules), or `... name the account that runs pip, including root` (named packages) | `mmx validate` refuses a node task without `run_as_user_account`. Add the application's account, or `run_as_user_account: root`. |
-| `npm_program_path): path must be absolute without null bytes` | A program path starts with `/`, such as `/opt/nvm/versions/node/v24.22.0/bin/npm`. |
+| `npm_program_path): path must be absolute without null bytes or .. parts` | A program path starts with `/`, such as `/opt/nvm/versions/node/v24.22.0/bin/npm`. |
 | `npm_project_dependencies installs only what a lock file lists, and /tmp has no package-lock.json or npm-shrinkwrap.json; commit the lock file with the application` | `lock_file_dir` names a directory without a lock file. Check the path, and create the lock file as step 1 shows. |
 | `npm_project_dependencies: npm is not installed; install the package npm in an earlier node task, or name the program in npm_program_path` | The server has no `npm`. Install it in an earlier node task, as `install_nodejs` does, or name a version manager's `npm` in `npm_program_path`. A dryrun reports the same node task `not_checked`. |
 | `npm_program_path /opt/nvm/versions/node/v24.22.0/bin/npm is not an executable program; an earlier node task may install the program.` in a dryrun | The version is not installed yet. The `shell` node task before it installs the version in the run. |

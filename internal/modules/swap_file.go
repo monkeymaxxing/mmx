@@ -360,8 +360,8 @@ func ValidateSwapFile(s SwapFile) error {
 
 // swapFilePath is the rule for a swap file's path: absolute, below /, and
 // one field of /etc/fstab once escaped.
-var swapFilePath = rule("path must be an absolute path of a file, such as /swapfile, without null bytes or line breaks", func(s string) bool {
-	return filepath.IsAbs(s) && filepath.Clean(s) != "/" && !strings.ContainsAny(s, "\x00\n")
+var swapFilePath = rule("path must be an absolute path of a file, such as /swapfile, without null bytes, line breaks, or .. parts", func(s string) bool {
+	return filepath.IsAbs(s) && filepath.Clean(s) != "/" && !strings.ContainsAny(s, "\x00\n") && withoutParentPart(s)
 })
 
 // swapFileDescription is what mmx describe-module shows for swap_file.

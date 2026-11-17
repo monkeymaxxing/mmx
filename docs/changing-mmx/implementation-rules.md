@@ -585,6 +585,11 @@ Only a node's own managed key is read per node.
 - A `save_on_controller_machine` path is public: a path that would hold a
   secret is refused during loading when `secretOutputs` identifies the output
   as secret.
+- A value in a `save_on_controller_machine` path that may come from a node,
+  any reference whose root is not `vars`, `inventory`, or `node`, fills part
+  of one file name. `config.NodeValuesStayInOneFileName` refuses such a value
+  with `/` or a NUL byte, and a rendered path with a `.` or `..` part, both
+  where the run writes the file and where `mmx explain` shows it.
   The
   controller process always refuses the unreadable file secret when rendering
   the secret.
@@ -625,7 +630,14 @@ The node task execution engine calls `config.ResolveArguments` before the
 module's resource implementation runs. Then `InspectArguments` checks private
 values.
 Resource implementations receive resolved identifiers and never resolve or
-check public identifiers again. Resource implementations resolve only private
+check public identifiers again.
+`ResolveArguments` cleans a resolved path, so a path rule checks the value
+before cleaning: the node path rules (`absolute`, `deletablePath`,
+`accountPath`, and the module-specific path rules) refuse a `..` part
+(`withoutParentPart`), and the primitives that Starlark modules call refuse
+one too (`primitivePathRefusal`). A value from another node, such as an
+output, then adds directories below the path a project writes but never
+climbs out of it. Resource implementations resolve only private
 values (content, templates, environment, module inputs) through the scope.
 
 `Validate*` functions, called from each

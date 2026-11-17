@@ -103,10 +103,20 @@ type PathChange struct {
 	Error string
 }
 
+// primitivePathRefusal says why a primitive refuses path, or "". A module
+// may build a path from its inputs, such as another node's output, so a path
+// with a .. part could climb out of the directory the module names.
+func primitivePathRefusal(path string) string {
+	if !filepath.IsAbs(path) || !withoutParentPart(path) {
+		return "the path must be absolute without .. parts"
+	}
+	return ""
+}
+
 // ReadFile reads a text file of at most 1 MiB.
 func (run Runtime) ReadFile(path string) FileText {
-	if !filepath.IsAbs(path) {
-		return FileText{Error: "the path must be absolute"}
+	if refusal := primitivePathRefusal(path); refusal != "" {
+		return FileText{Error: refusal}
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -127,8 +137,8 @@ func (run Runtime) ReadFile(path string) FileText {
 
 // InspectPath looks at a path without following a final link.
 func (run Runtime) InspectPath(path string) PathInfo {
-	if !filepath.IsAbs(path) {
-		return PathInfo{Error: "the path must be absolute"}
+	if refusal := primitivePathRefusal(path); refusal != "" {
+		return PathInfo{Error: refusal}
 	}
 	st, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -418,8 +428,8 @@ func withoutAddress(err error) string {
 // through the file module: a new file beside the old one, renamed into place,
 // with the SELinux label of its path.
 func (run Runtime) WriteFile(ctx context.Context, path, content, owner, group, permissionsMode string) PathChange {
-	if !filepath.IsAbs(path) {
-		return PathChange{Error: "the path must be absolute"}
+	if refusal := primitivePathRefusal(path); refusal != "" {
+		return PathChange{Error: refusal}
 	}
 	f := File{Path: filepath.Clean(path), Literal: &content, Owner: Account(owner), Group: Account(group), Mode: permissionsMode}
 	if err := ValidateFile(f); err != nil {
@@ -431,8 +441,8 @@ func (run Runtime) WriteFile(ctx context.Context, path, content, owner, group, p
 // MakeDirectory makes path a directory with that owner, group, and mode,
 // through the directory module; the parent must exist.
 func (run Runtime) MakeDirectory(ctx context.Context, path, owner, group, permissionsMode string) PathChange {
-	if !filepath.IsAbs(path) {
-		return PathChange{Error: "the path must be absolute"}
+	if refusal := primitivePathRefusal(path); refusal != "" {
+		return PathChange{Error: refusal}
 	}
 	d := Directory{Path: filepath.Clean(path), Owner: Account(owner), Group: Account(group), Mode: permissionsMode}
 	if err := ValidateDirectory(d); err != nil {
@@ -443,8 +453,8 @@ func (run Runtime) MakeDirectory(ctx context.Context, path, owner, group, permis
 
 // MakeLink makes path a symbolic link to target, through the symlink module.
 func (run Runtime) MakeLink(ctx context.Context, path, target string) PathChange {
-	if !filepath.IsAbs(path) {
-		return PathChange{Error: "the path must be absolute"}
+	if refusal := primitivePathRefusal(path); refusal != "" {
+		return PathChange{Error: refusal}
 	}
 	l := Symlink{Path: filepath.Clean(path), Target: target}
 	if err := ValidateSymlink(l); err != nil {
@@ -455,8 +465,8 @@ func (run Runtime) MakeLink(ctx context.Context, path, target string) PathChange
 
 // RemovePath removes a file, a link, or an empty directory.
 func (run Runtime) RemovePath(ctx context.Context, path string) PathChange {
-	if !filepath.IsAbs(path) || filepath.Clean(path) == "/" {
-		return PathChange{Error: "the path must be absolute and not /"}
+	if refusal := primitivePathRefusal(path); refusal != "" || filepath.Clean(path) == "/" {
+		return PathChange{Error: "the path must be absolute without .. parts, and not /"}
 	}
 	st, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {

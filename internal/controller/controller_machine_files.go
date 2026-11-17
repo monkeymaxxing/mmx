@@ -136,6 +136,9 @@ func (w *fleetStageWalker) saveFile(fleetStageID string, entry config.SaveOnCont
 		written, err = value.Scalar(resolved)
 	}
 	if err == nil {
+		err = config.NodeValuesStayInOneFileName(entry.Path, written, local)
+	}
+	if err == nil {
 		full, err = config.ControllerMachinePath(entry.ProjectRoot, written)
 	}
 	if err != nil {

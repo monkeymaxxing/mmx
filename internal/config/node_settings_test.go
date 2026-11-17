@@ -63,7 +63,7 @@ func TestNodeSettingsConfiguration(t *testing.T) {
 	if _, err := ResolveArguments(task, value.Scope{"node": map[string]any{"name": "web_1"}}); err == nil || !strings.Contains(err.Error(), "hostname.name") {
 		t.Fatal(err)
 	}
-	alternatives := Task{Module: "update_alternatives", ModuleInputs: &modules.UpdateAlternatives{Name: "editor", ProgramPath: "/usr/bin/../bin/vim"}}
+	alternatives := Task{Module: "update_alternatives", ModuleInputs: &modules.UpdateAlternatives{Name: "editor", ProgramPath: "/usr/bin//vim"}}
 	resolved, err = ResolveArguments(alternatives, value.Scope{})
 	if err != nil || InputsOf[modules.UpdateAlternatives](resolved).ProgramPath != "/usr/bin/vim" {
 		t.Fatal(InputsOf[modules.UpdateAlternatives](resolved), err)

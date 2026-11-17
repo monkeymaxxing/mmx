@@ -196,6 +196,12 @@ func TestArgumentRulesRunBeforeTheNode(t *testing.T) {
 	for _, tc := range []struct{ vars, task, field, want string }{
 		{`target: "a\0b"`, "symlink: {path: /etc/link, target: '{{ .vars.target }}'}", "symlink.target", "null byte"},
 		{"unit: 'bad name'", "systemd_service: {name: '{{ .vars.unit }}', state: running}", "systemd_service.name", "invalid service name"},
+		// A value, such as another node's output, cannot climb out of the
+		// directory a path names.
+		{"site: ../../etc/cron.d", "file: {path: '/srv/sites/{{ .vars.site }}/index', permissions_mode: '0644', content: x}", "file.path", "without null bytes or .. parts"},
+		{"site: ../..", "directory: {path: '/srv/sites/{{ .vars.site }}', state: absent}", "directory.path", "without .. parts"},
+		{"site: ../../etc", "delete_old_files: {directory: '/srv/sites/{{ .vars.site }}', name_patterns: ['*.gz'], older_than: 7d, include_subdirectories: false}", "delete_old_files.directory", "without .. parts"},
+		{"site: ../../root", "user: {create_home_directory: true, name: app, home: '/srv/{{ .vars.site }}'}", "user.home", "newlines, or .. parts"},
 	} {
 		path := fixture(t, "vars: {"+tc.vars+"}\nfleet_stages: [{id: setup, nodes: all, node_tasks: [{"+tc.task+"}]}]\n")
 		_, _, err := Load(path, "example", "", nil)

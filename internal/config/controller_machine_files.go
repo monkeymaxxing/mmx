@@ -120,6 +120,45 @@ func ControllerMachinePath(root, path string) (string, error) {
 	return full, nil
 }
 
+// writtenInTheProject names the scope variables whose values come from the
+// project and the inventory. A path's other values, fleet stage outputs and
+// loop items, may come from a node.
+var writtenInTheProject = map[string]bool{"vars": true, "inventory": true, "node": true}
+
+// NodeValuesStayInOneFileName refuses a path in which a value that may come
+// from a node does more than fill part of one file name: a node that answers
+// ../playbooks/deploy or /home/someone/.profile must not choose where the
+// controller machine writes.
+func NodeValuesStayInOneFileName(path, rendered string, scope value.Scope) error {
+	fromNode := false
+	for _, m := range value.Reference.FindAllStringSubmatch(value.WithoutLiterals(path), -1) {
+		parts, err := value.Path(m[1])
+		if err != nil || len(parts) == 0 || writtenInTheProject[parts[0].Name] {
+			continue
+		}
+		fromNode = true
+		v, err := scope.Get(m[1])
+		if err != nil {
+			return err
+		}
+		text, err := value.Scalar(v)
+		if err != nil {
+			return err
+		}
+		if strings.ContainsAny(text, "/\x00") {
+			return fmt.Errorf("%s is %q, a value that may come from a node; such a value fills part of one file name, so it cannot contain / or a NUL byte", m[1], text)
+		}
+	}
+	if fromNode {
+		for _, name := range strings.Split(rendered, "/") {
+			if name == "." || name == ".." {
+				return fmt.Errorf("the path %q has a %q part; a path that holds a value that may come from a node cannot have . or .. parts", rendered, name)
+			}
+		}
+	}
+	return nil
+}
+
 // controllerMachineFileReads is what a fleet stage's
 // save_on_controller_machine entries read, for the limit check. A template
 // entry reads the fleet stage's whole output collection, whatever its text
