@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -321,18 +322,34 @@ func (d *DNF) simulate(ctx context.Context, p Package, refresh bool, args ...str
 // version.
 func (d *DNF) transactionChanges(ctx context.Context, table string) ([]any, error) {
 	var changes []any
-	section := ""
+	section, previous := "", ""
 	for _, line := range strings.Split(table, "\n") {
 		fields := strings.Fields(line)
 		switch {
 		case strings.HasPrefix(line, "Transaction Summary"):
 			return d.withInstalledVersions(ctx, changes)
-		case len(fields) > 0 && fields[0] == "replacing":
-			// dnf 5 lists the package an upgrade replaces under the new one.
+		case len(fields) >= 3 && fields[0] == "replacing":
+			// The package that the package above replaces: dnf 4 writes
+			// "replacing name.arch version", dnf 5 "replacing name arch
+			// version". dnf 5 lists an upgraded package's own older build
+			// here; any other package is one that the package above
+			// obsoletes, and the transaction removes it.
+			name, version := fields[1], fields[2]
+			if len(fields) == 3 {
+				if dot := strings.LastIndex(name, "."); dot > 0 {
+					name = name[:dot]
+				}
+			} else {
+				version = fields[3]
+			}
+			if name != previous && !slices.ContainsFunc(changes, func(change any) bool { return change.(map[string]any)["name"] == name }) {
+				changes = append(changes, packageChange(name, rpmVersion(version), ""))
+			}
 		case line != "" && line[0] != ' ' && strings.HasSuffix(line, ":"):
 			section = line
 		case len(fields) >= 3 && line[0] == ' ':
 			name, version := fields[0], rpmVersion(fields[2])
+			previous = name
 			var change map[string]any
 			switch {
 			case strings.HasPrefix(section, "Removing"):

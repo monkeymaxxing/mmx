@@ -547,6 +547,7 @@ Transaction Summary:
 func TestDNFReadsTransactionTables(t *testing.T) {
 	dir := dnfFixture(t)
 	put(t, filepath.Join(dir, "pkg-acl"), "2.3.1-4.el9\n")
+	put(t, filepath.Join(dir, "pkg-rsyslog"), "8.2510.0-2.el9_8.2\n")
 	four := `Dependencies resolved.
 ================================================================================
  Package             Arch     Version                         Repository   Size
@@ -555,13 +556,19 @@ Installing:
  nginx               x86_64   2:1.20.1-28.el9_8.6             appstream    38 k
 Upgrading:
  acl                 x86_64   2.4.0-1.el9_8                   baseos       74 k
+ rsyslog             x86_64   8.2604.0-4.el9_9.1              appstream   885 k
+     replacing  rsyslog-logrotate.x86_64 8.2510.0-2.el9_8.2
 Removing unused dependencies:
  rocky-logos-httpd   noarch   90.17-1.el9                     @appstream   24 k
 
 Transaction Summary
 ================================================================================
 `
+	// The package that rsyslog obsoletes is removed, as Rocky Linux 9.9's
+	// rsyslog removed rsyslog-logrotate.
 	want := []any{map[string]any{"name": "nginx", "to": "2:1.20.1-28.el9_8.6"}, map[string]any{"name": "acl", "from": "2.3.1-4.el9", "to": "2.4.0-1.el9_8"},
+		map[string]any{"name": "rsyslog", "from": "8.2510.0-2.el9_8.2", "to": "8.2604.0-4.el9_9.1"},
+		map[string]any{"name": "rsyslog-logrotate", "from": "8.2510.0-2.el9_8.2"},
 		map[string]any{"name": "rocky-logos-httpd", "from": "90.17-1.el9"}}
 	got, err := dnfIn(dir).transactionChanges(context.Background(), four)
 	if err != nil || !reflect.DeepEqual(got, want) {
