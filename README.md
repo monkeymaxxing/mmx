@@ -7,6 +7,9 @@ should have, such as packages, configuration files, and running services,
 in plain YAML files. `mmx dryrun` shows what would change on each server,
 and `mmx run` makes those changes.
 
+> [!NOTE]
+> **This is an alpha version.** MMX runs our own development, test, and monitoring servers and is tested on real machines before every release. A command or a setting may still change. When one does, the release notes say what to change on your side. If anything confuses you or breaks, please tell us: [how to report it](CONTRIBUTING.md). Thanks!
+
 Your coding agent, such as [Claude Code](https://claude.com/claude-code) or [Codex](https://openai.com/codex/), can write the YAML files
 and run the commands, or you can do both yourself. You don't need to have
 used a tool like this before. If you have used
