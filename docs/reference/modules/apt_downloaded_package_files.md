@@ -11,6 +11,7 @@ package file again when it needs one.
 ## Inputs
 
 - `state` (`absent`; required): the only state: apt-get clean deletes every file in apt's archives directory and in its partial/ directory, and apt's two package list caches, which the next apt command builds again; installed packages stay as they are
+- `wait_for_apt_lock_at_most` (string; default `15m`): how long the node task waits for another apt process, such as the unattended upgrade that a new cloud server runs at first boot, to give up apt's locks; a duration of whole seconds, such as 90s, 15m, or 1h. The default covers a first-boot upgrade, which takes about ten minutes; a lock held longer usually belongs to a stuck apt process that a person should look at. A lock still held after the wait fails the node task without another try, with apt's line that names the process holding the lock
 
 ## Outputs
 
@@ -71,9 +72,10 @@ contains package files, the node task is `unchanged` and MMX skips
 - **apt's lock.** `apt-get clean` takes the locks of the archives directory
   and of the package lists, and fails at once while another apt holds one,
   such as apt's daily timer or an installation by hand. MMX then tries again
-  every two seconds for up to a minute, as [`apt_package`](apt_package.md)
-  does before it refreshes the package lists. If an apt lock stays held,
-  MMX fails the node task and names the held lock in the error.
+  every two seconds for up to `wait_for_apt_lock_at_most`, 15 minutes unless
+  the task sets it, as [`apt_package`](apt_package.md) does. If an apt lock
+  stays held, MMX fails the node task without another try and names the
+  held lock and the process that holds it in the error.
 - **The archives directory** is the one that apt's settings name
   (`Dir::Cache::archives`), `/var/cache/apt/archives/` unless a setting
   moves it.
@@ -82,7 +84,7 @@ contains package files, the node task is `unchanged` and MMX skips
 
 | The reason holds | What the error means, and what to do |
 |---|---|
-| `another apt process still holds the lock on the downloaded package files after 1m0s` | MMX could not acquire the apt lock during the one-minute wait. Run MMX again when the apt command holding the lock finishes. |
+| `another apt process still holds apt's lock after 15m0s: Could not get lock /var/cache/apt/archives/lock. It is held by process 2016 (apt-get)` | Another apt process held apt's lock for the whole wait. Run MMX again when that process ends; `ps -p 2016` on the node shows it. A node that needs longer can get a longer `wait_for_apt_lock_at_most`. |
 | `apt-get is not installed` | The node does not install its packages with apt. A dryrun reports the node task not checked. |
 
 ## Tested on

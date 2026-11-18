@@ -204,40 +204,103 @@ func TestAPTRefreshBelongsToOneNodeJob(t *testing.T) {
 
 // apt-get update fails at once while another apt holds the package lists'
 // lock, as apt's daily timer does after a first boot: the refresh tries
-// again until the lock is free, and names the lock when it never is.
-func TestAPTRefreshWaitsForTheListsLock(t *testing.T) {
+// again until the lock is free. wait_for_apt_lock_at_most sets both that
+// wait and the dpkg lock wait that apt-get itself does; a lock still held
+// after it fails the task without another try, with apt's line about the
+// holder. An installation that never gets dpkg's lock fails the same way.
+func TestAPTWaitsForAptsLocks(t *testing.T) {
 	dir := aptFixture(t)
-	// The first two updates find the lock held; the "held" file holds it for good.
+	// The first two updates find the lock held; the "held" file holds every lock for good.
 	script := `printf 'apt-get %s\n' "$*" >> "$MMX_APT_FIXTURE/calls"
+[ "$1" = -s ] && exit 0
+if [ -e "$MMX_APT_FIXTURE/held" ]; then
+	echo 'E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1816 (unattended-upgr)' >&2
+	echo 'E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), is another process using it?' >&2
+	exit 100
+fi
 case " $* " in
 *" update "*)
 	tries=$(grep -c ' update$' "$MMX_APT_FIXTURE/calls")
-	if [ -e "$MMX_APT_FIXTURE/held" ] || [ "$tries" -le 2 ]; then
+	if [ "$tries" -le 2 ]; then
 		echo 'E: Could not get lock /var/lib/apt/lists/lock. It is held by process 2016 (apt-get)' >&2
 		exit 100
-	fi
-	exit 0;;
+	fi;;
 esac
 `
 	writeStandInProgram(t, filepath.Join(dir, "apt-get"), "#!/bin/sh\nset -eu\n"+script)
-	pause, wait := aptLockPause, aptLockWait
-	// Enough time for three tries on a busy machine.
-	aptLockPause, aptLockWait = 10*time.Millisecond, 5*time.Second
-	t.Cleanup(func() { aptLockPause, aptLockWait = pause, wait })
+	pause := aptLockPause
+	aptLockPause = 10 * time.Millisecond
+	t.Cleanup(func() { aptLockPause = pause })
 	ctx := testContext(t)
-	if r := aptIn(dir).refresh(ctx); r.Status != "succeeded" {
+	calls := func() string {
+		calls, _ := os.ReadFile(filepath.Join(dir, "calls"))
+		return string(calls)
+	}
+	put(t, filepath.Join(dir, "one"), "1.0\tinstalled\n")
+	// Enough time for three tries on a busy machine.
+	newest := Package{Manager: "apt", Packages: []PackageEntry{{Name: "one", Version: newestOnEveryRun}}, WaitForAptLockAtMost: "5s"}
+	if r := aptIn(dir).Ensure(ctx, Runtime{}, newest); r.Status != "succeeded" {
 		t.Fatal(r)
 	}
-	if calls, _ := os.ReadFile(filepath.Join(dir, "calls")); strings.Count(string(calls), " update\n") != 3 {
-		t.Fatal(string(calls))
+	if got := calls(); strings.Count(got, "apt-get -o DPkg::Lock::Timeout=5 update\n") != 3 || strings.Count(got, " update\n") != 3 {
+		t.Fatal(got)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "held"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	aptLockWait = time.Second
-	r := aptIn(dir).refresh(ctx)
-	if r.Status != "failed" || r.Change != "unknown" || !strings.Contains(r.Reason, "another apt process still holds the lock on the package lists after 1s") {
+	newest.WaitForAptLockAtMost = "1s"
+	started := time.Now()
+	r := aptIn(dir).Ensure(ctx, Runtime{}, newest)
+	want := "another apt process still holds apt's lock after 1s: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 1816 (unattended-upgr). " +
+		"Run MMX again after that process ends, or give the node task a longer wait_for_apt_lock_at_most"
+	if r.Status != "failed" || r.Change != "unknown" || !r.NoOtherTry || r.Reason != want || time.Since(started) < time.Second {
+		t.Fatalf("%+v\nwant reason %q", r, want)
+	}
+	// An installation: the refresh succeeds, and apt-get install, which
+	// waits for dpkg's lock itself, never gets it.
+	if err := os.Remove(filepath.Join(dir, "held")); err != nil {
+		t.Fatal(err)
+	}
+	install := Package{Manager: "apt", Packages: []PackageEntry{{Name: "two", Version: newestWhenFirstInstalled}}, WaitForAptLockAtMost: "1s"}
+	put(t, filepath.Join(dir, "plan"), "Inst two (2.0 Debian:stable [amd64])\n")
+	apt := aptIn(dir)
+	if r := apt.refresh(ctx, time.Second); r.Status != "succeeded" {
 		t.Fatal(r)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "held"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	r = apt.Ensure(ctx, Runtime{}, install)
+	if r.Status != "failed" || !r.NoOtherTry || !strings.HasPrefix(r.Reason, want) {
+		t.Fatalf("%+v\nwant reason %q", r, want)
+	}
+	if got := calls(); !strings.Contains(got, "apt-get -o DPkg::Lock::Timeout=1 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y -- two\n") {
+		t.Fatal(got)
+	}
+}
+
+// Without wait_for_apt_lock_at_most an apt task waits 15 minutes for apt's
+// locks; the setting takes whole seconds and only apt's modules have it.
+func TestAPTLockWaitSetting(t *testing.T) {
+	t.Parallel()
+	if wait := (Package{Manager: "apt"}).aptLockWait(); wait != 15*time.Minute {
+		t.Fatal(wait)
+	}
+	if wait := (Package{Manager: "apt", WaitForAptLockAtMost: "1h"}).aptLockWait(); wait != time.Hour {
+		t.Fatal(wait)
+	}
+	packages := []PackageEntry{{Name: "nginx", Version: newestWhenFirstInstalled}}
+	for _, wait := range []string{"0s", "-1m", "1500ms", "15", "soon"} {
+		err := ValidatePackage(Package{Manager: "apt", Packages: packages, WaitForAptLockAtMost: wait})
+		if err == nil || !strings.HasSuffix(err.Error(), "apt_package.wait_for_apt_lock_at_most must be a duration of whole seconds, at least 1s, such as 90s, 15m, or 1h") {
+			t.Fatalf("%q: %v", wait, err)
+		}
+	}
+	if err := ValidatePackage(Package{Manager: "apt", UpgradeAll: true, WaitForAptLockAtMost: "20m"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePackage(Package{Manager: "dnf", Packages: packages, WaitForAptLockAtMost: "20m"}); err == nil || !strings.Contains(err.Error(), "dnf_package has no field wait_for_apt_lock_at_most") {
+		t.Fatal(err)
 	}
 }
 
@@ -376,8 +439,8 @@ func TestAPTKeepsAPackageInsideAVersionPattern(t *testing.T) {
 	if r := manager.Ensure(ctx, Runtime{}, p); r.Status != "succeeded" || r.Change != "unchanged" {
 		t.Fatal(r)
 	}
-	wantCalls := "apt-get -o DPkg::Lock::Timeout=60 update\n" +
-		"apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y -- docker-ce=5:27.3.10-1 [policy]\n"
+	wantCalls := "apt-get -o DPkg::Lock::Timeout=900 update\n" +
+		"apt-get -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y -- docker-ce=5:27.3.10-1 [policy]\n"
 	if calls := fixtureCalls(t, dir); calls != wantCalls {
 		t.Fatalf("calls:\n%s\nwant:\n%s", calls, wantCalls)
 	}
@@ -463,8 +526,8 @@ func TestAPTUpgradesNamedPackages(t *testing.T) {
 	if r := manager.Ensure(ctx, Runtime{}, p); r.Change != "unchanged" {
 		t.Fatal(r)
 	}
-	wantCalls := "apt-get -o DPkg::Lock::Timeout=60 update\n" +
-		"apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y -- openssl=3.0.2 tzdata=2026a [policy]\n"
+	wantCalls := "apt-get -o DPkg::Lock::Timeout=900 update\n" +
+		"apt-get -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y -- openssl=3.0.2 tzdata=2026a [policy]\n"
 	if calls := fixtureCalls(t, dir); calls != wantCalls {
 		t.Fatalf("calls:\n%s\nwant:\n%s", calls, wantCalls)
 	}
@@ -527,7 +590,7 @@ printf '\tnot-installed\n' > "$MMX_APT_FIXTURE/agent"
 		t.Fatal(r)
 	}
 	wantCalls := "apt-get -s remove -y --purge --autoremove -- agent-\n" +
-		"apt-get -o DPkg::Lock::Timeout=60 remove -y --purge --autoremove -- agent-\n"
+		"apt-get -o DPkg::Lock::Timeout=900 remove -y --purge --autoremove -- agent-\n"
 	if calls := fixtureCalls(t, dir); calls != wantCalls {
 		t.Fatalf("calls:\n%s\nwant:\n%s", calls, wantCalls)
 	}
@@ -642,9 +705,9 @@ exit 2
 		t.Fatal(r)
 	}
 	wantCalls := "apt-get -s full-upgrade\n" +
-		"apt-get -o DPkg::Lock::Timeout=60 update\n" +
+		"apt-get -o DPkg::Lock::Timeout=900 update\n" +
 		"apt-get -s full-upgrade\n" +
-		"apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade -y\n" +
+		"apt-get -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold full-upgrade -y\n" +
 		"apt-get -s full-upgrade\n"
 	if calls() != wantCalls {
 		t.Fatalf("calls:\n%s\nwant:\n%s", calls(), wantCalls)
@@ -680,7 +743,7 @@ exit 2
 	if r := manager.Ensure(ctx, Runtime{}, upgrade); r.Change != "unchanged" {
 		t.Fatal(r)
 	}
-	change := "apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "
+	change := "apt-get -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold "
 	wantCalls = "apt-get -s full-upgrade\napt-get -s autoremove\n" +
 		"apt-get -s full-upgrade\napt-get -s autoremove\n" + change + "full-upgrade -y\napt-get -s autoremove\n" + change + "autoremove -y\n" +
 		"apt-get -s full-upgrade\napt-get -s autoremove\n" + change + "full-upgrade -y\napt-get -s autoremove\n" + change + "autoremove -y\n" +

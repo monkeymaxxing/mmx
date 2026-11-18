@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"mmx/internal/assets"
 	"mmx/internal/protocol"
@@ -169,6 +170,7 @@ type AptPackage struct {
 	AlsoRemovePackagesNoLongerNeeded    bool           `yaml:"also_remove_packages_no_longer_needed,omitempty"`
 	AlsoRemovePackagesThatDependOnThese bool           `yaml:"also_remove_packages_that_depend_on_these,omitempty"`
 	AllowPackageToStartItsServices      bool           `yaml:"allow_package_to_start_its_services,omitempty"`
+	WaitForAptLockAtMost                string         `yaml:"wait_for_apt_lock_at_most,omitempty"`
 }
 
 // DnfPackage is only the YAML form of a dnf_package task.
@@ -198,6 +200,7 @@ type Package struct {
 	AllowPackageToStartItsServices      bool           `json:"allow_package_to_start_its_services,omitempty"`
 	RepositoriesEnabledOnlyForThisTask  []string       `json:"repositories_enabled_only_for_this_task,omitempty"`
 	EnableDnfModuleStream               string         `json:"enable_dnf_module_stream,omitempty"`
+	WaitForAptLockAtMost                string         `json:"wait_for_apt_lock_at_most,omitempty"`
 }
 
 func (p Package) Module() string { return p.Manager + "_package" }
@@ -215,7 +218,8 @@ func (a AptPackage) Package() (Package, error) {
 		AlsoDeleteItsConfigFiles:            a.AlsoDeleteItsConfigFiles,
 		AlsoRemovePackagesNoLongerNeeded:    a.AlsoRemovePackagesNoLongerNeeded,
 		AlsoRemovePackagesThatDependOnThese: a.AlsoRemovePackagesThatDependOnThese,
-		AllowPackageToStartItsServices:      a.AllowPackageToStartItsServices}, nil
+		AllowPackageToStartItsServices:      a.AllowPackageToStartItsServices,
+		WaitForAptLockAtMost:                a.WaitForAptLockAtMost}, nil
 }
 
 func (d DnfPackage) Package() (Package, error) {
@@ -225,6 +229,13 @@ func (d DnfPackage) Package() (Package, error) {
 		AlsoRemovePackagesThatDependOnThese: d.AlsoRemovePackagesThatDependOnThese,
 		RepositoriesEnabledOnlyForThisTask:  d.RepositoriesEnabledOnlyForThisTask,
 		EnableDnfModuleStream:               d.EnableDnfModuleStream}, nil
+}
+
+// aptLockWait is how long the task waits for another apt process to give up
+// apt's locks; ValidatePackage has checked the duration.
+func (p Package) aptLockWait() time.Duration {
+	wait, _ := aptLockWait(p.Module(), p.WaitForAptLockAtMost)
+	return wait
 }
 
 // ValidatePackage checks structure on the controller machine and again on the node.
@@ -244,14 +255,20 @@ func ValidatePackage(p Package) error {
 		"only_security_updates":                   p.Manager != "dnf" && p.OnlySecurityUpdates != nil,
 		"enable_dnf_module_stream":                p.Manager != "dnf" && p.EnableDnfModuleStream != "",
 		"also_remove_packages_only_it_needed":     p.Manager != "dnf" && p.AlsoRemovePackagesOnlyItNeeded,
+		"wait_for_apt_lock_at_most":               p.Manager != "apt" && p.WaitForAptLockAtMost != "",
 	} {
 		if set {
 			return invalid(field, m+" has no field "+field)
 		}
 	}
+	if writtenDuration(p.WaitForAptLockAtMost) {
+		if _, err := aptLockWait(m, p.WaitForAptLockAtMost); err != nil {
+			return err
+		}
+	}
 	if p.UpgradeAll {
 		if p.Packages != nil || p.State != "" || p.EnableDnfModuleStream != "" || p.AlsoDeleteItsConfigFiles || p.AlsoRemovePackagesOnlyItNeeded || p.AlsoRemovePackagesThatDependOnThese || p.AllowPackageToStartItsServices {
-			return invalid("upgrade_all_packages_within_their_version_rules", m+".upgrade_all_packages_within_their_version_rules takes only also_remove_packages_no_longer_needed, only_security_updates (dnf), and repositories_enabled_only_for_this_task (dnf)")
+			return invalid("upgrade_all_packages_within_their_version_rules", m+".upgrade_all_packages_within_their_version_rules takes only also_remove_packages_no_longer_needed, wait_for_apt_lock_at_most (apt), only_security_updates (dnf), and repositories_enabled_only_for_this_task (dnf)")
 		}
 	} else if len(p.Packages) == 0 {
 		return invalid("packages", m+" requires packages, or upgrade_all_packages_within_their_version_rules: true")
@@ -578,6 +595,7 @@ var aptPackageDescription = Description{
 		{Name: "also_remove_packages_that_depend_on_these", Default: "false", Notes: "with state: absent: permits the package manager's simulation to remove packages the task does not name"},
 		{Name: "also_delete_its_config_files", Default: "false", Notes: "with state: absent: apt purge"},
 		{Name: "allow_package_to_start_its_services", Default: "false", Notes: "lets package scripts start stopped services; otherwise they can only restart running services"},
+		{Name: "wait_for_apt_lock_at_most", Default: "15m", Notes: aptLockWaitNote},
 	},
 	Example: "- apt_package:\n    packages:\n      - name: nginx\n        version: newest_when_first_installed\n",
 	Results: []string{"status", "change", "value"},

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"mmx/internal/protocol"
 )
@@ -16,7 +17,8 @@ import (
 // AptDownloadedPackageFiles deletes the package files that apt downloaded
 // into its cache, with apt-get clean.
 type AptDownloadedPackageFiles struct {
-	State string `yaml:"state" json:"state"`
+	State                string `yaml:"state" json:"state"`
+	WaitForAptLockAtMost string `yaml:"wait_for_apt_lock_at_most,omitempty" json:"wait_for_apt_lock_at_most,omitempty"`
 }
 
 // aptDownloadedPackageFilesStates are the states of the package files; the
@@ -30,6 +32,7 @@ var aptDownloadedPackageFilesDescription = Description{
 	Summary: "deletes the package files that apt downloaded into its archives directory, /var/cache/apt/archives/, with apt-get clean; value has deleted_package_files and deleted_bytes",
 	Fields: []Field{
 		{Name: "state", Values: aptDownloadedPackageFilesStates, Required: true, Notes: "the only state: apt-get clean deletes every file in apt's archives directory and in its partial/ directory, and apt's two package list caches, which the next apt command builds again; installed packages stay as they are"},
+		{Name: "wait_for_apt_lock_at_most", Default: "15m", Notes: aptLockWaitNote},
 	},
 	Example: "- apt_downloaded_package_files:\n    state: absent\n",
 	Results: []string{"status", "change", "reason", "value.deleted_package_files", "value.deleted_bytes"},
@@ -41,12 +44,21 @@ func (a *AptDownloadedPackageFiles) Prepare(base string) error {
 	if a.State != "absent" {
 		return invalid("state", "apt_downloaded_package_files.state is required and must be absent: the task deletes the package files that apt downloaded")
 	}
+	if writtenDuration(a.WaitForAptLockAtMost) {
+		if _, err := aptLockWait("apt_downloaded_package_files", a.WaitForAptLockAtMost); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // Run does the module's work on the node.
 func (a *AptDownloadedPackageFiles) Run(ctx context.Context, task NodeTask) protocol.Result {
-	return task.Runtime.AptDownloadedPackageFiles(ctx)
+	wait, err := aptLockWait("apt_downloaded_package_files", a.WaitForAptLockAtMost)
+	if err != nil {
+		return protocol.ConfigurationError(err)
+	}
+	return task.Runtime.AptDownloadedPackageFiles(ctx, wait)
 }
 
 // aptCacheEntriesThatStay are the names in apt's archives directory that
@@ -54,9 +66,9 @@ func (a *AptDownloadedPackageFiles) Run(ctx context.Context, task NodeTask) prot
 var aptCacheEntriesThatStay = []string{"lock", "partial", "auxfiles", "lost+found"}
 
 // AptDownloadedPackageFiles runs apt-get clean when the archives directory
-// holds package files, waiting for another apt's lock as a refresh does,
-// and reports the files that are gone afterwards.
-func (run Runtime) AptDownloadedPackageFiles(ctx context.Context) protocol.Result {
+// holds package files, waiting up to wait for another apt's lock as a
+// refresh does, and reports the files that are gone afterwards.
+func (run Runtime) AptDownloadedPackageFiles(ctx context.Context, wait time.Duration) protocol.Result {
 	if _, err := lookPath(ctx, "apt-get"); err != nil {
 		return run.notYet(errors.New("apt_downloaded_package_files: apt-get is not installed; the module requires a node that uses apt to install packages"))
 	}
@@ -80,7 +92,7 @@ func (run Runtime) AptDownloadedPackageFiles(ctx context.Context) protocol.Resul
 	if err := run.Mutation("downloaded package files in " + archives); err != nil {
 		return protocol.Failed(err)
 	}
-	cleaned := aptGetWaitingForLocks(ctx, "the downloaded package files", "clean")
+	cleaned := aptGetWaitingForLocks(ctx, wait, "clean")
 	after, err := downloadedPackageFiles(archives)
 	if err != nil {
 		r := protocol.Failed(fmt.Errorf("apt_downloaded_package_files: after apt-get clean: %w", err))
@@ -95,7 +107,7 @@ func (run Runtime) AptDownloadedPackageFiles(ctx context.Context) protocol.Resul
 	}
 	result := downloadedPackageFilesResult(false, archives, deleted)
 	if cleaned.Status != "succeeded" {
-		result.Status = "failed"
+		result.Status, result.NoOtherTry = "failed", cleaned.NoOtherTry
 		detail := cleaned.Reason
 		if stderr := lastLines(strings.TrimSpace(cleaned.Stderr), 20); stderr != "" {
 			detail += ": " + stderr

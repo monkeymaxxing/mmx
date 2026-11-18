@@ -214,7 +214,8 @@ def journal_vacuum(remote, project, run, result, mark):
 
 def downloaded_package_files(remote, project, run, result, mark):
     """apt_downloaded_package_files: the package files in apt's archives directory, the guest's own and three of the
-    suite's, one in partial/; once with another apt holding the lock of the archives directory for a few seconds."""
+    suite's, one in partial/; once with another apt holding the lock of the archives directory for a few seconds, and
+    once for longer than the task's wait_for_apt_lock_at_most."""
     def package_files():
         lines = remote(f"find {APT_ARCHIVES} {APT_ARCHIVES}/partial -maxdepth 1 ! -type d ! -name lock -printf '%p %s\\n' | sort -u").splitlines()
         return {line.split()[0]: int(line.split()[1]) for line in lines}
@@ -251,6 +252,27 @@ def downloaded_package_files(remote, project, run, result, mark):
     assert ran['change'] == 'changed' and ran['value']['deleted_package_files'] == 3 and package_files() == {}, ran
     assert waited >= 3, f'the task did not wait for the lock: it took {waited:.1f} s'
     mark('apt_downloaded_package_files waits while another apt holds the lock of the archives directory, then deletes')
+
+    # A lock that stays held for longer than wait_for_apt_lock_at_most fails
+    # the task after that wait, without another try, with apt's line that
+    # names the process holding the lock.
+    put_package_files()
+    project([{'id': 'fixed', 'apt_downloaded_package_files': {'state': 'absent', 'wait_for_apt_lock_at_most': '3s'}}])
+    remote("systemd-run --unit=mmx-test-apt-lock --collect python3 -c "
+           "'import fcntl, time; f = open(\"/var/cache/apt/archives/lock\", \"w\"); fcntl.lockf(f, fcntl.LOCK_EX); time.sleep(30)'\n"
+           "for i in $(seq 50); do systemctl is-active --quiet mmx-test-apt-lock && break; sleep 0.1; done")
+    started = time.monotonic()
+    failed = result(run('run', expected=1))
+    waited = time.monotonic() - started
+    remote('systemctl stop mmx-test-apt-lock')
+    holder = "apt_downloaded_package_files: apt-get clean: another apt process still holds apt's lock after 3s: " \
+        f"Could not get lock {APT_ARCHIVES}/lock. It is held by process "
+    assert failed['status'] == 'failed' and failed['reason'].startswith(holder), failed
+    assert '(python3). Run MMX again after that process ends, or give the node task a longer wait_for_apt_lock_at_most' in failed['reason'], failed
+    assert len(failed.get('tries') or [failed]) == 1 and 3 <= waited < 20, (waited, failed)
+    assert len(package_files()) == 3
+    mark(f'apt_downloaded_package_files with wait_for_apt_lock_at_most: 3s fails once after the wait ({waited:.0f} s) while '
+         'another apt keeps the lock, naming the process that holds it')
 
 
 def old_files(remote, project, run, result, mark, command):

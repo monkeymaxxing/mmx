@@ -90,7 +90,7 @@ if [ "$1" = -s ]; then
  exit 0
 fi
 printf '%s\n' "$*" >> "$MMX_TEST_SERVICE/apt-calls"
-[ "$1" = -o ] && [ "$2" = DPkg::Lock::Timeout=60 ] && [ "$3" = remove ] && [ "$4" = -y ] && [ "$5" = -- ]
+[ "$1" = -o ] && [ "$2" = DPkg::Lock::Timeout=900 ] && [ "$3" = remove ] && [ "$4" = -y ] && [ "$5" = -- ]
 shift 5
 for argument; do
  name=${argument%-}
@@ -127,7 +127,7 @@ func TestPackageRemovalAndDryrun(t *testing.T) {
 	if r.Results[0].Change != "changed" {
 		t.Fatal(r)
 	}
-	want := "-o DPkg::Lock::Timeout=60 remove -y -- demo- addon+- addon-- partial-\n"
+	want := "-o DPkg::Lock::Timeout=900 remove -y -- demo- addon+- addon-- partial-\n"
 	if read(t, filepath.Join(f.dir, "apt-calls")) != want {
 		t.Fatal("unexpected apt action")
 	}

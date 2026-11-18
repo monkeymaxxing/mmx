@@ -126,27 +126,44 @@ func (a *APT) claim(p Package) error {
 // messages in English, which refresh reads.
 var aptEnv = map[string]string{"DEBIAN_FRONTEND": "noninteractive", "LC_ALL": "C"}
 
-// aptLockWait is how long an apt-get command waits for another apt to give
-// up a lock that the command takes without waiting. DPkg::Lock::Timeout
-// makes apt-get wait for dpkg's lock, but apt-get update fails at once while
-// another apt holds the package lists' lock, as apt's daily timer and
-// cloud-init do just after a server first boots, and apt-get clean also
-// while another apt holds the lock of the downloaded package files.
-var aptLockWait = 60 * time.Second
+// aptLockWaitDefault is how long an apt task waits for another apt process
+// to give up apt's locks when the task sets no wait_for_apt_lock_at_most. A
+// fresh cloud server runs an unattended upgrade at first boot that holds the
+// locks for about ten minutes; a lock held for longer than 15 minutes
+// usually belongs to a stuck apt process that a person should look at.
+const aptLockWaitDefault = 15 * time.Minute
 
-// aptLockPause is the pause between two tries of such a command.
+// aptLockWaitNote describes wait_for_apt_lock_at_most on each apt module's page.
+const aptLockWaitNote = "how long the node task waits for another apt process, such as the unattended upgrade that a new cloud server runs at first boot, to give up apt's locks; a duration of whole seconds, such as 90s, 15m, or 1h. The default covers a first-boot upgrade, which takes about ten minutes; a lock held longer usually belongs to a stuck apt process that a person should look at. A lock still held after the wait fails the node task without another try, with apt's line that names the process holding the lock"
+
+// aptLockWait reads a task's wait_for_apt_lock_at_most. It is whole seconds
+// because apt's DPkg::Lock::Timeout counts seconds.
+func aptLockWait(module, text string) (time.Duration, error) {
+	if text == "" {
+		return aptLockWaitDefault, nil
+	}
+	d, err := time.ParseDuration(text)
+	if err != nil || d < time.Second || d%time.Second != 0 {
+		return 0, invalid("wait_for_apt_lock_at_most", module+".wait_for_apt_lock_at_most must be a duration of whole seconds, at least 1s, such as 90s, 15m, or 1h")
+	}
+	return d, nil
+}
+
+// aptLockPause is the pause between two tries of an apt-get command that
+// found a lock held.
 var aptLockPause = 2 * time.Second
 
-// aptChange is the start of every apt-get command that changes packages.
-var aptChange = []string{"-o", "DPkg::Lock::Timeout=60", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"}
+// aptChange holds dpkg's options for every apt-get command that changes
+// packages; aptGetWaitingForLocks puts the lock wait before them.
+var aptChange = []string{"-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"}
 
 // refresh updates package indexes once per job, and again after a source change.
-func (a *APT) refresh(ctx context.Context) protocol.Result {
+func (a *APT) refresh(ctx context.Context, wait time.Duration) protocol.Result {
 	sources := a.sourcesFingerprint()
 	if a.indexesFresh && sources == a.indexedSources {
 		return protocol.Success("unchanged")
 	}
-	r := aptGetWaitingForLocks(ctx, "the package lists", "-o", "DPkg::Lock::Timeout=60", "update")
+	r := aptGetWaitingForLocks(ctx, wait, "update")
 	if r.Status == "succeeded" {
 		a.indexesFresh, a.indexedSources = true, sources
 	}
@@ -199,22 +216,29 @@ func aptCommand(ctx context.Context, program string, args ...string) protocol.Re
 	return r
 }
 
-// aptGetWaitingForLocks runs apt-get with args, and again while it fails at
-// once because another apt holds a lock, until aptLockWait has passed.
-// guarded names what the lock guards, for the reason of a lock that stays
-// held.
-func aptGetWaitingForLocks(ctx context.Context, guarded string, args ...string) protocol.Result {
-	for deadline := time.Now().Add(aptLockWait); ; {
+// aptGetWaitingForLocks runs apt-get with args, waiting up to wait for
+// another apt process to give up apt's locks. DPkg::Lock::Timeout makes
+// apt-get itself wait for dpkg's lock, but apt-get fails at once while
+// another apt holds the lock of the package lists or of the downloaded
+// package files, as apt's daily timers and a first-boot unattended upgrade
+// do; so apt-get runs again until wait has passed. A lock still held then
+// fails the task without another try: the task has waited as long as it
+// was told to.
+func aptGetWaitingForLocks(ctx context.Context, wait time.Duration, args ...string) protocol.Result {
+	args = append([]string{"-o", fmt.Sprintf("DPkg::Lock::Timeout=%d", int64(wait/time.Second))}, args...)
+	for deadline := time.Now().Add(wait); ; {
 		r := aptCommand(ctx, "apt-get", args...)
 		if r.Status == "succeeded" {
 			return r
 		}
 		r.Change = "unknown"
-		if !strings.Contains(r.Stderr, "Could not get lock") {
+		held := aptLockMessage(r.Stderr)
+		if held == "" {
 			return r
 		}
 		if time.Now().After(deadline) {
-			r.Reason = fmt.Sprintf("another apt process still holds the lock on %s after %s: %s", guarded, aptLockWait, r.Reason)
+			r.NoOtherTry = true
+			r.Reason = fmt.Sprintf("another apt process still holds apt's lock after %s: %s. Run MMX again after that process ends, or give the node task a longer wait_for_apt_lock_at_most", wait, held)
 			return r
 		}
 		select {
@@ -225,10 +249,22 @@ func aptGetWaitingForLocks(ctx context.Context, guarded string, args ...string) 
 	}
 }
 
+// aptLockMessage is apt's line about a lock that another process holds,
+// such as "Could not get lock /var/lib/apt/lists/lock. It is held by process
+// 1816 (python3)", or "" when stderr holds none.
+func aptLockMessage(stderr string) string {
+	for _, line := range strings.Split(stderr, "\n") {
+		if _, message, found := strings.Cut(line, "Could not get lock"); found {
+			return "Could not get lock" + strings.TrimRight(message, ". ")
+		}
+	}
+	return ""
+}
+
 // change runs one apt command that changes packages, with MMX's policy program
-// in place unless the task lets the package start its services. A failed
-// command leaves the change unknown. Cleanup failure preserves that change
-// information and fails the task.
+// in place unless the task lets the package start its services; apt-get waits
+// for apt's locks. A failed command leaves the change unknown. Cleanup failure
+// preserves that change information and fails the task.
 func (a *APT) change(ctx context.Context, run Runtime, p Package, program string, args ...string) protocol.Result {
 	note := ""
 	if !p.AllowPackageToStartItsServices {
@@ -237,7 +273,12 @@ func (a *APT) change(ctx context.Context, run Runtime, p Package, program string
 			return protocol.Failed(err)
 		}
 	}
-	r := aptCommand(ctx, program, args...)
+	var r protocol.Result
+	if program == "apt-get" {
+		r = aptGetWaitingForLocks(ctx, p.aptLockWait(), args...)
+	} else {
+		r = aptCommand(ctx, program, args...)
+	}
 	if r.Status != "succeeded" {
 		r.Change = "unknown"
 	}
@@ -317,7 +358,7 @@ func (a *APT) installPackages(ctx context.Context, run Runtime, p Package) proto
 				break
 			}
 			if !run.Dryrun {
-				if r := a.refresh(ctx); r.Status != "succeeded" {
+				if r := a.refresh(ctx, p.aptLockWait()); r.Status != "succeeded" {
 					return r
 				}
 			}
@@ -349,7 +390,7 @@ func (a *APT) installPackages(ctx context.Context, run Runtime, p Package) proto
 			}
 		case entry.Version == newestOnEveryRun:
 			if !run.Dryrun {
-				if r := a.refresh(ctx); r.Status != "succeeded" {
+				if r := a.refresh(ctx, p.aptLockWait()); r.Status != "succeeded" {
 					return r
 				}
 			}
@@ -385,7 +426,7 @@ func (a *APT) installPackages(ctx context.Context, run Runtime, p Package) proto
 	}
 
 	if !run.Dryrun && len(changes) > len(configure) {
-		if r := a.refresh(ctx); r.Status != "succeeded" {
+		if r := a.refresh(ctx, p.aptLockWait()); r.Status != "succeeded" {
 			return r
 		}
 	}
@@ -479,7 +520,7 @@ func (a *APT) installPackages(ctx context.Context, run Runtime, p Package) proto
 		result.Change = "changed"
 		return result
 	}
-	if r := a.refresh(ctx); r.Status != "succeeded" {
+	if r := a.refresh(ctx, p.aptLockWait()); r.Status != "succeeded" {
 		r.Change = protocol.CombineChange(result.Change, r.Change)
 		return r
 	}
@@ -697,7 +738,7 @@ func (a *APT) previewPreferences(p Package, directory string) ([]string, error) 
 // or remove, with from and to versions.
 func (a *APT) upgradeAll(ctx context.Context, run Runtime, p Package) protocol.Result {
 	if !run.Dryrun {
-		if r := a.refresh(ctx); r.Status != "succeeded" {
+		if r := a.refresh(ctx, p.aptLockWait()); r.Status != "succeeded" {
 			return r
 		}
 	}
@@ -818,7 +859,7 @@ func (a *APT) remove(ctx context.Context, run Runtime, p Package) protocol.Resul
 	if err := run.Mutation("packages"); err != nil {
 		return protocol.Failed(err)
 	}
-	r := a.change(ctx, run, p, "apt-get", append([]string{"-o", "DPkg::Lock::Timeout=60"}, args...)...)
+	r := a.change(ctx, run, p, "apt-get", args...)
 	if r.Status != "succeeded" {
 		return r
 	}

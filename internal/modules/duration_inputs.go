@@ -68,3 +68,14 @@ func (w *WireguardInterface) DurationInputs(visit func(string, *string, func(str
 func (n *NetworkManagerConnectionFile) DurationInputs(visit func(string, *string, func(string) error)) {
 	visit("restore_unless_controller_confirms_within", &n.RestoreUnlessControllerConfirmsWithin, confirmationWithin)
 }
+
+func (p *Package) DurationInputs(visit func(string, *string, func(string) error)) {
+	visit("wait_for_apt_lock_at_most", &p.WaitForAptLockAtMost, func(s string) error { _, err := aptLockWait(p.Module(), s); return err })
+}
+
+func (a *AptDownloadedPackageFiles) DurationInputs(visit func(string, *string, func(string) error)) {
+	visit("wait_for_apt_lock_at_most", &a.WaitForAptLockAtMost, func(s string) error {
+		_, err := aptLockWait("apt_downloaded_package_files", s)
+		return err
+	})
+}

@@ -292,9 +292,8 @@ rules, so it differs from the shared rules above:
   files. There is no input for the dependencies that nothing needs any
   more.
 - **The lock is `/var/lib/pacman/db.lck`.** Before each command that takes
-  the lock, the module waits up to 60 seconds, as `apt_package` waits for
-  dpkg's lock, then fails with a reason that says that a pacman that was
-  stopped leaves the file. Reading and `--print` take no lock.
+  the lock, the module waits up to 60 seconds, then fails with a reason
+  that says that a pacman that was stopped leaves the file. Reading and `--print` take no lock.
 - **Packages start no service.** Arch Linux's packages neither start nor
   enable a service, so `pacman_package` needs no counterpart to
   `apt_package`'s `policy-rc.d` program.

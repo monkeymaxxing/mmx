@@ -635,6 +635,10 @@ The cases prove:
   and the rerun
   runs nothing; while a process holds the lock of the archives directory
   for six seconds, the node task waits and then deletes.
+  On 2026-11-18, on Debian 13 only, with `wait_for_apt_lock_at_most: 3s`:
+  while a process keeps the lock for longer, the node task fails once after
+  about the three seconds, with apt's line that names the process holding
+  the lock (`python3`), and deletes nothing.
 - `delete_old_files`: old files whose names match, also in a directory
   below, go, and the dryrun lists the files that the run deletes; a symlink
   to a file and one to a

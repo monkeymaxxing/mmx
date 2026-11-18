@@ -324,10 +324,14 @@ task would add the source: that source is only previewed during a dryrun.
 A real run refreshes the indexes first and fails if the package is still
 missing. Version rules and packages stay unchanged on that refusal.
 
-apt waits up to 60 seconds for the dpkg lock, such as while the daily update
-that a fresh server runs at first boot is still busy. MMX tries the index
-refresh again for up to 60 seconds while another apt holds the lock on the
-package lists. dpkg keeps a configuration file that was changed on the node
+Each apt command that takes apt's locks waits up to
+`wait_for_apt_lock_at_most`, 15 minutes unless the task sets it, for another
+apt process to give them up. A new cloud server runs an unattended upgrade at
+first boot that holds the locks for about ten minutes. apt waits for dpkg's
+lock itself (`DPkg::Lock::Timeout`), and MMX runs `apt-get` again every two
+seconds while another apt holds the lock on the package lists or on the
+downloaded package files, which `apt-get` does not wait for. A dryrun takes
+no lock, so it never waits. dpkg keeps a configuration file that was changed on the node
 instead of prompting; a `file` node task owns that file's contents when MMX
 should own them. A package that dpkg left unpacked but not configured, after
 an interrupted installation, is configured.
@@ -445,6 +449,14 @@ A package may still enable its service for the next boot. A
   fails unless it says `allow_downgrade: true`.
 - **A source that apt cannot use** fails the index refresh, and apt's
   message names the source.
+- **Another apt process still holds apt's lock after the wait.** The task
+  fails without another try, with apt's line that names the process, such
+  as `another apt process still holds apt's lock after 15m0s: Could not get
+  lock /var/lib/dpkg/lock-frontend. It is held by process 1816
+  (unattended-upgr). Run MMX again after that process ends, or give the node
+  task a longer wait_for_apt_lock_at_most`. `ps -p 1816` on the node shows
+  the process. Wait until it ends, then run again; if it never ends, look
+  at it on the node.
 - **The node stopped inside dpkg** during an upgrade, such as when it lost
   power. The next attempt fails with apt's instruction to run
   `dpkg --configure -a`, and MMX does not retry it, because a retry
@@ -520,9 +532,18 @@ passed `server_resources.py` on Debian 13.
   distribution, and an upgrade still reaches running services. A node then
   behaves the same on Debian and on the Red Hat family, whose packages do
   not start their services.
-- **MMX retries the index refresh while another apt holds the lock on the
-  package lists.** `apt-get update` does not wait for that lock itself, and
-  apt's daily timer holds it just after a first boot.
+- **apt tasks wait 15 minutes for apt's locks by default.** A new server's
+  first-boot unattended upgrade holds them for about ten minutes, so a
+  shorter wait would fail the first run on every new server of such an
+  image. A lock held for longer than 15 minutes usually belongs to a stuck
+  apt process that a person should look at. `wait_for_apt_lock_at_most`
+  changes the wait for a fleet whose servers need longer or should fail
+  sooner. MMX runs `apt-get` again while another apt holds the lock on the
+  package lists, because `apt-get update` does not wait for that lock
+  itself.
+- **A lock still held after the wait fails without another try.** The task
+  has already waited as long as it was told to; more tries would multiply
+  the wait.
 - **Two tasks for one package, one with a version rule and one with a keyword, are
   refused.** Each would undo the other on every run.
 - **A package file needs a SHA-256 in the task.** apt checks no signature
