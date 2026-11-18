@@ -32,8 +32,8 @@ A container guest runs on its test server's kernel, 6.12.113 or 6.12.115.
 | Debian 13 | kernel 6.12.111 | kernel 6.12.107 |
 | Ubuntu 24.04 | 24.04.5, kernel 6.8.0-147 | 24.04.4, kernel 6.8.0-138 |
 | Ubuntu 26.04 | 26.04.1, kernel 7.0.0-38 | 26.04.1, kernel 7.0.0-30 |
-| Rocky Linux 9 | 9.8, kernel 5.14.0-687.66.1 | 9.8, kernel 5.14.0-687.42.1 |
-| AlmaLinux 10 | 10.2, kernel 6.12.0-211.74.2 | 10.2, kernel 6.12.0-211.49.1 |
+| Rocky Linux 9 | 9.9, kernel 5.14.0-741.22.1 | 9.8, kernel 5.14.0-687.42.1 |
+| AlmaLinux 10 | 10.3, kernel 6.12.0-264.16.1 | 10.2, kernel 6.12.0-211.49.1 |
 | Fedora 45 | kernel 7.3.3-300 | not tested |
 | Arch Linux | kernel 7.3.4 | not tested |
 | openSUSE Leap 16.1 | kernel 6.12.0-160100.8 | not tested |
