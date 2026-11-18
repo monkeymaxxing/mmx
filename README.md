@@ -460,7 +460,7 @@ machine, checks the download against the release's checksums, and installs
 ```sh
 (
 set -eu
-version=0.1.0
+version=0.2.0
 case "$(uname -sm)" in
   "Darwin arm64")  platform=macos-arm64 ;;
   "Darwin x86_64") platform=macos-amd64 ;;
@@ -483,7 +483,7 @@ ln -sf "$HOME/.local/lib/mmx/mmx" ~/.local/bin/mmx
 )
 ```
 
-The last line prints `mmx 0.1.0 (protocol 1)`.
+The last line prints `mmx 0.2.0 (protocol 1)`.
 
 Then open a new terminal and run `mmx version`.
 
@@ -495,12 +495,12 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc     # macOS
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc    # Linux
 ```
 
-The archive stays in `~/Downloads/mmx-0.1.0`. The checksum finds a damaged
+The archive stays in `~/Downloads/mmx-0.2.0`. The checksum finds a damaged
 download. If you have the [GitHub CLI](https://cli.github.com/), this
 command also proves that MMX's own release workflow built the archive:
 
 ```sh
-gh attestation verify ~/Downloads/mmx-0.1.0/mmx-0.1.0-*.tar.gz --repo monkeymaxxing/mmx
+gh attestation verify ~/Downloads/mmx-0.2.0/mmx-0.2.0-*.tar.gz --repo monkeymaxxing/mmx
 ```
 
 **By hand.** The release has one archive per machine:

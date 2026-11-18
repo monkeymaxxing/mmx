@@ -35,7 +35,7 @@ your own server's address and account.
    against the release's checksums, and installs `mmx` in
    `~/.local/lib/mmx`, with a link in `~/.local/bin`.
 
-   **Check:** the block's last line prints `mmx 0.1.0 (protocol 1)`, and in
+   **Check:** the block's last line prints `mmx 0.2.0 (protocol 1)`, and in
    a new terminal, `mmx version` prints the same. If the shell says
    `mmx: command not found`, add `~/.local/bin` to your `PATH`, as the
    README's Install section shows.

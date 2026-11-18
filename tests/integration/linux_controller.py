@@ -113,7 +113,9 @@ def main():
         # changes anything, then applies over HTTPS.
         said = mmx('run configure 2>&1').stdout
         notice = said.find(vm.https_setup_notice('target', 'example'))
-        assert notice >= 0 and notice < said.index('configure / target:'), said
+        # Live progress lines such as "configure / target: connecting" may
+        # come first on a slow guest; the notice must come before the result.
+        assert notice >= 0 and notice < said.index('configure / target: succeeded'), said
         record = json.loads(mmx('results --json').stdout)
         assert record['dryrun'] is False and record['status'] == 'succeeded', record
         assert record['entries'][0]['connection_used'] == 'https', record
