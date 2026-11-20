@@ -119,7 +119,7 @@ and owed restore.
 
 ## Compatibility between releases
 
-**MMX 0.1.0 is released. Every change keeps the promises in
+**MMX is released (since 0.1.0). Every change keeps the promises in
 [Compatibility between releases](docs/changing-mmx/design/README.md#compatibility-between-releases).**
 
 - A patch release, such as 0.1.1, holds fixes and documentation changes

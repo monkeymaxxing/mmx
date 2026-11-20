@@ -10,7 +10,7 @@ and `mmx run` makes those changes.
 > [!NOTE]
 > **This is an alpha version.** We use MMX on our own servers, and it is tested on real machines before every release. A command or a setting may still change. When one does, the release notes say what to change on your side. If anything confuses you or breaks, please tell us: [how to report it](CONTRIBUTING.md). Thanks!
 
-Your coding agent, such as [Claude Code](https://claude.com/claude-code) or [Codex](https://openai.com/codex/), can write the YAML files
+Your coding agent, such as [Claude](https://claude.com/claude-code) or [Codex](https://openai.com/codex/), can write the YAML files
 and run the commands, or you can do both yourself. You don't need to have
 used a tool like this before. If you have used
 [Ansible](https://www.ansible.com/), much of MMX will be familiar, and
@@ -50,7 +50,8 @@ server systems.
 | **MMX** (this tool) | Sets up your servers, and makes every later change to them |
 | [MMWatchdog](https://github.com/monkeymaxxing/mmwatchdog) | Watches your servers, restarts what fails, and alerts you |
 | [MMHotline](https://github.com/monkeymaxxing/mmhotline) | Gets each urgent alert to the person on call, and can let your coding agent investigate first |
-| [Monkeymaxxing Stack](https://github.com/monkeymaxxing/monkeymaxxing-stack) | Instructions for your coding agent that build and run a whole production system with the three tools above |
+| [doubleshell](https://github.com/monkeymaxxing/doubleshell) | Carries SSH over WireGuard so you can close port 22 to the internet without a laptop VPN |
+| [Monkeymaxxing Stack](https://github.com/monkeymaxxing/monkeymaxxing-stack) | Instructions for your coding agent that build and run a whole production system with the tools above |
 
 You need none of the other tools to use MMX.
 
